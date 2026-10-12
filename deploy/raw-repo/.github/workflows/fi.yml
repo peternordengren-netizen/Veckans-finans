@@ -1,0 +1,74 @@
+# Mall för det PRIVATA repot veckans-finans-raw. Kopieras dit som
+# .github/workflows/fi.yml – ligger här under deploy/ så att den aldrig körs
+# i det publika repot.
+#
+# Hämtar Finansinspektionens blanknings- och insynsregister en gång per dygn
+# med scripts/fi_fetch.py från det publika repot (tre anrop: blankning aggregat,
+# blankning aktuella, insyn för gårdagen) och committar till det privata repot.
+name: Hämta FI-register
+
+on:
+  schedule:
+    # 04:37 UTC = 06:37 svensk sommartid (05:37 vintertid): gårdagens
+    # rapporteringar är publicerade. Minut 37 för att undvika rusningen vid hel timme.
+    - cron: "37 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: raw-commit # samma grupp som "Hämta råtext", så att två jobb inte pushar samtidigt
+  cancel-in-progress: false
+
+jobs:
+  fi:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Versioner kontrollerade 2026-10-05: alla kör på Node 24.
+      - name: Checka ut rådatarepot
+        uses: actions/checkout@v7
+        with:
+          path: raw
+
+      - name: Checka ut koden från det publika repot
+        uses: actions/checkout@v7
+        with:
+          repository: peternordengren-netizen/veckans-finans
+          ref: main
+          path: app
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # fi_fetch.py använder bara standardbiblioteket.
+      - name: Hämta
+        id: fetch
+        run: |
+          set +e
+          python app/scripts/fi_fetch.py --raw-dir raw
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Committa
+        working-directory: raw
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Inga ändringar."
+          else
+            git commit -q -m "FI-register $(date -u +%Y-%m-%dT%H:%MZ)"
+            git pull --rebase -q
+            git push
+          fi
+
+      # Röd körning bara om allt misslyckades; delvisa fel syns som ::warning::.
+      - name: Rapportera om allt misslyckades
+        if: steps.fetch.outputs.code != '0'
+        run: |
+          echo "::error::fi_fetch.py avslutades med kod ${{ steps.fetch.outputs.code }} – inget kunde hämtas från FI."
+          exit 1
