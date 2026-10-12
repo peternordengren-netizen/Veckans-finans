@@ -174,8 +174,9 @@ Arbetsgång varje vecka, efter att veckan är slut. Kör kommandona i repots rot
 2. Kör `/sammanfatta-veckan` i Claude Code. Kommandot gör följande:
    - skriver och validerar `data/weeks/<vecka>.json`
    - hämtar kurser till `data/prices/<vecka>.json`
-   - **säkerhetskopierar** båda filerna till det privata repot, under `weeks/` och `prices/` i `veckans-finans-raw`,
-     med pull, commit och push
+   - räknar fram blankning och insyn till `data/analysis/<vecka>.json` med `registers.py`
+   - **säkerhetskopierar** de tre filerna till det privata repot, under `weeks/`, `prices/` och `analysis/` i
+     `veckans-finans-raw`, med pull, commit och push
 3. Om du vill hämta kurserna igen senare:
    ```bash
    .venv/Scripts/python scripts/prices.py 2026-W42

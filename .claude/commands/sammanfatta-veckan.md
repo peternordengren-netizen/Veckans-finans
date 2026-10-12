@@ -112,22 +112,27 @@ Görs även om valideringen blev **EJ GODKÄND**, så att arbetet inte går för
 
 1. **Kurser:** kör `.venv/Scripts/python scripts/prices.py <vecka>`. Skriptet är fail-soft. Exit-kod 1 betyder att
    ingen kurs kunde hämtas och ingen kursfil skrevs. Fortsätt då utan kursfil, och nämn det i slutrapporten.
+1b. **Blankning och insyn:** kör `.venv/Scripts/python scripts/registers.py <vecka>`. Analysen räknas fram
+   deterministiskt ur FI-datan i `data/raw/`. Du skriver eller ändrar ingenting i den. Den hamnar i
+   `data/analysis/<vecka>.json`. Ta med i slutrapporten vad skriptet skriver ut, alltså antal bolag med
+   blankningsförändring, om aggregatet är tillgängligt och vilka insynsdagar som saknas.
 2. **Säkerhetskopia till det privata repot** `data/raw/` (veckans-finans-raw):
    1. Kontrollera att `git -C data/raw status --porcelain` är tomt. Om det inte är tomt: stanna och rapportera.
       Committa aldrig någon annans ändringar.
    2. Kör `git -C data/raw pull --rebase` för att hämta GitHub Actions senaste hämtningar.
    3. Kopiera `data/weeks/<vecka>.json` till `data/raw/weeks/<vecka>.json`. Kopiera också `data/prices/<vecka>.json` till
-      `data/raw/prices/<vecka>.json` om kursfilen finns. Skapa mapparna vid behov och skriv över en tidigare kopia av
-      samma vecka.
-   4. Lägg bara till just dessa filer: `git -C data/raw add weeks/<vecka>.json prices/<vecka>.json`. Ta med kursfilen
-      bara om den finns. Använd aldrig `git add -A` eller `git add .`.
+      `data/raw/prices/<vecka>.json` och `data/analysis/<vecka>.json` till `data/raw/analysis/<vecka>.json`, om de
+      finns. Skapa mapparna vid behov och skriv över en tidigare kopia av samma vecka.
+   4. Lägg bara till just dessa filer:
+      `git -C data/raw add weeks/<vecka>.json prices/<vecka>.json analysis/<vecka>.json`. Ta bara med de filer som
+      finns. Använd aldrig `git add -A` eller `git add .`.
    5. Om något ändrats: `git -C data/raw commit -m "Säkerhetskopia <vecka> (validering OK)"`, eller `(validering EJ
       GODKÄND)`. Om filerna är identiska med förra kopian hoppar du över commiten.
    6. Kör `git -C data/raw push`. Om pushen avvisas för att Actions hunnit pusha emellan: kör
       `git -C data/raw pull --rebase` och försök **en** gång till. Om det fortfarande misslyckas, eller om inloggningen
       saknas: stanna och rapportera. Filerna finns kvar lokalt i `data/weeks/` och `data/prices/`.
-3. Committa eller pusha **aldrig** veckofilen eller kursfilen till det publika repot (`veckans-finans`). Där är
-   `data/weeks/` och `data/prices/` git-ignorerade, och så ska det förbli.
+3. Committa eller pusha **aldrig** veckofilen, kursfilen eller analysfilen till det publika repot
+   (`veckans-finans`). Där är `data/weeks/`, `data/prices/` och `data/analysis/` git-ignorerade, och så ska det förbli.
 
 ## Slutrapport till mig
 
@@ -140,5 +145,6 @@ Kort, i chatten:
 - valideringens resultat: OK efter hur många körningar, eller **EJ GODKÄND** med alla kvarvarande fel listade
 - eventuella varningar från valideringen
 - kurser: antal hämtade och antal fel, eller att ingen kursfil skrevs
+- blankning och insyn: det som `registers.py` skrev ut
 - säkerhetskopia: commit-hash som pushats till veckans-finans-raw, "oförändrad sedan förra kopian", eller varför den
   inte gick igenom

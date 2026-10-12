@@ -12,11 +12,16 @@ fjärde timme. Ändra inget för hand.
 <vecka>/mfn/<id>.txt          fulltext
 <vecka>/cision/<id>.txt       utdrag
 <vecka>/riksbanken/<id>.txt   styrräntan (nyckeltal)
+<vecka>/fi/blankning-<datum>.json   FI:s blankningsregister (aggregat + aktuella), dagligen
+<vecka>/fi/insyn-<datum>.json       FI:s insynsregister, publiceringar per dag
+fi-historik/                  FI:s historiska blankningspositioner, hämtade en gång
 weeks/<vecka>.json            säkerhetskopia av veckans sammanfattning
 prices/<vecka>.json           säkerhetskopia av veckans kurser
+analysis/<vecka>.json         säkerhetskopia av veckans blanknings- och insynsanalys
 ```
 
-`weeks/` och `prices/` skrivs av `/sammanfatta-veckan` som sista steg. De finns bara här och lokalt, och aldrig i
+FI-filerna skrivs av `.github/workflows/fi.yml` en gång per dygn.
+`weeks/`, `prices/` och `analysis/` skrivs av `/sammanfatta-veckan` som sista steg. De finns bara här och lokalt, och aldrig i
 det publika repot.
 
 Lokalt klonas repot in som `data/raw/` i det publika repot. Den mappen är git-ignorerad där.
