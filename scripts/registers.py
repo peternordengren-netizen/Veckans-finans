@@ -265,7 +265,15 @@ def build(week: str, raw_dir: Path, instruments: dict[str, Instrument], now: dat
     }
 
 
+def _utf8_console() -> None:
+    """Utskrifterna innehåller t.ex. '≥', som Windows-konsolens cp1252 inte kan skriva."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv: list[str] | None = None, now: datetime | None = None) -> int:
+    _utf8_console()
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("week")
     p.add_argument("--raw-dir", type=Path, default=ROOT / "data" / "raw")

@@ -204,6 +204,19 @@ def test_main_skriver_giltig_fil(tmp_path, instruments):
     assert validate.validate_analysis(data, "2026-W41").errors == []
 
 
+def test_main_kraschar_inte_pa_windows_konsol(tmp_path, instruments, monkeypatch):
+    """Utskriften innehåller '≥'; med en cp1252-konsol får det inte bli UnicodeEncodeError."""
+    import io
+    raw = tmp_path / "raw"
+    history(raw, [pos("Fond A", FJLH, 0.8, "2026-10-06")])
+    insyn_days(raw, {})
+    console = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", console)
+    code = registers.main(["2026-W41", "--raw-dir", str(raw), "--instruments", str(validate.MOCK_DIR / "instruments.csv"),
+                           "--out", str(tmp_path / "a.json")], now=NOW)
+    assert code == 0
+
+
 @pytest.mark.parametrize(
     "breaker, message",
     [

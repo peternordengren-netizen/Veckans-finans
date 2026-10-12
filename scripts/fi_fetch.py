@@ -232,6 +232,10 @@ def fetch_history(raw_dir: Path, since: date, now: datetime, get: Callable[[str]
 
 
 def main(argv: list[str] | None = None, get: Callable[[str], bytes] = http_get, now: datetime | None = None) -> int:
+    # Utskrifterna innehåller t.ex. '≥', som Windows-konsolens cp1252 inte kan skriva.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--raw-dir", type=Path, default=ROOT / "data" / "raw")
     p.add_argument("--insyn-from", type=date.fromisoformat, help="efterhämta insyn från detta publiceringsdatum")
