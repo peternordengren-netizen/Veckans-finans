@@ -1,7 +1,7 @@
-namn,alias,ticker,yahoo_ticker,börs,sektor,mfn_slug
-Fjällhem Fastigheter,Fjällhem,FJLH B,FJLH-B.MOCK,Exempelbörsen,fastigheter,fjallhem-fastigheter
-Kustbanken,,KUST A,KUST-A.MOCK,Exempelbörsen,banker-finans,kustbanken
-Norrsken Pharma,Norrsken,NRSK,NRSK.MOCK,Exempelbörsen,halsovard,norrsken-pharma
-Albion Biotech,,ALBN,ALBN.MOCK,Exempelbörsen,halsovard,
-Vågnät Telekom,Vågnät,VAGN B,VAGN-B.MOCK,Exempelbörsen,telekom,vagnat-telekom
-Molnbyrån Software,Molnbyrån,MOLN,MOLN.MOCK,Exempelbörsen,teknik,
+namn,alias,ticker,yahoo_ticker,börs,sektor,isin,mfn_slug
+Fjällhem Fastigheter,Fjällhem,FJLH B,FJLH-B.MOCK,Exempelbörsen,fastigheter,SEMOCKFJLHA1|SEMOCKFJLHB1,fjallhem-fastigheter
+Kustbanken,,KUST A,KUST-A.MOCK,Exempelbörsen,banker-finans,SEMOCKKUSTA1,kustbanken
+Norrsken Pharma,Norrsken,NRSK,NRSK.MOCK,Exempelbörsen,halsovard,SEMOCKNRSK01,norrsken-pharma
+Albion Biotech,,ALBN,ALBN.MOCK,Exempelbörsen,halsovard,SEMOCKALBN01,
+Vågnät Telekom,Vågnät,VAGN B,VAGN-B.MOCK,Exempelbörsen,telekom,SEMOCKVAGNB1,vagnat-telekom
+Molnbyrån Software,Molnbyrån,MOLN,MOLN.MOCK,Exempelbörsen,teknik,SEMOCKMOLN01,

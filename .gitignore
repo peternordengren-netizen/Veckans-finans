@@ -4,6 +4,7 @@ data/raw/
 # Veckans sammanfattningar och kurser är bara för lokal läsning och får aldrig hamna i det publika repot.
 data/weeks/
 data/prices/
+data/analysis/
 
 # Python
 .venv/

@@ -109,6 +109,32 @@ Körs lokalt efter `/sammanfatta-veckan`:
   och en befintlig fil lämnas orörd. Sidan fungerar i båda fallen.
 - `--mock --out <fil>` läser mockveckan. Den kurerade mockkursfilen skrivs aldrig över.
 
+### Blankning och insyn (`scripts/fi_fetch.py`, `scripts/registers.py`)
+
+`fi_fetch.py` körs en gång per dygn (06:37 svensk tid) i det privata repots Actions, mallen ligger i
+[`deploy/raw-repo/.github/workflows/fi.yml`](deploy/raw-repo/.github/workflows/fi.yml). Varje körning gör tre anrop
+till Finansinspektionen. Adresserna kommer från knapparna på FI:s egna sidor och kontrollerades 2026-10-12.
+
+| Fil | Adress | Innehåll |
+|---|---|---|
+| `<vecka>/fi/blankning-<datum>.json` | `https://www.fi.se/BlankningsRegister/GetBlankningsregisterAggregat` och `…/GetAktuellFile` (ODS) | Summa per emittent av alla positioner över 0,1 %, och enskilda positioner över 0,5 % med innehavare och ISIN |
+| `<vecka>/fi/insyn-<datum>.json` | `https://marknadssok.fi.se/Publiceringsklient/sv-SE/Search/Search?…&button=export` (CSV, UTF-16) | Insynstransaktioner publicerade det datumet |
+| `fi-historik/blankning-historik-<datum>.json` | `…/GetHistFile`, hämtad en gång med `--history` | Historiska positioner över 0,5 % sedan 2025 |
+
+Data dateras till gårdagen, så att lördagsmorgonens bild hamnar i fredagens vecka.
+
+`registers.py <vecka>` räknar deterministiskt fram `data/analysis/<vecka>.json` (git-ignorerad) för bolagen i
+`instruments.csv`, kopplade via `isin`:
+- **Blankning över 0,5 %:** läget per innehavare vid veckans slut jämfört med förra veckans slut, ur historikfilen
+  och de dagliga ögonblicksbilderna.
+- **Blankning, aggregat:** bara från egna ögonblicksbilder. Den första jämförelsen blir alltså veckan efter att
+  jobbet startat.
+- **Insyn:** förvärv och avyttring av aktier i SEK för mer än 100 000 kr, utom transaktioner kopplade till
+  aktieprogram och reviderade poster. Bolag där minst två insynspersoner köpt, respektive sålt, markeras.
+
+Valideringen kontrollerar att siffrorna hänger ihop: förändring = slut − start, netto = köp − sälj, värde = volym × pris,
+tröskeln och markeringarna.
+
 ## Sidan (Astro)
 
 Kräver Node 22 eller senare.

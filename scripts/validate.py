@@ -553,10 +553,63 @@ def validate_prices(data: dict, expected_week: str | None) -> Result:
     return res
 
 
+def validate_analysis(data: dict, expected_week: str | None) -> Result:
+    """Blanknings- och insynsanalysen (scripts/registers.py): schema plus att siffrorna
+    hänger ihop, så att en handredigerad eller trasig fil inte visas."""
+    res = Result()
+    res.errors += _schema_errors(_schema_validator("analysis.schema.json"), data)
+    if res.errors:
+        return res
+    week = data["week"]
+    if expected_week is not None and week != expected_week:
+        res.errors.append(f"week {week!r} matchar inte filnamnet {expected_week!r}")
+    start, end = iso_week_period(week)
+    if data["period"] != {"start": start.isoformat(), "end": end.isoformat()}:
+        res.errors.append(f"period ska vara {start}–{end} för {week}")
+
+    for block in ("short_positions", "short_aggregate"):
+        b = data[block]
+        if not b["available"] and (b["changes"] or not b["note"]):
+            res.errors.append(f"{block}: ej tillgänglig ska ha en förklaring och inga förändringar")
+        for c in b["changes"]:
+            if abs(c["end_pct"] - c["start_pct"] - c["change_pp"]) > 0.011:
+                res.errors.append(f"{block}/{c['ticker']}: change_pp {c['change_pp']} ≠ {c['end_pct']} − {c['start_pct']}")
+            for h in c.get("holders", []):
+                if abs(h["end_pct"] - h["start_pct"] - h["change_pp"]) > 0.011:
+                    res.errors.append(f"{block}/{c['ticker']}/{h['holder']}: change_pp stämmer inte")
+
+    ins = data["insider"]
+    days = {(start + timedelta(days=i)).isoformat() for i in range(7)}
+    if set(ins["days_covered"]) | set(ins["days_missing"]) != days or set(ins["days_covered"]) & set(ins["days_missing"]):
+        res.errors.append("insider: days_covered och days_missing ska tillsammans vara veckans sju dagar")
+    for c in ins["companies"]:
+        where = f"insider/{c['ticker']}"
+        buys = [t for t in c["transactions"] if t["side"] == "köp"]
+        sells = [t for t in c["transactions"] if t["side"] == "försäljning"]
+        if c["buy_value_sek"] != sum(t["value_sek"] for t in buys) or c["sell_value_sek"] != sum(t["value_sek"] for t in sells):
+            res.errors.append(f"{where}: köp-/säljvärde stämmer inte med transaktionerna")
+        if c["net_value_sek"] != c["buy_value_sek"] - c["sell_value_sek"]:
+            res.errors.append(f"{where}: net_value_sek ≠ köp − sälj")
+        if sorted(c["buyers"]) != sorted({t["person"] for t in buys}) or sorted(c["sellers"]) != sorted({t["person"] for t in sells}):
+            res.errors.append(f"{where}: buyers/sellers stämmer inte med transaktionerna")
+        if c["cluster_buy"] != (len(c["buyers"]) >= ins["cluster_min_persons"]) or \
+                c["cluster_sell"] != (len(c["sellers"]) >= ins["cluster_min_persons"]):
+            res.errors.append(f"{where}: markeringen för flera insynspersoner stämmer inte")
+        for t in c["transactions"]:
+            if t["value_sek"] <= ins["threshold_sek"]:
+                res.errors.append(f"{where}: transaktion om {t['value_sek']} kr under tröskeln {ins['threshold_sek']}")
+            if abs(t["volume"] * t["price"] - t["value_sek"]) > 1:
+                res.errors.append(f"{where}: value_sek ≠ volym × pris för {t['person']}")
+            if not start.isoformat() <= t["published_date"] <= end.isoformat():
+                res.errors.append(f"{where}: publicerad {t['published_date']} utanför veckan")
+    return res
+
+
 def _default_targets() -> list[Path]:
     return sorted(
-        [*DATA_DIR.glob("weeks/*.json"), *DATA_DIR.glob("prices/*.json"),
-         *DATA_DIR.glob("mock/weeks/*.json"), *DATA_DIR.glob("mock/prices/*.json")]
+        [*DATA_DIR.glob("weeks/*.json"), *DATA_DIR.glob("prices/*.json"), *DATA_DIR.glob("analysis/*.json"),
+         *DATA_DIR.glob("mock/weeks/*.json"), *DATA_DIR.glob("mock/prices/*.json"),
+         *DATA_DIR.glob("mock/analysis/*.json")]
     )
 
 
@@ -571,6 +624,8 @@ def main(argv: list[str]) -> int:
         in_mock_dir = MOCK_DIR in path.resolve().parents
         if path.parent.name == "prices":
             res = validate_prices(data, path.stem)
+        elif path.parent.name == "analysis":
+            res = validate_analysis(data, path.stem)
         else:
             res = validate_week(data, path.stem, mock_instruments if in_mock_dir else instruments, sector_ids)
         if data.get("mock", False) != in_mock_dir:

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "analysis.schema.json",
+  "title": "Veckans finans – blanknings- och insynsanalys för en vecka",
+  "description": "Skrivs deterministiskt av scripts/registers.py till data/analysis/<vecka>.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "week", "period", "generated_at", "top_n", "short_positions", "short_aggregate", "insider"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "week": { "type": "string", "pattern": "^[0-9]{4}-W(0[1-9]|[1-4][0-9]|5[0-3])$" },
+    "period": {
+      "type": "object", "additionalProperties": false, "required": ["start", "end"],
+      "properties": { "start": { "type": "string", "format": "date" }, "end": { "type": "string", "format": "date" } }
+    },
+    "generated_at": { "type": "string" },
+    "mock": { "type": "boolean" },
+    "top_n": { "type": "integer", "minimum": 1 },
+    "short_positions": { "$ref": "#/$defs/shortBlock" },
+    "short_aggregate": { "$ref": "#/$defs/shortBlock" },
+    "insider": {
+      "type": "object", "additionalProperties": false,
+      "required": ["threshold_sek", "cluster_min_persons", "days_covered", "days_missing", "excluded", "companies"],
+      "properties": {
+        "threshold_sek": { "type": "integer" },
+        "cluster_min_persons": { "type": "integer" },
+        "days_covered": { "type": "array", "items": { "type": "string", "format": "date" } },
+        "days_missing": { "type": "array", "items": { "type": "string", "format": "date" } },
+        "excluded": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "companies": { "type": "array", "items": { "$ref": "#/$defs/insiderCompany" } }
+      }
+    }
+  },
+  "$defs": {
+    "pct": { "type": "number", "minimum": 0, "maximum": 100 },
+    "shortBlock": {
+      "type": "object", "additionalProperties": false,
+      "required": ["available", "note", "start_as_of", "end_as_of", "changes"],
+      "properties": {
+        "available": { "type": "boolean" },
+        "note": { "type": ["string", "null"] },
+        "start_as_of": { "type": ["string", "null"], "format": "date" },
+        "end_as_of": { "type": ["string", "null"], "format": "date" },
+        "changes": { "type": "array", "items": { "$ref": "#/$defs/shortChange" } }
+      }
+    },
+    "shortChange": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ticker", "name", "start_pct", "end_pct", "change_pp"],
+      "properties": {
+        "ticker": { "type": "string" },
+        "name": { "type": "string" },
+        "start_pct": { "$ref": "#/$defs/pct" },
+        "end_pct": { "$ref": "#/$defs/pct" },
+        "change_pp": { "type": "number" },
+        "holders": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["holder", "start_pct", "end_pct", "change_pp"],
+            "properties": {
+              "holder": { "type": "string" },
+              "start_pct": { "$ref": "#/$defs/pct" },
+              "end_pct": { "$ref": "#/$defs/pct" },
+              "change_pp": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "insiderCompany": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ticker", "name", "buy_value_sek", "sell_value_sek", "net_value_sek", "buyers", "sellers",
+                   "cluster_buy", "cluster_sell", "transactions"],
+      "properties": {
+        "ticker": { "type": "string" },
+        "name": { "type": "string" },
+        "buy_value_sek": { "type": "integer", "minimum": 0 },
+        "sell_value_sek": { "type": "integer", "minimum": 0 },
+        "net_value_sek": { "type": "integer" },
+        "buyers": { "type": "array", "items": { "type": "string" } },
+        "sellers": { "type": "array", "items": { "type": "string" } },
+        "cluster_buy": { "type": "boolean" },
+        "cluster_sell": { "type": "boolean" },
+        "transactions": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["person", "position", "closely_associated", "side", "transaction_date", "published_date",
+                         "volume", "price", "value_sek"],
+            "properties": {
+              "person": { "type": "string" },
+              "position": { "type": "string" },
+              "closely_associated": { "type": "string" },
+              "side": { "enum": ["köp", "försäljning"] },
+              "transaction_date": { "type": "string", "format": "date" },
+              "published_date": { "type": "string", "format": "date" },
+              "volume": { "type": "number" },
+              "price": { "type": "number" },
+              "value_sek": { "type": "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
