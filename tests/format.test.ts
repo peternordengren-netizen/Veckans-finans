@@ -2,7 +2,27 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { pct, relativeToIndex, shortRange } from "../src/lib/format.ts";
+import { dateRange, direction, pct, relativeToIndex, shortDate, shortRange } from "../src/lib/format.ts";
+
+test("datum utan årtal med svensk månadsförkortning", () => {
+  assert.equal(shortDate("2026-10-07"), "7 okt");
+  assert.equal(shortDate("2026-09-30"), "30 sep");
+  assert.equal(shortDate("2026-03-01"), "1 mars");
+});
+
+test("datumintervall för insynsaffärer", () => {
+  assert.equal(dateRange(["2026-10-07"]), "7 okt");
+  assert.equal(dateRange(["2026-10-07", "2026-10-07"]), "7 okt");
+  assert.equal(dateRange(["2026-10-09", "2026-10-06", "2026-10-07"]), "6–9 okt");
+  assert.equal(dateRange(["2026-10-02", "2026-09-30"]), "30 sep–2 okt");
+  assert.equal(dateRange([]), "");
+});
+
+test("riktning med pil och ord", () => {
+  assert.equal(direction(2.2), "▲ ökad");
+  assert.equal(direction(-0.5), "▼ minskad");
+  assert.equal(direction(0), "oförändrad");
+});
 
 test("skillnad mot index i ord", () => {
   assert.equal(relativeToIndex(-5.3), "5,3 % sämre än index");

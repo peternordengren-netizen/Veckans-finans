@@ -10,6 +10,36 @@ const nf = (min: number, max: number, sign = false) =>
     ...(sign ? { signDisplay: "exceptZero" as const } : {}),
   });
 
+const MONTHS = ["jan", "feb", "mars", "apr", "maj", "juni", "juli", "aug", "sep", "okt", "nov", "dec"];
+
+/** "2026-10-07" -> "7 okt" (utan årtal). */
+export function shortDate(iso: string): string {
+  const [, m, d] = iso.split("-").map(Number);
+  return `${d} ${MONTHS[m - 1]}`;
+}
+
+/**
+ * Datumintervall utan årtal: ett datum -> "7 okt"; samma månad -> "6–9 okt";
+ * olika månader -> "30 sep–2 okt". Ordningen i listan spelar ingen roll.
+ */
+export function dateRange(isoDates: string[]): string {
+  const sorted = [...new Set(isoDates)].sort();
+  if (sorted.length === 0) return "";
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  if (first === last) return shortDate(first);
+  const [, m1, d1] = first.split("-").map(Number);
+  const [, m2] = last.split("-").map(Number);
+  return m1 === m2 ? `${d1}–${shortDate(last)}` : `${shortDate(first)}–${shortDate(last)}`;
+}
+
+/** Riktning med pil och ord, så att den inte bara syns som färg. */
+export function direction(change: number): string {
+  if (change > 0) return "▲ ökad";
+  if (change < 0) return "▼ minskad";
+  return "oförändrad";
+}
+
 /** 2.2 -> "2,2", 0.68 -> "0,68", 2 -> "2,0" */
 export function pct(value: number): string {
   return nf(1, 2).format(value);

@@ -4,8 +4,7 @@
  * insynsaffärer för bolagen i bevakningslistan (data/analysis/<vecka>.json).
  */
 import type { Analysis, ShortBlock } from "../lib/data";
-import { formatDate } from "../lib/data";
-import { shortRange } from "../lib/format";
+import { dateRange, direction, shortDate, shortRange } from "../lib/format";
 
 interface Props {
   analysis: Analysis;
@@ -24,7 +23,7 @@ function split(block: ShortBlock) {
 }
 const positions = split(analysis.short_positions);
 const aggregate = split(analysis.short_aggregate);
-const period = (b: ShortBlock) => (b.start_as_of && b.end_as_of ? `${formatDate(b.start_as_of)} → ${formatDate(b.end_as_of)}` : "");
+const period = (b: ShortBlock) => (b.start_as_of && b.end_as_of ? `${shortDate(b.start_as_of)} → ${shortDate(b.end_as_of)}` : "");
 const ins = analysis.insider;
 ---
 
@@ -53,12 +52,16 @@ const ins = analysis.insider;
                       <span class="co">{c.name} <span class="tk">{c.ticker}</span></span>
                     </div>
                     <div class:list={["sub", "chg", c.change_pp > 0 ? "up" : "down"]}>
+                      <span class="dir">{direction(c.change_pp)}</span>{" "}
                       {shortRange(c.start_pct, c.end_pct, c.change_pp, { threshold: 0.5 })}
                     </div>
                     {c.holders && c.holders.length > 0 && (
                       <ul class="holders">
                         {c.holders.map((h) => (
-                          <li>{h.holder}: {shortRange(h.start_pct, h.end_pct, h.change_pp, { threshold: 0.5, newHolder: true })}</li>
+                          <li>
+                            {h.holder}: <span class="dir">{direction(h.change_pp)}</span>{" "}
+                            {shortRange(h.start_pct, h.end_pct, h.change_pp, { threshold: 0.5, newHolder: true })}
+                          </li>
                         ))}
                       </ul>
                     )}
@@ -94,6 +97,7 @@ const ins = analysis.insider;
                       <span class="co">{c.name} <span class="tk">{c.ticker}</span></span>
                     </div>
                     <div class:list={["sub", "chg", c.change_pp > 0 ? "up" : "down"]}>
+                      <span class="dir">{direction(c.change_pp)}</span>{" "}
                       {shortRange(c.start_pct, c.end_pct, c.change_pp, { threshold: 0.1 })}
                     </div>
                   </li>
@@ -113,7 +117,7 @@ const ins = analysis.insider;
 <p class="period">
   Köp och försäljningar av aktier publicerade under veckan. Aktieprogram, teckningar och reviderade anmälningar ingår inte.
   Affärer utanför handelsplats, till exempel blockaffärer, ingår i beloppen men markeras "utanför börsen".
-  {ins.days_missing.length > 0 && <strong> Hämtning saknas för {ins.days_missing.map((d) => formatDate(d)).join(", ")}.</strong>}
+  {ins.days_missing.length > 0 && <strong> Hämtning saknas för {ins.days_missing.map((d) => shortDate(d)).join(", ")}.</strong>}
 </p>
 {
   ins.companies.length === 0 ? (
@@ -130,6 +134,7 @@ const ins = analysis.insider;
             </span>
           </div>
           <div class="sub">
+            <span class="when">{dateRange(c.transactions.map((t) => t.transaction_date))}:</span>{" "}
             {c.buy_value_sek > 0 && <span>Köp {kr(c.buy_value_sek)}</span>}
             {c.buy_value_sek > 0 && c.sell_value_sek > 0 && <span aria-hidden="true"> · </span>}
             {c.sell_value_sek > 0 && <span>Försäljning {kr(c.sell_value_sek)}</span>}
@@ -146,7 +151,7 @@ const ins = analysis.insider;
                   <span class:list={["side", t.side === "köp" ? "buy" : "sell"]}>{t.side}</span>
                   {t.person}{t.closely_associated ? " (närstående)" : ""}, {t.position}:
                   {" "}{sek.format(t.volume)} st × {num2.format(t.price)} kr = {kr(t.value_sek)}
-                  <span class="date"> · {formatDate(t.transaction_date)}</span>
+                  <span class="date"> · {shortDate(t.transaction_date)}</span>
                   {t.off_exchange && <span class="offer"> · utanför börsen</span>}
                   {t.side === "försäljning" && c.under_offer && <span class="offer"> · under pågående uppköpsbud</span>}
                 </li>
@@ -267,6 +272,13 @@ const ins = analysis.insider;
   }
   .offer {
     font-style: italic;
+  }
+  .dir {
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .when {
+    font-weight: 600;
   }
   details {
     margin-top: 6px;
