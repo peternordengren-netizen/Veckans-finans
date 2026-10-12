@@ -132,7 +132,9 @@ export interface ShortChange {
   start_pct: number;
   end_pct: number;
   change_pp: number;
-  holders?: { holder: string; start_pct: number; end_pct: number; change_pp: number }[];
+  /** Senaste positionsdatum under veckan (positioner ≥ 0,5 %; saknas i äldre filer). */
+  last_change_date?: string;
+  holders?: { holder: string; start_pct: number; end_pct: number; change_pp: number; date?: string }[];
 }
 export interface ShortBlock {
   available: boolean;
@@ -153,6 +155,9 @@ export interface InsiderTransaction {
   value_sek: number;
   /** Utanför handelsplats enligt FI – ingår i summorna men markeras (saknas i äldre filer). */
   off_exchange?: boolean;
+  /** Arbetsdagar från affär till publicering, och om det var fler än tre (saknas i äldre filer). */
+  business_days_to_publication?: number;
+  late_report?: boolean;
 }
 export interface InsiderCompany {
   ticker: string;

@@ -25,7 +25,9 @@ Insyn:
     uppköpsbud eller en avnotering (bid_target i veckofilen) får under_offer = true, så
     att försäljningar inte läses som fristående säljbeslut. Transaktioner med
     handelsplats "Utanför handelsplats" får off_exchange = true; de räknas med i
-    summorna men visas som "utanför börsen".
+    summorna men visas som "utanför börsen". late_report = true om publiceringen
+    skedde mer än LATE_REPORT_BUSINESS_DAYS arbetsdagar efter transaktionen
+    (scripts/workdays.py).
 
 Användning:
     python scripts/registers.py 2026-W41 [--raw-dir data/raw] [--out data/analysis/2026-W41.json]
@@ -47,12 +49,17 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from validate import Instrument, bid_targets, iso_week_period, load_instruments, validate_analysis  # noqa: E402
 
 from fetch import STOCKHOLM  # noqa: E402
+from workdays import business_days_between  # noqa: E402
 
 INSYN_MIN_SEK = 100_000
 CLUSTER_MIN_PERSONS = 2
 INSYN_NATURES = {"Förvärv": "köp", "Avyttring": "försäljning"}
 TOP_N = 10
 OFF_EXCHANGE_VENUE = "Utanför handelsplats"  # FI:s värde i fältet Handelsplats
+# Insynspersoner ska anmäla inom tre arbetsdagar efter transaktionen (MAR art. 19).
+LATE_REPORT_BUSINESS_DAYS = 3
+
+
 
 
 # --- Hjälp -------------------------------------------------------------------
@@ -110,12 +117,17 @@ def _position_records(raw_dir: Path, snaps: list[dict]) -> tuple[list[tuple], st
     return records, (max(covered) if covered else None)
 
 
-def _state_at(records: list[tuple], when: date) -> dict[tuple[str, str], float]:
+def _latest_at(records: list[tuple], when: date) -> dict[tuple[str, str], tuple[str, float | None]]:
+    """Senaste (datum, pct) per (innehavare, ISIN) med datum ≤ when."""
     latest: dict[tuple[str, str], tuple[str, float | None]] = {}
     for holder, isin, d, pct in records:
         if d <= when.isoformat() and ((holder, isin) not in latest or d >= latest[(holder, isin)][0]):
             latest[(holder, isin)] = (d, pct)
-    return {k: v[1] for k, v in latest.items() if v[1]}
+    return latest
+
+
+def _state_at(records: list[tuple], when: date) -> dict[tuple[str, str], float]:
+    return {k: v[1] for k, v in _latest_at(records, when).items() if v[1]}
 
 
 def positions_changes(raw_dir: Path, snaps: list[dict], start: date, end: date,
@@ -126,6 +138,9 @@ def positions_changes(raw_dir: Path, snaps: list[dict], start: date, end: date,
         return {"available": False, "note": f"underlaget täcker bara t.o.m. {covered_to or '–'}",
                 "start_as_of": prev_end.isoformat(), "end_as_of": end.isoformat(), "changes": []}
     before, after = _state_at(records, prev_end), _state_at(records, end)
+    # Positionsdatum = datumet på det värde som gäller vid veckans slut (FI:s
+    # "Datum för positionen", eller ögonblicksbilden där positionen försvann).
+    end_dates = {k: v[0] for k, v in _latest_at(records, end).items()}
     per: dict[str, dict] = {}
     for key in set(before) | set(after):
         holder, isin = key
@@ -138,13 +153,15 @@ def positions_changes(raw_dir: Path, snaps: list[dict], start: date, end: date,
         c["start_pct"] += b
         c["end_pct"] += a
         if abs(a - b) > 1e-9:
-            c["holders"].append({"holder": holder, "start_pct": _r2(b), "end_pct": _r2(a), "change_pp": _r2(a - b)})
+            c["holders"].append({"holder": holder, "start_pct": _r2(b), "end_pct": _r2(a), "change_pp": _r2(a - b),
+                                 "date": end_dates[key]})
     changes = []
     for c in per.values():
         c["start_pct"], c["end_pct"] = _r2(c["start_pct"]), _r2(c["end_pct"])
         c["change_pp"] = _r2(c["end_pct"] - c["start_pct"])
         if c["holders"]:
             c["holders"].sort(key=lambda h: -abs(h["change_pp"]))
+            c["last_change_date"] = max(h["date"] for h in c["holders"])
             changes.append(c)
     changes.sort(key=lambda c: (-abs(c["change_pp"]), c["name"]))
     return {"available": True, "note": None, "start_as_of": prev_end.isoformat(), "end_as_of": end.isoformat(),
@@ -225,6 +242,9 @@ def insyn_summary(raw_dir: Path, week: str, start: date, end: date, isin_to_tick
                     "value_sek": round(value),
                     # Räknas med i summorna men markeras – t.ex. blockaffärer i samband med fusion.
                     "off_exchange": r["venue"].strip().casefold() == OFF_EXCHANGE_VENUE.casefold(),
+                    "business_days_to_publication": (bd := business_days_between(
+                        date.fromisoformat(r["transaction_date"]), date.fromisoformat(r["published_date"]))),
+                    "late_report": bd > LATE_REPORT_BUSINESS_DAYS,
                 })
     companies = []
     for c in per.values():

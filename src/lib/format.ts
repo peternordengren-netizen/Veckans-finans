@@ -40,6 +40,20 @@ export function direction(change: number): string {
   return "oförändrad";
 }
 
+/**
+ * Riktning + text för en blankningsförändring. En ny innehavare (newHolder, start 0)
+ * får bara pilen: "▲" + "ny position 1,05 % av aktierna" – inte "▲ ökad".
+ */
+export function shortChange(
+  start: number,
+  end: number,
+  change: number,
+  opts: { threshold: number; newHolder?: boolean },
+): { dir: string; text: string } {
+  const text = shortRange(start, end, change, opts);
+  return { dir: opts.newHolder && start === 0 ? "▲" : direction(change), text };
+}
+
 /** 2.2 -> "2,2", 0.68 -> "0,68", 2 -> "2,0" */
 export function pct(value: number): string {
   return nf(1, 2).format(value);

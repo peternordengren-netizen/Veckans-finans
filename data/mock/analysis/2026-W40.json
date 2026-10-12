@@ -20,18 +20,21 @@
         "start_pct": 1.2,
         "end_pct": 2.45,
         "change_pp": 1.25,
+        "last_change_date": "2026-10-01",
         "holders": [
           {
             "holder": "Exempelfonden LP",
             "start_pct": 0.0,
             "end_pct": 0.75,
-            "change_pp": 0.75
+            "change_pp": 0.75,
+            "date": "2026-10-01"
           },
           {
             "holder": "Testkapital LLP",
             "start_pct": 1.2,
             "end_pct": 1.7,
-            "change_pp": 0.5
+            "change_pp": 0.5,
+            "date": "2026-09-29"
           }
         ]
       },
@@ -41,12 +44,14 @@
         "start_pct": 0.6,
         "end_pct": 0.9,
         "change_pp": 0.3,
+        "last_change_date": "2026-10-02",
         "holders": [
           {
             "holder": "Påhittad Förvaltning AB",
             "start_pct": 0.6,
             "end_pct": 0.9,
-            "change_pp": 0.3
+            "change_pp": 0.3,
+            "date": "2026-10-02"
           }
         ]
       },
@@ -56,12 +61,14 @@
         "start_pct": 0.8,
         "end_pct": 0.0,
         "change_pp": -0.8,
+        "last_change_date": "2026-10-01",
         "holders": [
           {
             "holder": "Exempelfonden LP",
             "start_pct": 0.8,
             "end_pct": 0.0,
-            "change_pp": -0.8
+            "change_pp": -0.8,
+            "date": "2026-10-01"
           }
         ]
       }
@@ -137,19 +144,23 @@
             "volume": 20000,
             "price": 45.0,
             "value_sek": 900000,
-            "off_exchange": false
+            "off_exchange": false,
+            "business_days_to_publication": 1,
+            "late_report": false
           },
           {
             "person": "Bo Påhittad",
             "position": "Styrelseledamot",
             "closely_associated": "Ja",
             "side": "köp",
-            "transaction_date": "2026-10-01",
+            "transaction_date": "2026-09-22",
             "published_date": "2026-10-02",
             "volume": 10000,
             "price": 45.0,
             "value_sek": 450000,
-            "off_exchange": true
+            "off_exchange": true,
+            "business_days_to_publication": 8,
+            "late_report": true
           }
         ]
       },
@@ -177,7 +188,9 @@
             "volume": 1000,
             "price": 250.0,
             "value_sek": 250000,
-            "off_exchange": false
+            "off_exchange": false,
+            "business_days_to_publication": 1,
+            "late_report": false
           }
         ]
       }

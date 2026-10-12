@@ -80,6 +80,30 @@ def test_forandring_ur_historik_och_ogonblicksbild(tmp_path, instruments):
     assert {h["holder"]: (h["start_pct"], h["end_pct"]) for h in c["holders"]} == {"Fond A": (0.8, 0.0), "Fond B": (0.0, 0.7)}
 
 
+def test_positionsdatum_per_innehavare_och_senaste_for_bolaget(tmp_path, instruments):
+    history(tmp_path, [
+        pos("Fond A", FJLH, 0.8, "2026-09-20"),
+        pos("Fond A", FJLH, None, "2026-10-07"),  # under 0,5 den 7/10
+        pos("Fond B", FJLH, 0.6, "2026-10-08"),   # ny den 8/10
+        pos("Fond B", FJLH, 0.7, "2026-10-12"),   # efter veckan – räknas inte
+    ])
+    snapshot(tmp_path, "2026-10-12", "2026-W42", [], [])
+    [c] = build(tmp_path, instruments)["short_positions"]["changes"]
+    assert {h["holder"]: h["date"] for h in c["holders"]} == {"Fond A": "2026-10-07", "Fond B": "2026-10-08"}
+    assert c["last_change_date"] == "2026-10-08"
+
+
+def test_sen_anmalan_over_tre_arbetsdagar(tmp_path, instruments):
+    late = insyn_row("Fjällhem AB", FJLH, "Anna A", "Förvärv", 3000, 50.0, day="2026-10-07")
+    late["transaction_date"] = "2026-10-01"  # tor -> ons: fre, mån, tis, ons = 4
+    ok = insyn_row("Fjällhem AB", FJLH, "Bo B", "Förvärv", 3000, 50.0, day="2026-10-07")
+    ok["transaction_date"] = "2026-10-02"    # fre -> ons: 3
+    insyn_days(tmp_path, {"2026-10-07": [late, ok]})
+    [c] = build(tmp_path, instruments)["insider"]["companies"]
+    flags = {t["person"]: (t["business_days_to_publication"], t["late_report"]) for t in c["transactions"]}
+    assert flags == {"Anna A": (4, True), "Bo B": (3, False)}
+
+
 def test_alla_aktieslag_summeras_per_bolag(tmp_path, instruments):
     history(tmp_path, [pos("Fond A", FJLH, 0.6, "2026-10-06"), pos("Fond A", FJLH_A, 0.5, "2026-10-06")])
     [c] = build(tmp_path, instruments)["short_positions"]["changes"]
@@ -238,6 +262,9 @@ def test_main_kraschar_inte_pa_windows_konsol(tmp_path, instruments, monkeypatch
         (lambda a: a["insider"]["companies"][0]["transactions"][0].update(value_sek=160000), "volym × pris"),
         (lambda a: a["short_positions"]["changes"][0].update(change_pp=0.5), "change_pp"),
         (lambda a: a["insider"].update(days_missing=[]), "sju dagar"),
+        (lambda a: a["short_positions"]["changes"][0]["holders"][0].update(date="2026-10-04"), "utanför veckan"),
+        (lambda a: a["short_positions"]["changes"][0].update(last_change_date="2026-10-05"), "last_change_date"),
+        (lambda a: a["insider"]["companies"][0]["transactions"][0].update(late_report=True), "sen anmälan"),
     ],
 )
 def test_validering_fangar_inkonsekvent_analys(tmp_path, instruments, breaker, message):

@@ -53,16 +53,21 @@
         "start_pct": { "$ref": "#/$defs/pct" },
         "end_pct": { "$ref": "#/$defs/pct" },
         "change_pp": { "type": "number" },
+        "last_change_date": {
+          "description": "Senaste positionsdatum bland innehavarna som ändrats under veckan (bara positioner ≥ 0,5 %).",
+          "type": "string", "format": "date"
+        },
         "holders": {
           "type": "array",
           "items": {
             "type": "object", "additionalProperties": false,
-            "required": ["holder", "start_pct", "end_pct", "change_pp"],
+            "required": ["holder", "start_pct", "end_pct", "change_pp", "date"],
             "properties": {
               "holder": { "type": "string" },
               "start_pct": { "$ref": "#/$defs/pct" },
               "end_pct": { "$ref": "#/$defs/pct" },
-              "change_pp": { "type": "number" }
+              "change_pp": { "type": "number" },
+              "date": { "description": "Positionsdatum för värdet vid veckans slut.", "type": "string", "format": "date" }
             }
           }
         }
@@ -91,7 +96,7 @@
           "items": {
             "type": "object", "additionalProperties": false,
             "required": ["person", "position", "closely_associated", "side", "transaction_date", "published_date",
-                         "volume", "price", "value_sek", "off_exchange"],
+                         "volume", "price", "value_sek", "off_exchange", "business_days_to_publication", "late_report"],
             "properties": {
               "person": { "type": "string" },
               "position": { "type": "string" },
@@ -105,7 +110,12 @@
               "off_exchange": {
                 "description": "Handelsplats 'Utanför handelsplats' enligt FI. Ingår i summorna men markeras på sidan.",
                 "type": "boolean"
-              }
+              },
+              "business_days_to_publication": {
+                "description": "Arbetsdagar (Nasdaq Stockholm) efter transaktionsdagen till och med publiceringsdagen.",
+                "type": "integer", "minimum": 0
+              },
+              "late_report": { "description": "Mer än tre arbetsdagar till publicering.", "type": "boolean" }
             }
           }
         }

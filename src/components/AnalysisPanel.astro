@@ -4,7 +4,7 @@
  * insynsaffärer för bolagen i bevakningslistan (data/analysis/<vecka>.json).
  */
 import type { Analysis, ShortBlock } from "../lib/data";
-import { dateRange, direction, shortDate, shortRange } from "../lib/format";
+import { dateRange, shortChange, shortDate } from "../lib/format";
 
 interface Props {
   analysis: Analysis;
@@ -51,18 +51,26 @@ const ins = analysis.insider;
                     <div class="row">
                       <span class="co">{c.name} <span class="tk">{c.ticker}</span></span>
                     </div>
-                    <div class:list={["sub", "chg", c.change_pp > 0 ? "up" : "down"]}>
-                      <span class="dir">{direction(c.change_pp)}</span>{" "}
-                      {shortRange(c.start_pct, c.end_pct, c.change_pp, { threshold: 0.5 })}
-                    </div>
+                    {(() => {
+                      const s = shortChange(c.start_pct, c.end_pct, c.change_pp, { threshold: 0.5 });
+                      return (
+                        <div class:list={["sub", "chg", c.change_pp > 0 ? "up" : "down"]}>
+                          <span class="dir">{s.dir}</span> {s.text}
+                          {c.last_change_date && <span class="when-pos"> · senast ändrad {shortDate(c.last_change_date)}</span>}
+                        </div>
+                      );
+                    })()}
                     {c.holders && c.holders.length > 0 && (
                       <ul class="holders">
-                        {c.holders.map((h) => (
-                          <li>
-                            {h.holder}: <span class="dir">{direction(h.change_pp)}</span>{" "}
-                            {shortRange(h.start_pct, h.end_pct, h.change_pp, { threshold: 0.5, newHolder: true })}
-                          </li>
-                        ))}
+                        {c.holders.map((h) => {
+                          const s = shortChange(h.start_pct, h.end_pct, h.change_pp, { threshold: 0.5, newHolder: true });
+                          return (
+                            <li>
+                              {h.holder}: <span class="dir">{s.dir}</span> {s.text}
+                              {h.date && <span class="when-pos"> · ändrad {shortDate(h.date)}</span>}
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </li>
@@ -96,10 +104,14 @@ const ins = analysis.insider;
                     <div class="row">
                       <span class="co">{c.name} <span class="tk">{c.ticker}</span></span>
                     </div>
-                    <div class:list={["sub", "chg", c.change_pp > 0 ? "up" : "down"]}>
-                      <span class="dir">{direction(c.change_pp)}</span>{" "}
-                      {shortRange(c.start_pct, c.end_pct, c.change_pp, { threshold: 0.1 })}
-                    </div>
+                    {(() => {
+                      const s = shortChange(c.start_pct, c.end_pct, c.change_pp, { threshold: 0.1 });
+                      return (
+                        <div class:list={["sub", "chg", c.change_pp > 0 ? "up" : "down"]}>
+                          <span class="dir">{s.dir}</span> {s.text}
+                        </div>
+                      );
+                    })()}
                   </li>
                 ))}
               </ol>
@@ -153,6 +165,11 @@ const ins = analysis.insider;
                   {" "}{sek.format(t.volume)} st × {num2.format(t.price)} kr = {kr(t.value_sek)}
                   <span class="date"> · {shortDate(t.transaction_date)}</span>
                   {t.off_exchange && <span class="offer"> · utanför börsen</span>}
+                  {t.late_report && (
+                    <span class="offer" title={`Publicerad ${shortDate(t.published_date)}, ${t.business_days_to_publication} arbetsdagar efter affären (gränsen är tre)`}>
+                      {" "}· sen anmälan
+                    </span>
+                  )}
                   {t.side === "försäljning" && c.under_offer && <span class="offer"> · under pågående uppköpsbud</span>}
                 </li>
               ))}
@@ -279,6 +296,10 @@ const ins = analysis.insider;
   }
   .when {
     font-weight: 600;
+  }
+  .when-pos {
+    font-weight: 400;
+    color: var(--muted);
   }
   details {
     margin-top: 6px;

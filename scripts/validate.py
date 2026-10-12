@@ -44,6 +44,9 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator, FormatChecker
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from workdays import business_days_between  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_DIR = ROOT / "schema"
 DATA_DIR = ROOT / "data"
@@ -673,9 +676,15 @@ def validate_analysis(data: dict, expected_week: str | None) -> Result:
         for c in b["changes"]:
             if abs(c["end_pct"] - c["start_pct"] - c["change_pp"]) > 0.011:
                 res.errors.append(f"{block}/{c['ticker']}: change_pp {c['change_pp']} ≠ {c['end_pct']} − {c['start_pct']}")
-            for h in c.get("holders", []):
+            holders = c.get("holders", [])
+            for h in holders:
                 if abs(h["end_pct"] - h["start_pct"] - h["change_pp"]) > 0.011:
                     res.errors.append(f"{block}/{c['ticker']}/{h['holder']}: change_pp stämmer inte")
+                # Ändringen ska ha skett efter förra veckans slut och senast vid veckans slut.
+                if b["start_as_of"] and b["end_as_of"] and not b["start_as_of"] < h["date"] <= b["end_as_of"]:
+                    res.errors.append(f"{block}/{c['ticker']}/{h['holder']}: positionsdatum {h['date']} utanför veckan")
+            if holders and c.get("last_change_date") != max(h["date"] for h in holders):
+                res.errors.append(f"{block}/{c['ticker']}: last_change_date ska vara senaste innehavardatum")
 
     ins = data["insider"]
     days = {(start + timedelta(days=i)).isoformat() for i in range(7)}
@@ -701,6 +710,9 @@ def validate_analysis(data: dict, expected_week: str | None) -> Result:
                 res.errors.append(f"{where}: value_sek ≠ volym × pris för {t['person']}")
             if not start.isoformat() <= t["published_date"] <= end.isoformat():
                 res.errors.append(f"{where}: publicerad {t['published_date']} utanför veckan")
+            bd = business_days_between(date.fromisoformat(t["transaction_date"]), date.fromisoformat(t["published_date"]))
+            if t["business_days_to_publication"] != bd or t["late_report"] != (bd > 3):
+                res.errors.append(f"{where}: sen anmälan stämmer inte för {t['person']} ({bd} arbetsdagar)")
     return res
 
 

@@ -2,7 +2,23 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { dateRange, direction, pct, relativeToIndex, shortDate, shortRange } from "../src/lib/format.ts";
+import { dateRange, direction, pct, relativeToIndex, shortChange, shortDate, shortRange } from "../src/lib/format.ts";
+
+test("ny innehavare får bara pilen, inte 'ökad'", () => {
+  const c = shortChange(0, 1.05, 1.05, { threshold: 0.5, newHolder: true });
+  assert.deepEqual(c, { dir: "▲", text: "ny position 1,05 % av aktierna" });
+  assert.equal(`${c.dir} ${c.text}`, "▲ ny position 1,05 % av aktierna");
+});
+
+test("befintlig innehavare och bolag får pil och ord", () => {
+  assert.deepEqual(shortChange(0.68, 0.79, 0.11, { threshold: 0.5, newHolder: true }),
+    { dir: "▲ ökad", text: "0,68 % → 0,79 % av aktierna (+0,11)" });
+  assert.deepEqual(shortChange(2.03, 0.88, -1.15, { threshold: 0.5, newHolder: true }),
+    { dir: "▼ minskad", text: "2,03 % → 0,88 % av aktierna (−1,15)" });
+  // Bolag (inte newHolder) som går från under gränsen behåller "ökad".
+  assert.deepEqual(shortChange(0, 1.2, 1.2, { threshold: 0.5 }),
+    { dir: "▲ ökad", text: "under 0,5 % → 1,2 % av aktierna (+1,2)" });
+});
 
 test("datum utan årtal med svensk månadsförkortning", () => {
   assert.equal(shortDate("2026-10-07"), "7 okt");
