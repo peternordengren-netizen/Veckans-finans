@@ -190,6 +190,7 @@ class Result:
 
 
 MFN_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+ISIN_RE = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
 
 
 @dataclass(frozen=True)
@@ -201,6 +202,7 @@ class Instrument:
     bors: str
     mfn_slug: str | None = None  # bolagets slug i MFN:s URL:er (mfn.se/a/<slug>/…), valfri
     sektor: str | None = None  # id ur data/sectors.json, valfri
+    isin: tuple[str, ...] = ()  # alla bolagets aktieslag, valfri (används för FI-registren)
 
 
 def load_instruments(
@@ -219,11 +221,19 @@ def load_instruments(
     instruments: dict[str, Instrument] = {}
     slugs: dict[str, str] = {}
     name_owner: dict[str, str] = {}  # namn/alias (gemener) -> ticker
+    isin_owner: dict[str, str] = {}  # ISIN -> ticker
     with path.open(encoding="utf-8-sig", newline="") as f:
         for line, row in enumerate(csv.DictReader(f), start=2):
             alias = tuple(a.strip() for a in (row.get("alias") or "").split("|") if a.strip())
             slug = (row.get("mfn_slug") or "").strip() or None
             sektor = (row.get("sektor") or "").strip() or None
+            isins = tuple(i.strip() for i in (row.get("isin") or "").split("|") if i.strip())
+            for isin in isins:
+                if not ISIN_RE.match(isin):
+                    raise ValueError(f"{path.name} rad {line}: ogiltig ISIN {isin!r}")
+                owner = isin_owner.setdefault(isin, row["ticker"].strip())
+                if owner != row["ticker"].strip():
+                    raise ValueError(f"{path.name} rad {line}: ISIN {isin!r} används redan av {owner!r}")
             inst = Instrument(
                 namn=row["namn"].strip(),
                 alias=alias,
@@ -232,6 +242,7 @@ def load_instruments(
                 bors=row["börs"].strip(),
                 mfn_slug=slug,
                 sektor=sektor,
+                isin=isins,
             )
             if inst.ticker in instruments:
                 raise ValueError(f"{path.name} rad {line}: dubblett av ticker {inst.ticker!r}")

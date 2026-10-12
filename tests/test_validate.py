@@ -342,6 +342,42 @@ def test_okand_sektor_underkanns(tmp_path):
         validate.load_instruments(p)
 
 
+def test_isin_lases_som_lista_och_ar_valfri(tmp_path):
+    p = write_csv(
+        tmp_path,
+        "Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen,SE0000000001|SE0000000002,",
+        "Albion,,ALBN,ALBN.MOCK,Exempelbörsen,,",
+        head=CSV_HEAD + ",isin,mfn_slug",
+    )
+    inst = validate.load_instruments(p)
+    assert inst["FJLH B"].isin == ("SE0000000001", "SE0000000002")
+    assert inst["ALBN"].isin == ()
+
+
+@pytest.mark.parametrize("isin", ["SE000000000", "se0000000001", "SE00000000AB", "SE0000000001|X"])
+def test_ogiltig_isin_underkanns(tmp_path, isin):
+    p = write_csv(tmp_path, f"Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen,{isin},", head=CSV_HEAD + ",isin,mfn_slug")
+    with pytest.raises(ValueError, match="ogiltig ISIN"):
+        validate.load_instruments(p)
+
+
+def test_isin_pa_tva_rader_underkanns(tmp_path):
+    p = write_csv(
+        tmp_path,
+        "Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen,SE0000000001,",
+        "Kustbanken,,KUST A,KUST-A.MOCK,Exempelbörsen,SE0000000001,",
+        head=CSV_HEAD + ",isin,mfn_slug",
+    )
+    with pytest.raises(ValueError, match="rad 3: ISIN 'SE0000000001' används redan av 'FJLH B'"):
+        validate.load_instruments(p)
+
+
+def test_projektets_lista_har_isin_for_stockholmsbolagen():
+    real = validate.load_instruments()
+    assert real["SEB A"].isin == ("SE0000148884", "SE0000120784")
+    assert all(i.isin for i in real.values() if i.bors == "Nasdaq Stockholm")
+
+
 # --- Indirekta kopplingar via sektor ---------------------------------------
 
 

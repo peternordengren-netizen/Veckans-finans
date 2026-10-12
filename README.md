@@ -59,7 +59,9 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
   Serien har en observation per bankdag, så "föregående värde" betyder värdet före senaste *ändringen*,
   inte gårdagens observation.
 - [`schema/prices.schema.json`](schema/prices.schema.json): kursförändring per `yahoo_ticker`. Sidan fungerar utan filen.
-- [`data/instruments.csv`](data/instruments.csv): `namn,alias,ticker,yahoo_ticker,börs,sektor,mfn_slug`. Flera alias
+- [`data/instruments.csv`](data/instruments.csv): `namn,alias,ticker,yahoo_ticker,börs,sektor,isin,mfn_slug`.
+  `isin` innehåller alla bolagets aktieslag, åtskilda med `|`. Värdena kommer från samma Nasdaq-hämtning (2026-10-05)
+  och används för att koppla FI:s blankningsregister och insynsregister till listan. Flera alias
   separeras med `|`. Underhålls manuellt. `sektor` är ett id ur `sectors.json` och kan vara tom. Den styr var en
   nyhet placeras och vilka bolag som får kopplas *indirekt*: ett indirekt bolag måste tillhöra nyhetens sektor eller
   en sektor i dess `sector_impacts`, vilket valideringen kontrollerar.
