@@ -159,6 +159,18 @@ def test_insyn_filter_trosklar_och_flera_insynspersoner(tmp_path, instruments):
     assert ins["days_missing"] == ["2026-10-10", "2026-10-11"]
 
 
+def test_affar_utanfor_handelsplats_markeras_men_raknas_med(tmp_path, instruments):
+    off = insyn_row("Fjällhem AB", FJLH, "Anna A", "Förvärv", 3000, 50.0)
+    off["venue"] = "Utanför handelsplats"
+    on = insyn_row("Fjällhem AB", FJLH, "Bo B", "Förvärv", 3000, 50.0)
+    on["venue"] = "NASDAQ STOCKHOLM AB"
+    insyn_days(tmp_path, {"2026-10-06": [off, on]})
+    [c] = build(tmp_path, instruments)["insider"]["companies"]
+    assert c["buy_value_sek"] == 300000  # båda räknas
+    assert {t["person"]: t["off_exchange"] for t in c["transactions"]} == {"Anna A": True, "Bo B": False}
+    assert validate.validate_analysis(build(tmp_path, instruments), "2026-W41").errors == []
+
+
 def test_forsaljning_i_malbolag_markeras_under_uppkopsbud(tmp_path, instruments):
     insyn_days(tmp_path, {"2026-10-06": [
         insyn_row("Kustbanken AB", KUST, "Cia C", "Avyttring", 10000, 20.0),

@@ -23,7 +23,9 @@ Insyn:
     över INSYN_MIN_SEK. Bolag där minst CLUSTER_MIN_PERSONS olika insynspersoner köpt
     (respektive sålt) markeras. Bolag som enligt veckans nyheter är målbolag för ett
     uppköpsbud eller en avnotering (bid_target i veckofilen) får under_offer = true, så
-    att försäljningar inte läses som fristående säljbeslut.
+    att försäljningar inte läses som fristående säljbeslut. Transaktioner med
+    handelsplats "Utanför handelsplats" får off_exchange = true; de räknas med i
+    summorna men visas som "utanför börsen".
 
 Användning:
     python scripts/registers.py 2026-W41 [--raw-dir data/raw] [--out data/analysis/2026-W41.json]
@@ -50,6 +52,7 @@ INSYN_MIN_SEK = 100_000
 CLUSTER_MIN_PERSONS = 2
 INSYN_NATURES = {"Förvärv": "köp", "Avyttring": "försäljning"}
 TOP_N = 10
+OFF_EXCHANGE_VENUE = "Utanför handelsplats"  # FI:s värde i fältet Handelsplats
 
 
 # --- Hjälp -------------------------------------------------------------------
@@ -220,6 +223,8 @@ def insyn_summary(raw_dir: Path, week: str, start: date, end: date, isin_to_tick
                     "side": INSYN_NATURES[r["nature"]], "transaction_date": r["transaction_date"],
                     "published_date": r["published_date"], "volume": r["volume"], "price": r["price"],
                     "value_sek": round(value),
+                    # Räknas med i summorna men markeras – t.ex. blockaffärer i samband med fusion.
+                    "off_exchange": r["venue"].strip().casefold() == OFF_EXCHANGE_VENUE.casefold(),
                 })
     companies = []
     for c in per.values():

@@ -136,7 +136,8 @@
             "published_date": "2026-09-30",
             "volume": 20000,
             "price": 45.0,
-            "value_sek": 900000
+            "value_sek": 900000,
+            "off_exchange": false
           },
           {
             "person": "Bo Påhittad",
@@ -147,7 +148,8 @@
             "published_date": "2026-10-02",
             "volume": 10000,
             "price": 45.0,
-            "value_sek": 450000
+            "value_sek": 450000,
+            "off_exchange": true
           }
         ]
       },
@@ -174,7 +176,8 @@
             "published_date": "2026-10-01",
             "volume": 1000,
             "price": 250.0,
-            "value_sek": 250000
+            "value_sek": 250000,
+            "off_exchange": false
           }
         ]
       }

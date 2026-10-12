@@ -91,7 +91,7 @@
           "items": {
             "type": "object", "additionalProperties": false,
             "required": ["person", "position", "closely_associated", "side", "transaction_date", "published_date",
-                         "volume", "price", "value_sek"],
+                         "volume", "price", "value_sek", "off_exchange"],
             "properties": {
               "person": { "type": "string" },
               "position": { "type": "string" },
@@ -101,7 +101,11 @@
               "published_date": { "type": "string", "format": "date" },
               "volume": { "type": "number" },
               "price": { "type": "number" },
-              "value_sek": { "type": "integer" }
+              "value_sek": { "type": "integer" },
+              "off_exchange": {
+                "description": "Handelsplats 'Utanför handelsplats' enligt FI. Ingår i summorna men markeras på sidan.",
+                "type": "boolean"
+              }
             }
           }
         }

@@ -151,6 +151,8 @@ export interface InsiderTransaction {
   volume: number;
   price: number;
   value_sek: number;
+  /** Utanför handelsplats enligt FI – ingår i summorna men markeras (saknas i äldre filer). */
+  off_exchange?: boolean;
 }
 export interface InsiderCompany {
   ticker: string;
