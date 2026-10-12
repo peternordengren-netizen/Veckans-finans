@@ -1,0 +1,282 @@
+---
+/**
+ * Fliken "Blankning & insyn": veckans största blankningsförändringar och
+ * insynsaffärer för bolagen i bevakningslistan (data/analysis/<vecka>.json).
+ */
+import type { Analysis, ShortBlock } from "../lib/data";
+import { formatDate } from "../lib/data";
+
+interface Props {
+  analysis: Analysis;
+}
+const { analysis } = Astro.props;
+const n = analysis.top_n;
+
+const pp = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" });
+const pct = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const sek = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 });
+const kr = (v: number) => `${sek.format(v)} kr`;
+
+function split(block: ShortBlock) {
+  const up = block.changes.filter((c) => c.change_pp > 0).sort((a, b) => b.change_pp - a.change_pp).slice(0, n);
+  const down = block.changes.filter((c) => c.change_pp < 0).sort((a, b) => a.change_pp - b.change_pp).slice(0, n);
+  return { up, down };
+}
+const positions = split(analysis.short_positions);
+const aggregate = split(analysis.short_aggregate);
+const period = (b: ShortBlock) => (b.start_as_of && b.end_as_of ? `${formatDate(b.start_as_of)} → ${formatDate(b.end_as_of)}` : "");
+const ins = analysis.insider;
+---
+
+<p class="intro">
+  Ur Finansinspektionens blanknings- och insynsregister, för bolagen i bevakningslistan. Förändringen avser läget vid
+  veckans slut jämfört med förra veckans slut. Uppgifterna rapporteras av innehavarna själva och granskas inte av FI
+  före publicering.
+</p>
+
+<h3>Blankning, positioner över 0,5 %</h3>
+{
+  analysis.short_positions.available ? (
+    <>
+      <p class="period">{period(analysis.short_positions)}. Innehavare som ändrat sin position visas under bolaget.</p>
+      <div class="two-col">
+        {[["Ökade mest", positions.up], ["Minskade mest", positions.down]].map(([title, list]) => (
+          <section class="list-block">
+            <h4>{title as string}</h4>
+            {(list as typeof positions.up).length === 0 ? (
+              <p class="empty">Inga förändringar.</p>
+            ) : (
+              <ol class="changes">
+                {(list as typeof positions.up).map((c) => (
+                  <li>
+                    <div class="row">
+                      <span class="co">{c.name} <span class="tk">{c.ticker}</span></span>
+                      <span class:list={["chg", c.change_pp > 0 ? "up" : "down"]}>{pp.format(c.change_pp)} pe</span>
+                    </div>
+                    <div class="sub">{pct.format(c.start_pct)} % → {pct.format(c.end_pct)} %</div>
+                    {c.holders && c.holders.length > 0 && (
+                      <ul class="holders">
+                        {c.holders.map((h) => (
+                          <li>{h.holder}: {pct.format(h.start_pct)} → {pct.format(h.end_pct)} %</li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        ))}
+      </div>
+    </>
+  ) : (
+    <p class="note">Inte tillgängligt: {analysis.short_positions.note}.</p>
+  )
+}
+
+<h3>Blankning, summa av alla positioner över 0,1 %</h3>
+{
+  analysis.short_aggregate.available ? (
+    <>
+      <p class="period">{period(analysis.short_aggregate)}</p>
+      <div class="two-col">
+        {[["Ökade mest", aggregate.up], ["Minskade mest", aggregate.down]].map(([title, list]) => (
+          <section class="list-block">
+            <h4>{title as string}</h4>
+            {(list as typeof aggregate.up).length === 0 ? (
+              <p class="empty">Inga förändringar.</p>
+            ) : (
+              <ol class="changes">
+                {(list as typeof aggregate.up).map((c) => (
+                  <li>
+                    <div class="row">
+                      <span class="co">{c.name} <span class="tk">{c.ticker}</span></span>
+                      <span class:list={["chg", c.change_pp > 0 ? "up" : "down"]}>{pp.format(c.change_pp)} pe</span>
+                    </div>
+                    <div class="sub">{pct.format(c.start_pct)} % → {pct.format(c.end_pct)} %</div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        ))}
+      </div>
+    </>
+  ) : (
+    <p class="note">Inte tillgängligt än: {analysis.short_aggregate.note}.</p>
+  )
+}
+
+<h3>Insynsaffärer över {kr(ins.threshold_sek)}</h3>
+<p class="period">
+  Köp och försäljningar av aktier publicerade under veckan. Aktieprogram, teckningar och reviderade anmälningar ingår inte.
+  {ins.days_missing.length > 0 && <strong> Hämtning saknas för {ins.days_missing.map((d) => formatDate(d)).join(", ")}.</strong>}
+</p>
+{
+  ins.companies.length === 0 ? (
+    <p class="empty">Inga insynsaffärer över tröskeln i bevakade bolag.</p>
+  ) : (
+    <ul class="insider">
+      {ins.companies.map((c) => (
+        <li class="ins-card">
+          <div class="row">
+            <span class="co">{c.name} <span class="tk">{c.ticker}</span></span>
+            <span class="flags">
+              {c.cluster_buy && <span class="flag buy">{c.buyers.length} insynspersoner köpte</span>}
+              {c.cluster_sell && <span class="flag sell">{c.sellers.length} insynspersoner sålde</span>}
+            </span>
+          </div>
+          <div class="sub">
+            {c.buy_value_sek > 0 && <span>Köp {kr(c.buy_value_sek)}</span>}
+            {c.buy_value_sek > 0 && c.sell_value_sek > 0 && <span aria-hidden="true"> · </span>}
+            {c.sell_value_sek > 0 && <span>Försäljning {kr(c.sell_value_sek)}</span>}
+          </div>
+          <details>
+            <summary>{c.transactions.length} {c.transactions.length === 1 ? "transaktion" : "transaktioner"}</summary>
+            <ul class="tx">
+              {c.transactions.map((t) => (
+                <li>
+                  <span class:list={["side", t.side === "köp" ? "buy" : "sell"]}>{t.side}</span>
+                  {t.person}{t.closely_associated ? " (närstående)" : ""}, {t.position}:
+                  {" "}{sek.format(t.volume)} st × {pct.format(t.price)} kr = {kr(t.value_sek)}
+                  <span class="date"> · {formatDate(t.transaction_date)}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+<style>
+  .intro {
+    margin: 0 0 8px;
+    max-width: 70ch;
+    color: var(--muted);
+    font-size: 0.9375rem;
+  }
+  h3 {
+    margin: 24px 0 4px;
+    font-size: 1.125rem;
+  }
+  .period,
+  .note,
+  .empty {
+    margin: 0 0 12px;
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    gap: 12px;
+  }
+  .list-block,
+  .ins-card {
+    background: var(--surface-2);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+  }
+  h4 {
+    margin: 0 0 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  ol.changes,
+  ul.insider,
+  ul.holders,
+  ul.tx {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  ol.changes > li {
+    padding: 6px 0;
+    border-top: 1px solid var(--border);
+  }
+  ol.changes > li:first-child {
+    border-top: 0;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .co {
+    font-weight: 600;
+  }
+  .tk {
+    font-weight: 400;
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+  .chg {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .chg.up {
+    color: var(--neg); /* mer blankning */
+  }
+  .chg.down {
+    color: var(--pos);
+  }
+  .sub,
+  .holders li,
+  .tx li {
+    font-size: 0.8125rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .holders {
+    margin-top: 2px !important;
+  }
+  ul.insider {
+    display: grid;
+    gap: 10px;
+  }
+  .flag {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .flag.buy {
+    background: var(--direct-bg);
+    color: var(--direct-fg);
+  }
+  .flag.sell {
+    background: var(--indirect-bg);
+    color: var(--indirect-fg);
+  }
+  details {
+    margin-top: 6px;
+    font-size: 0.875rem;
+  }
+  summary {
+    cursor: pointer;
+    color: var(--accent);
+  }
+  .tx li {
+    padding: 4px 0;
+  }
+  .side {
+    display: inline-block;
+    min-width: 6.5em;
+    font-weight: 600;
+  }
+  .side.buy {
+    color: var(--pos);
+  }
+  .side.sell {
+    color: var(--neg);
+  }
+</style>

@@ -4,6 +4,7 @@
  * Utan JavaScript visas alla sektorer under varandra; med JavaScript blir de flikar.
  */
 import Base from "../layouts/Base.astro";
+import AnalysisPanel from "./AnalysisPanel.astro";
 import CompanyCard from "./CompanyCard.astro";
 import { formatDate, weekLabel, type WeekView } from "../lib/data";
 import { describePolicyRate, formatRate } from "../lib/policyRate";
@@ -99,6 +100,21 @@ const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
             </button>
           ))
         }
+        {
+          view.analysis && (
+            <button
+              type="button"
+              role="tab"
+              id="tab-blankning-insyn"
+              aria-controls="sektor-blankning-insyn"
+              aria-selected={view.sectors.length === 0 ? "true" : "false"}
+              tabindex={view.sectors.length === 0 ? 0 : -1}
+              data-sector="blankning-insyn"
+            >
+              Blankning & insyn
+            </button>
+          )
+        }
       </div>
 
       {view.sectors.length === 0 && <p class="empty">Inga nyheter den här veckan.</p>}
@@ -163,6 +179,15 @@ const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
             ))}
           </section>
         ))
+      }
+
+      {
+        view.analysis && (
+          <section class="sector" id="sektor-blankning-insyn" role="tabpanel" aria-labelledby="tab-blankning-insyn" tabindex="0">
+            <h2>Blankning & insyn</h2>
+            <AnalysisPanel analysis={view.analysis} />
+          </section>
+        )
       }
     </div>
   </main>

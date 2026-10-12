@@ -12,6 +12,7 @@ const DATA = join(process.cwd(), "data");
 const IS_MOCK = import.meta.env.MODE === "mock";
 const WEEKS_DIR = IS_MOCK ? join(DATA, "mock", "weeks") : join(DATA, "weeks");
 const PRICES_DIR = IS_MOCK ? join(DATA, "mock", "prices") : join(DATA, "prices");
+const ANALYSIS_DIR = IS_MOCK ? join(DATA, "mock", "analysis") : join(DATA, "analysis");
 const WEEK_RE = /^\d{4}-W\d{2}$/;
 
 export type Impact = "direkt" | "indirekt";
@@ -82,6 +83,7 @@ export interface WeekView {
   mock: boolean;
   hasPrices: boolean;
   policyRate: PolicyRate | null;
+  analysis: Analysis | null;
   sectors: SectorView[];
 }
 
@@ -102,6 +104,71 @@ export function listWeeks(): string[] {
     .filter((w) => WEEK_RE.test(w))
     .sort()
     .reverse();
+}
+
+// Blanknings- och insynsanalys (scripts/registers.py, schema/analysis.schema.json).
+export interface ShortChange {
+  ticker: string;
+  name: string;
+  start_pct: number;
+  end_pct: number;
+  change_pp: number;
+  holders?: { holder: string; start_pct: number; end_pct: number; change_pp: number }[];
+}
+export interface ShortBlock {
+  available: boolean;
+  note: string | null;
+  start_as_of: string | null;
+  end_as_of: string | null;
+  changes: ShortChange[];
+}
+export interface InsiderTransaction {
+  person: string;
+  position: string;
+  closely_associated: string;
+  side: "köp" | "försäljning";
+  transaction_date: string;
+  published_date: string;
+  volume: number;
+  price: number;
+  value_sek: number;
+}
+export interface InsiderCompany {
+  ticker: string;
+  name: string;
+  buy_value_sek: number;
+  sell_value_sek: number;
+  net_value_sek: number;
+  buyers: string[];
+  sellers: string[];
+  cluster_buy: boolean;
+  cluster_sell: boolean;
+  transactions: InsiderTransaction[];
+}
+export interface Analysis {
+  week: string;
+  top_n: number;
+  short_positions: ShortBlock;
+  short_aggregate: ShortBlock;
+  insider: {
+    threshold_sek: number;
+    cluster_min_persons: number;
+    days_covered: string[];
+    days_missing: string[];
+    companies: InsiderCompany[];
+  };
+}
+
+/** Analysfilen är valfri – saknas den, eller är den trasig, visas ingen flik för den. */
+export function loadAnalysis(week: string): Analysis | null {
+  const path = join(ANALYSIS_DIR, `${week}.json`);
+  if (!existsSync(path)) return null;
+  try {
+    return readJson<Analysis>(path);
+  } catch (err) {
+    console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan blankning/insyn:`, err);
+    return null;
+  }
 }
 
 /** Kursfilen är valfri – saknas den, eller är den trasig, visas sidan utan kurser. */
@@ -212,6 +279,7 @@ export function loadWeek(week: string): WeekView {
           sourceUrl: pr.source_url,
         }
       : null,
+    analysis: loadAnalysis(week),
     sectors: sectorViews,
   };
 }
