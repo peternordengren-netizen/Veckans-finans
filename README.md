@@ -51,6 +51,16 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
   (backade, rasade, lyfte, tappade), riktningsord efter talet ("en ökning på 3 procent" fångas, "3 procents ökning"
   gör det inte) och negationer ("ökade inte"). Undantaget för "till" gör också att en felaktig riktning framför
   en nivå inte fångas. Kontrollen är ett skyddsnät och ersätter inte en egen läsning.
+- **Ton per nyhet:** `sentiment` har `label` (positiv, negativ eller neutral), `rationale` och `basis`, där `basis`
+  är index till de citat bedömningen bygger på. Tonen gäller nyheten för bolaget, inte aktien. Valideringen kontrollerar
+  spårbarheten men inte om bedömningen är riktig:
+  - motiveringens siffror och riktningsord finns i just de refererade citaten
+  - minst ett innehållsord är gemensamt med citaten
+  - motiveringen innehåller inga ord om kurs eller råd
+  - rutinmeddelanden är neutrala
+
+  Sidan visar tonen och markerar "avviker" på aktiekortet när tonen och veckans kursrörelse går åt olika håll, utan
+  att påstå något samband.
 - **Nyckeltal:** `key_figures.policy_rate` innehåller Riksbankens styrränta, alltså senaste observationen i veckan,
   värdet före senaste ändringen och ändringsdatumet, med länk till
   [Riksbankens sida om styrräntan](https://www.riksbank.se/sv/statistik/rantor-och-valutakurser/styrranta-in--och-utlaningsranta/).

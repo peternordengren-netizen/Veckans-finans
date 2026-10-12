@@ -408,6 +408,98 @@ def test_direkt_bolag_i_annan_sektor_kontrolleras_inte(week, instruments, sector
     assert run(week, instruments, sector_ids).errors == []
 
 
+# --- Sentiment ---------------------------------------------------------------
+
+
+def sentiment(week, item_id, **kw):
+    s = item(week, item_id)["sentiment"]
+    s.update(kw)
+    return s
+
+
+def test_mockveckans_sentiment_ar_giltigt(week, instruments, sector_ids):
+    assert all("sentiment" in it for s in week["sectors"] for it in s["items"])
+    assert run(week, instruments, sector_ids).errors == []
+
+
+def test_basis_som_pekar_utanfor_evidence_underkanns(week, instruments, sector_ids):
+    sentiment(week, "bank-kustbanken-kvartal", basis=[0, 3])
+    res = run(week, instruments, sector_ids)
+    assert any("basis pekar på citat som inte finns: [3]" in e for e in res.errors)
+
+
+def test_siffra_maste_finnas_i_just_de_refererade_citaten(week, instruments, sector_ids):
+    # 2027 finns i citat 1, men motiveringen refererar bara citat 0.
+    sentiment(week, "fast-fjallhem-refinansiering", rationale="Obligationer som förfaller under 2027 ersätts.", basis=[0])
+    res = run(week, instruments, sector_ids)
+    assert any("siffror som inte finns i de refererade citaten: ['2027']" in e for e in res.errors)
+    sentiment(week, "fast-fjallhem-refinansiering", basis=[0, 1])
+    assert run(week, instruments, sector_ids).errors == []
+
+
+def test_riktning_i_motiveringen_maste_stamma_med_citaten(week, instruments, sector_ids):
+    # Citatet: "Räntenettot förändrades med −3,2 % …"
+    sentiment(week, "bank-kustbanken-kvartal", rationale="Räntenettot ökade med 3,2 procent mot föregående kvartal.")
+    res = run(week, instruments, sector_ids)
+    assert any("motsäger riktningen" in e for e in res.errors)
+
+
+def test_motivering_utan_gemensamt_innehallsord_underkanns(week, instruments, sector_ids):
+    sentiment(week, "halso-norrsken-studie", rationale="Ett bra besked för framtiden.")
+    res = run(week, instruments, sector_ids)
+    assert any("delar inget innehållsord" in e for e in res.errors)
+
+
+@pytest.mark.parametrize(
+    "rationale",
+    [
+        "Fas 3-studien nådde sitt effektmått, vilket bör lyfta kursen.",
+        "Fas 3-studien nådde sitt effektmått och aktien ser undervärderad ut.",
+        "Fas 3-studien nådde sitt effektmått – ett köpläge.",
+        "Fas 3-studien nådde sitt effektmått; vi rekommenderar bolaget.",
+        "Fas 3-studien nådde sitt effektmått, höjt kursmål väntas.",
+    ],
+)
+def test_kurs_och_rad_ar_forbjudet_i_motiveringen(week, instruments, sector_ids, rationale):
+    sentiment(week, "halso-norrsken-studie", rationale=rationale)
+    res = run(week, instruments, sector_ids)
+    assert any("får inte handla om kurs eller råd" in e for e in res.errors)
+
+
+def test_bolag_som_kopar_ar_inte_forbjudet(week, instruments, sector_ids):
+    sentiment(week, "fast-tallmo-forsaljning", rationale="Fjällhem köper ett bestånd av kontorsfastigheter.")
+    assert run(week, instruments, sector_ids).errors == []
+
+
+def test_rutinmeddelande_maste_vara_neutralt(week, instruments, sector_ids, tmp_path):
+    week = real_week(week)
+    raw = make_raw(week, tmp_path)
+    idx = json.loads((raw / "index.json").read_text(encoding="utf-8"))
+    for e in idx["items"]:
+        if e["path"] == item(week, "halso-norrsken-studie")["source"]["raw_file"]:
+            e["routine"] = True
+    (raw / "index.json").write_text(json.dumps(idx), encoding="utf-8")
+    res = run(week, instruments, sector_ids, raw_dir=tmp_path)
+    assert any("rutinmeddelanden ska ha sentiment 'neutral', inte 'positiv'" in e for e in res.errors)
+    sentiment(week, "halso-norrsken-studie", label="neutral")
+    assert run(week, instruments, sector_ids, raw_dir=tmp_path).errors == []
+
+
+def test_saknat_sentiment_ger_varning_for_riktig_vecka(week, instruments, sector_ids, tmp_path):
+    week = real_week(week)
+    del item(week, "halso-norrsken-studie")["sentiment"]
+    make_raw(week, tmp_path)
+    res = run(week, instruments, sector_ids, raw_dir=tmp_path)
+    assert res.errors == []
+    assert any("halso-norrsken-studie: sentiment saknas" in w for w in res.warnings)
+
+
+@pytest.mark.parametrize("bad", [{"label": "glad"}, {"basis": []}, {"rationale": ""}])
+def test_sentiment_schema(week, instruments, sector_ids, bad):
+    sentiment(week, "halso-norrsken-studie", **bad)
+    assert any(e.startswith("schema:") for e in run(week, instruments, sector_ids).errors)
+
+
 # --- Rådata och mock-spärr -------------------------------------------------
 
 

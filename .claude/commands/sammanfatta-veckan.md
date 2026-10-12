@@ -80,7 +80,20 @@ Veckan har typiskt flera hundra poster. Läs dem inte alla.
    - **Bolag som inte nämns i texten** får läggas till som `indirekt` bara om kopplingen är konkret: samma marknad,
      en namngiven kund, leverantör eller konkurrent, eller direkt räntekänslighet. Motiveringen ska nämna kopplingen.
      Högst två sådana bolag per nyhet. Hellre inga än svaga kopplingar. Att två bolag har samma sektor räcker inte.
-10. **Id:** `item.id` ska vara unikt, med gemener och bindestreck, t.ex. `fast-<bolag>-<ämne>`.
+10. **Sentiment (ton) per nyhet:** varje nyhet får `sentiment` med `label`, `rationale` och `basis`.
+    - `label` är `"positiv"`, `"negativ"` eller `"neutral"` och beskriver **nyhetens ton för bolaget**, alltså om det
+      som händer är bra eller dåligt för verksamheten. Det är inte en bedömning av aktien. Använd `neutral` när
+      nyheten är blandad, oklar eller rent informativ, och alltid för rutinmeddelanden.
+    - `basis` är index, med början på 0, till de citat i `evidence` som bedömningen bygger på. Minst ett.
+    - `rationale` är en mening som bygger **bara** på de refererade citaten:
+      - Siffror och riktningsord ("ökade", "minskade") måste finnas i just de citaten.
+      - Minst ett innehållsord ur citaten ska finnas med.
+      - **Inga ord om kursen eller aktien och inga råd**, till exempel kurs, aktien, kursmål, köpläge, undervärderad
+        eller rekommendera. Tonen bygger på nyhetens innehåll, aldrig på kursrörelsen.
+    - Valideringen kontrollerar spårbarheten men inte om bedömningen är riktig. Läs därför citaten noga.
+    - Sidan visar tonen bredvid veckans kursrörelse och markerar "avviker" när de går åt olika håll. Försök inte få
+      dem att stämma.
+11. **Id:** `item.id` ska vara unikt, med gemener och bindestreck, t.ex. `fast-<bolag>-<ämne>`.
 
 ## Kontroll innan du är klar
 

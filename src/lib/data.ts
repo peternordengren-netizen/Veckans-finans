@@ -50,8 +50,17 @@ export interface SectorImpact {
   rationale: string;
 }
 
+import type { Tone } from "./tone";
+export type { Tone } from "./tone";
+
+export interface Sentiment {
+  label: Tone;
+  rationale: string;
+}
+
 export interface ItemView {
   id: string;
+  sentiment: Sentiment | null;
   headline: string;
   summary: string;
   published: string;
@@ -201,6 +210,7 @@ interface RawItem {
   source: { name: string; url: string };
   companies: RawCompany[];
   sector_impacts: { sector: string; direction: Direction; rationale: string }[];
+  sentiment?: { label: Tone; rationale: string; basis: number[] };
 }
 interface RawWeek {
   week: string;
@@ -232,6 +242,8 @@ export function loadWeek(week: string): WeekView {
 
   const toItem = (it: RawItem): ItemView => ({
     id: it.id,
+    // basis (citatindex) används bara av valideringen; evidence läses aldrig in i sidan.
+    sentiment: it.sentiment ? { label: it.sentiment.label, rationale: it.sentiment.rationale } : null,
     headline: it.headline,
     summary: it.summary,
     published: it.published,

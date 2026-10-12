@@ -123,6 +123,21 @@
           "type": "array",
           "items": { "$ref": "#/$defs/company" }
         },
+        "sentiment": {
+          "description": "Nyhetens ton för bolaget (inte för aktien), byggd på angivna citat i evidence.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["label", "rationale", "basis"],
+          "properties": {
+            "label": { "enum": ["positiv", "negativ", "neutral"] },
+            "rationale": { "description": "En mening, byggd på de refererade citaten.", "type": "string", "minLength": 1 },
+            "basis": {
+              "description": "Index (0-baserade) i evidence för citaten som bedömningen bygger på.",
+              "type": "array", "minItems": 1, "uniqueItems": true,
+              "items": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
         "sector_impacts": {
           "description": "Indirekt påverkan på andra sektorer än den nyheten ligger under.",
           "type": "array",

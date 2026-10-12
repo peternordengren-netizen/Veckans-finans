@@ -1,13 +1,17 @@
 ---
 /** Aktiekort för ett matchat (noterat) bolag. Kursraden visas bara när veckan har en kursfil. */
 import type { ListedCompany } from "../lib/data";
+import { divergesFromPrice, type Tone } from "../lib/tone";
 
 interface Props {
   company: ListedCompany;
   hasPrices: boolean;
+  /** Nyhetens ton – jämförs bara med kursen för direkt berörda bolag. */
+  tone?: Tone;
 }
-const { company, hasPrices } = Astro.props;
+const { company, hasPrices, tone } = Astro.props;
 const q = company.quote;
+const diverges = company.impact === "direkt" && divergesFromPrice(tone, q);
 
 const pct = q
   ? new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" }).format(q.change_pct)
@@ -38,6 +42,11 @@ const arrow = { up: "▲", down: "▼", flat: "■" }[trend];
               {close} {q.currency}
             </span>
             <span class="sr-only">kursförändring under veckan</span>
+            {diverges && (
+              <span class="diverges" title="Nyhetens ton och veckans kursrörelse går åt olika håll. Inget samband är fastställt.">
+                avviker
+              </span>
+            )}
           </>
         ) : (
           <span class="missing">Kurs saknas för veckan</span>
@@ -118,6 +127,15 @@ const arrow = { up: "▲", down: "▼", flat: "■" }[trend];
   .close,
   .missing {
     color: var(--muted);
+  }
+  .price {
+    flex-wrap: wrap;
+  }
+  .diverges {
+    flex-basis: 100%;
+    font-size: 0.75rem;
+    color: var(--muted);
+    font-style: italic;
   }
   .sr-only {
     position: absolute;

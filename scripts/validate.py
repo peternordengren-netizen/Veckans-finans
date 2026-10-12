@@ -10,6 +10,10 @@ Utöver JSON Schema-kontrollen görs korskontroller som schemat inte kan uttryck
   eller en sektor i nyhetens sector_impacts
 - makrosammanfattningen säger inte att styrräntan sänkts/höjts om nyckeltalets
   ändringsdatum ligger före veckan
+- sentiment per nyhet: basis pekar på befintliga citat; motiveringens siffror och
+  riktning finns i just de citaten; minst ett gemensamt innehållsord; inga ord om
+  kurs eller råd; rutinmeddelanden är neutrala (kontrollerar spårbarhet, inte
+  om bedömningen är riktig)
 - publiceringsdatum ligger inom veckan
 - varje siffra i rubrik/sammanfattning finns exakt (efter normalisering, se
   extract_numbers) i något evidence-citat – avrundade siffror underkänns
@@ -383,6 +387,12 @@ def validate_week(
             if conflicts:
                 res.errors.append(f"{where}: riktningen motsäger evidence: {conflicts}")
 
+            if "sentiment" in item:
+                entry_for_sentiment = raw_index.get(item["source"]["raw_file"]) if raw_index is not None else None
+                _check_sentiment(item, where, entry_for_sentiment, res)
+            elif not is_mock:
+                res.warnings.append(f"{where}: sentiment saknas")
+
             if raw_index is not None:
                 entry = raw_index.get(item["source"]["raw_file"])
                 if entry is None:
@@ -435,6 +445,53 @@ def _load_raw_index(week_raw: Path, res: Result) -> dict[str, dict] | None:
 
 def _sv_number(value: float) -> str:
     return f"{value:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+
+
+# --- Sentiment ---------------------------------------------------------------
+
+# Ord som handlar om aktien/kursen eller är råd – tonen ska bygga på nyhetens innehåll.
+_SENTIMENT_FORBIDDEN_RE = re.compile(
+    r"\bkurs(?:en|er|erna|uppgång\w*|nedgång\w*|rörelse\w*|mål\w*|ras\w*|lyft\w*)?\b|\baktien\b|\baktiekurs\w*"
+    r"|\bköp(?:läge|rekommendation|signal|värd)\w*|\bsälj(?:läge|rekommendation|signal)\w*|\bbör (?:köpas|säljas|köpa|sälja)\b"
+    r"|\bunder(?:värder|prissatt)\w*|\böver(?:värder|prissatt)\w*|\brekommend\w*|\bkursmål\w*|\binvesteringsråd\w*",
+    re.IGNORECASE,
+)
+_CONTENT_STOPWORDS = {
+    "och", "eller", "som", "för", "med", "till", "från", "efter", "under", "över", "inom", "mellan", "utan",
+    "att", "det", "den", "denna", "detta", "dessa", "har", "hade", "kommer", "ska", "skulle", "kan", "blir", "blev",
+    "bolaget", "bolagets", "också", "även", "samt", "vilket", "vilken", "där", "när", "nyheten", "procent",
+    "with", "that", "this", "will", "from", "have", "their", "about", "which",
+}
+
+
+def _content_stems(text: str) -> set[str]:
+    """Innehållsord (minst fyra bokstäver, inte stoppord), kortade till fem tecken
+    så att böjningar möts ("förvärvar"/"förvärvet")."""
+    return {w[:5] for w in (m.casefold() for m in re.findall(r"[^\W\d_]{4,}", text)) if w not in _CONTENT_STOPWORDS}
+
+
+def _check_sentiment(item: dict, where: str, raw_entry: dict | None, res: Result) -> None:
+    s = item["sentiment"]
+    evidence = item["evidence"]
+    bad = [i for i in s["basis"] if i >= len(evidence)]
+    if bad:
+        res.errors.append(f"{where}: sentiment.basis pekar på citat som inte finns: {bad} (evidence har {len(evidence)})")
+        return
+    refs = [evidence[i]["quote"] for i in s["basis"]]
+    text = s["rationale"]
+    missing = unsupported_numbers(text, refs)
+    if missing:
+        res.errors.append(f"{where}: sentiment.rationale har siffror som inte finns i de refererade citaten: {missing}")
+    conflicts = direction_conflicts(text, refs)
+    if conflicts:
+        res.errors.append(f"{where}: sentiment.rationale motsäger riktningen i de refererade citaten: {conflicts}")
+    if not _content_stems(text) & _content_stems(" ".join(refs)):
+        res.errors.append(f"{where}: sentiment.rationale delar inget innehållsord med de refererade citaten")
+    forbidden = sorted({m.group(0) for m in _SENTIMENT_FORBIDDEN_RE.finditer(text)})
+    if forbidden:
+        res.errors.append(f"{where}: sentiment.rationale får inte handla om kurs eller råd: {forbidden}")
+    if raw_entry is not None and raw_entry.get("routine") and s["label"] != "neutral":
+        res.errors.append(f"{where}: rutinmeddelanden ska ha sentiment 'neutral', inte {s['label']!r}")
 
 
 _RATE_RE = re.compile(r"styrränt", re.IGNORECASE)

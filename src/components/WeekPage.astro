@@ -138,11 +138,17 @@ const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
                 </p>
                 <h3>{it.headline}</h3>
                 <p class="summary">{it.summary}</p>
+                {it.sentiment && (
+                  <p class="tone">
+                    <span class:list={["tone-label", it.sentiment.label]}>Ton: {it.sentiment.label}</span>
+                    <span class="tone-why">{it.sentiment.rationale}</span>
+                  </p>
+                )}
 
                 {it.listed.length > 0 && (
                   <div class="cards">
                     {it.listed.map((c) => (
-                      <CompanyCard company={c} hasPrices={view.hasPrices} />
+                      <CompanyCard company={c} hasPrices={view.hasPrices} tone={it.sentiment?.label} />
                     ))}
                   </div>
                 )}
@@ -434,6 +440,33 @@ const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
   .summary {
     margin: 0 0 12px;
     max-width: 70ch;
+  }
+
+  .tone {
+    margin: -4px 0 12px;
+    font-size: 0.875rem;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+  .tone-label {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    color: var(--muted);
+  }
+  .tone-label.positiv {
+    color: var(--pos);
+  }
+  .tone-label.negativ {
+    color: var(--neg);
+  }
+  .tone-why {
+    color: var(--muted);
   }
 
   .cards {
