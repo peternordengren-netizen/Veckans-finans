@@ -130,6 +130,7 @@ const ins = analysis.insider;
             {c.buy_value_sek > 0 && <span>Köp {kr(c.buy_value_sek)}</span>}
             {c.buy_value_sek > 0 && c.sell_value_sek > 0 && <span aria-hidden="true"> · </span>}
             {c.sell_value_sek > 0 && <span>Försäljning {kr(c.sell_value_sek)}</span>}
+            {c.sell_value_sek > 0 && c.under_offer && <span class="offer"> · under pågående uppköpsbud</span>}
           </div>
           <details>
             <summary>{c.transactions.length} {c.transactions.length === 1 ? "transaktion" : "transaktioner"}</summary>
@@ -140,6 +141,7 @@ const ins = analysis.insider;
                   {t.person}{t.closely_associated ? " (närstående)" : ""}, {t.position}:
                   {" "}{sek.format(t.volume)} st × {pct.format(t.price)} kr = {kr(t.value_sek)}
                   <span class="date"> · {formatDate(t.transaction_date)}</span>
+                  {t.side === "försäljning" && c.under_offer && <span class="offer"> · under pågående uppköpsbud</span>}
                 </li>
               ))}
             </ul>
@@ -256,6 +258,9 @@ const ins = analysis.insider;
   .flag.sell {
     background: var(--indirect-bg);
     color: var(--indirect-fg);
+  }
+  .offer {
+    font-style: italic;
   }
   details {
     margin-top: 6px;

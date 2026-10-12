@@ -162,6 +162,8 @@ export interface InsiderCompany {
   sellers: string[];
   cluster_buy: boolean;
   cluster_sell: boolean;
+  /** Målbolag för uppköpsbud/avnotering enligt veckans nyheter (saknas i äldre filer). */
+  under_offer?: boolean;
   transactions: InsiderTransaction[];
 }
 export interface Analysis {

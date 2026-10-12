@@ -417,6 +417,7 @@ def validate_week(
             for c in item["companies"]:
                 _check_company(c, where, instruments, names, res)
                 _check_indirect_sector(c, where, instruments, linked, res)
+                _check_bid_target(c, item, where, res)
 
             for imp in item["sector_impacts"]:
                 if imp["sector"] not in sector_ids:
@@ -579,6 +580,34 @@ def _check_company(c: dict, where: str, instruments: dict[str, Instrument], name
         ticker = names.get(c["name"].casefold())
         if ticker is not None:
             res.errors.append(f"{label}: markerat 'ej i listan' men matchar {ticker!r} i instruments.csv")
+
+
+TAKEOVER_RE = re.compile(
+    r"uppköp|offentligt erbjudande|budpliktsbud|\bbud\b|avnoter|tvångsinlös"
+    r"|takeover|tender offer|public offer|delist|squeeze-out|compulsory (?:acquisition|redemption)",
+    re.IGNORECASE,
+)
+
+
+def _check_bid_target(c: dict, item: dict, where: str, res: Result) -> None:
+    """bid_target får bara sitta på ett matchat, direkt berört bolag i en nyhet som
+    handlar om uppköpsbud, avnotering eller tvångsinlösen."""
+    if not c.get("bid_target"):
+        return
+    label = f"{where}: bolaget {c['name']!r} har bid_target"
+    if c["match"] != "matchad" or c["impact"] != "direkt":
+        res.errors.append(f"{label} men är inte ett matchat, direkt berört bolag")
+    text = " ".join([item["headline"], item["summary"], *(e["quote"] for e in item["evidence"])])
+    if not TAKEOVER_RE.search(text):
+        res.errors.append(f"{label} men nyheten nämner inget uppköpsbud, ingen avnotering och ingen tvångsinlösen")
+
+
+def bid_targets(week_data: dict) -> set[str]:
+    """Tickers som är målbolag för uppköpsbud/avnotering enligt veckofilen."""
+    return {
+        c["ticker"] for s in week_data.get("sectors", []) for it in s["items"] for c in it["companies"]
+        if c.get("bid_target") and c.get("ticker")
+    }
 
 
 def _check_indirect_sector(

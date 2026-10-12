@@ -69,6 +69,11 @@ Veckan har typiskt flera hundra poster. Läs dem inte alla.
      eller en analys om något annat, kopplas avsändaren inte till nyheten, varken direkt eller indirekt. Det gäller till
      exempel Swedbanks inköpschefsindex, SEB:s boprisindikator, bankers konjunkturprognoser och Swecos analyser. Bolaget
      kopplas bara om nyheten handlar om dess egen verksamhet, till exempel dess egna siffror eller affärer.
+   - **Uppköpsbud och avnotering:** när nyheten handlar om ett uppköpsbud, en avnotering eller en tvångsinlösen sätter
+     du `"bid_target": true` på **målbolaget**, alltså det bolag som köps upp eller avnoteras, inte budgivaren. Det
+     måste vara matchat och direkt berört. Sidan markerar då bolagets insynsförsäljningar samma vecka som "under
+     pågående uppköpsbud". Valideringen underkänner `bid_target` om nyheten inte nämner bud, avnotering eller
+     tvångsinlösen.
    - `impact`: `"direkt"` om bolaget är föremål för nyheten, `"indirekt"` om det påverkas via kunder, leverantörer, konkurrenter, räntor eller liknande. `rationale` är en mening.
 8. **Indirekt sektorpåverkan:** ange i `sector_impacts` vilka *andra* sektorer nyheten rimligen påverkar, med riktning (`positiv`/`negativ`/`blandad`/`oklar`) och en motivering på en mening. Använd `oklar` hellre än att gissa. En tom lista är okej.
 9. **Sektor och indirekta kopplingar via `sektor` i `instruments.csv`:**

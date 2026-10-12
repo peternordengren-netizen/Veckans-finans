@@ -21,7 +21,9 @@ Insyn:
     Transaktioner publicerade under veckan, karaktär Förvärv eller Avyttring, aktier,
     i SEK, inte kopplade till aktieprogram, status Aktuell och värde (volym × pris)
     över INSYN_MIN_SEK. Bolag där minst CLUSTER_MIN_PERSONS olika insynspersoner köpt
-    (respektive sålt) markeras.
+    (respektive sålt) markeras. Bolag som enligt veckans nyheter är målbolag för ett
+    uppköpsbud eller en avnotering (bid_target i veckofilen) får under_offer = true, så
+    att försäljningar inte läses som fristående säljbeslut.
 
 Användning:
     python scripts/registers.py 2026-W41 [--raw-dir data/raw] [--out data/analysis/2026-W41.json]
@@ -40,7 +42,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from validate import Instrument, iso_week_period, load_instruments, validate_analysis  # noqa: E402
+from validate import Instrument, bid_targets, iso_week_period, load_instruments, validate_analysis  # noqa: E402
 
 from fetch import STOCKHOLM  # noqa: E402
 
@@ -189,7 +191,7 @@ def aggregate_changes(snaps: list[dict], start: date, end: date, instruments: di
 
 
 def insyn_summary(raw_dir: Path, week: str, start: date, end: date, isin_to_ticker: dict[str, str],
-                  instruments: dict[str, Instrument]) -> dict:
+                  instruments: dict[str, Instrument], under_offer: set[str] = frozenset()) -> dict:
     files = {p.stem.removeprefix("insyn-"): _load(p) for p in (raw_dir / week / "fi").glob("insyn-*.json")}
     days = [(start + timedelta(days=i)).isoformat() for i in range(7)]
     excluded = {"other_nature": 0, "not_share": 0, "share_program": 0, "not_current": 0, "non_sek": 0,
@@ -230,6 +232,7 @@ def insyn_summary(raw_dir: Path, week: str, start: date, end: date, isin_to_tick
             "ticker": c["ticker"], "name": c["name"], "buy_value_sek": buy, "sell_value_sek": sell,
             "net_value_sek": buy - sell, "buyers": buyers, "sellers": sellers,
             "cluster_buy": len(buyers) >= CLUSTER_MIN_PERSONS, "cluster_sell": len(sellers) >= CLUSTER_MIN_PERSONS,
+            "under_offer": c["ticker"] in under_offer,
             "transactions": tx,
         })
     companies.sort(key=lambda c: (-(c["buy_value_sek"] + c["sell_value_sek"]), c["name"]))
@@ -243,7 +246,10 @@ def insyn_summary(raw_dir: Path, week: str, start: date, end: date, isin_to_tick
 # --- Sammanställning ---------------------------------------------------------
 
 
-def build(week: str, raw_dir: Path, instruments: dict[str, Instrument], now: datetime) -> dict:
+def build(week: str, raw_dir: Path, instruments: dict[str, Instrument], now: datetime,
+          under_offer: set[str] = frozenset()) -> dict:
+    """under_offer: tickers som är målbolag för uppköpsbud/avnotering enligt veckans
+    nyheter (bid_target i data/weeks/<vecka>.json)."""
     start, end = iso_week_period(week)
     isin_to_ticker = {isin: t for t, i in instruments.items() for isin in i.isin}
     snaps = _snapshots(raw_dir)
@@ -255,7 +261,7 @@ def build(week: str, raw_dir: Path, instruments: dict[str, Instrument], now: dat
         "top_n": TOP_N,
         "short_positions": positions_changes(raw_dir, snaps, start, end, isin_to_ticker, instruments),
         "short_aggregate": aggregate_changes(snaps, start, end, instruments, isin_to_ticker),
-        "insider": insyn_summary(raw_dir, week, start, end, isin_to_ticker, instruments),
+        "insider": insyn_summary(raw_dir, week, start, end, isin_to_ticker, instruments, under_offer),
     }
 
 
@@ -265,10 +271,17 @@ def main(argv: list[str] | None = None, now: datetime | None = None) -> int:
     p.add_argument("--raw-dir", type=Path, default=ROOT / "data" / "raw")
     p.add_argument("--instruments", type=Path, default=ROOT / "data" / "instruments.csv")
     p.add_argument("--out", type=Path)
+    p.add_argument("--week-file", type=Path, help="veckofilen med bid_target (standard: data/weeks/<vecka>.json)")
     args = p.parse_args(argv)
     out = args.out or ROOT / "data" / "analysis" / f"{args.week}.json"
+    week_file = args.week_file or ROOT / "data" / "weeks" / f"{args.week}.json"
+    if week_file.exists():
+        targets = bid_targets(json.loads(week_file.read_text(encoding="utf-8")))
+    else:
+        targets = set()
+        print(f"Veckofilen saknas ({week_file}) – inga bolag markeras som under pågående uppköpsbud.", file=sys.stderr)
 
-    analysis = build(args.week, args.raw_dir, load_instruments(args.instruments), now or datetime.now(STOCKHOLM))
+    analysis = build(args.week, args.raw_dir, load_instruments(args.instruments), now or datetime.now(STOCKHOLM), targets)
     res = validate_analysis(analysis, args.week)
     if res.errors:
         print("Analysen klarar inte valideringen – skrivs inte:", *res.errors, sep="\n  ", file=sys.stderr)

@@ -146,6 +146,9 @@ Data dateras till gårdagen, så att lördagsmorgonens bild hamnar i fredagens v
   jobbet startat.
 - **Insyn:** förvärv och avyttring av aktier i SEK för mer än 100 000 kr, utom transaktioner kopplade till
   aktieprogram och reviderade poster. Bolag där minst två insynspersoner köpt, respektive sålt, markeras.
+  Om ett bolag är målbolag för ett uppköpsbud eller en avnotering, med `bid_target` i veckofilen, visas dess
+  försäljningar som "under pågående uppköpsbud". Det kan till exempel vara anslutning till budet och inget fristående
+  säljbeslut.
 
 Valideringen kontrollerar att siffrorna hänger ihop: förändring = slut − start, netto = köp − sälj, värde = volym × pris,
 tröskeln och markeringarna.

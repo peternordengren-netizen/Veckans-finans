@@ -1,7 +1,10 @@
 {
   "schema_version": 1,
   "week": "2026-W40",
-  "period": { "start": "2026-09-28", "end": "2026-10-04" },
+  "period": {
+    "start": "2026-09-28",
+    "end": "2026-10-04"
+  },
   "generated_at": "2026-10-05T07:00:00+02:00",
   "mock": true,
   "top_n": 10,
@@ -12,19 +15,55 @@
     "end_as_of": "2026-10-04",
     "changes": [
       {
-        "ticker": "FJLH B", "name": "Fjällhem Fastigheter", "start_pct": 1.2, "end_pct": 2.45, "change_pp": 1.25,
+        "ticker": "FJLH B",
+        "name": "Fjällhem Fastigheter",
+        "start_pct": 1.2,
+        "end_pct": 2.45,
+        "change_pp": 1.25,
         "holders": [
-          { "holder": "Exempelfonden LP", "start_pct": 0.0, "end_pct": 0.75, "change_pp": 0.75 },
-          { "holder": "Testkapital LLP", "start_pct": 1.2, "end_pct": 1.7, "change_pp": 0.5 }
+          {
+            "holder": "Exempelfonden LP",
+            "start_pct": 0.0,
+            "end_pct": 0.75,
+            "change_pp": 0.75
+          },
+          {
+            "holder": "Testkapital LLP",
+            "start_pct": 1.2,
+            "end_pct": 1.7,
+            "change_pp": 0.5
+          }
         ]
       },
       {
-        "ticker": "VAGN B", "name": "Vågnät Telekom", "start_pct": 0.6, "end_pct": 0.9, "change_pp": 0.3,
-        "holders": [ { "holder": "Påhittad Förvaltning AB", "start_pct": 0.6, "end_pct": 0.9, "change_pp": 0.3 } ]
+        "ticker": "VAGN B",
+        "name": "Vågnät Telekom",
+        "start_pct": 0.6,
+        "end_pct": 0.9,
+        "change_pp": 0.3,
+        "holders": [
+          {
+            "holder": "Påhittad Förvaltning AB",
+            "start_pct": 0.6,
+            "end_pct": 0.9,
+            "change_pp": 0.3
+          }
+        ]
       },
       {
-        "ticker": "KUST A", "name": "Kustbanken", "start_pct": 0.8, "end_pct": 0.0, "change_pp": -0.8,
-        "holders": [ { "holder": "Exempelfonden LP", "start_pct": 0.8, "end_pct": 0.0, "change_pp": -0.8 } ]
+        "ticker": "KUST A",
+        "name": "Kustbanken",
+        "start_pct": 0.8,
+        "end_pct": 0.0,
+        "change_pp": -0.8,
+        "holders": [
+          {
+            "holder": "Exempelfonden LP",
+            "start_pct": 0.8,
+            "end_pct": 0.0,
+            "change_pp": -0.8
+          }
+        ]
       }
     ]
   },
@@ -34,32 +73,109 @@
     "start_as_of": "2026-09-27",
     "end_as_of": "2026-10-04",
     "changes": [
-      { "ticker": "FJLH B", "name": "Fjällhem Fastigheter", "start_pct": 1.6, "end_pct": 2.95, "change_pp": 1.35 },
-      { "ticker": "KUST A", "name": "Kustbanken", "start_pct": 1.1, "end_pct": 0.35, "change_pp": -0.75 }
+      {
+        "ticker": "FJLH B",
+        "name": "Fjällhem Fastigheter",
+        "start_pct": 1.6,
+        "end_pct": 2.95,
+        "change_pp": 1.35
+      },
+      {
+        "ticker": "KUST A",
+        "name": "Kustbanken",
+        "start_pct": 1.1,
+        "end_pct": 0.35,
+        "change_pp": -0.75
+      }
     ]
   },
   "insider": {
     "threshold_sek": 100000,
     "cluster_min_persons": 2,
-    "days_covered": ["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"],
+    "days_covered": [
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-03",
+      "2026-10-04"
+    ],
     "days_missing": [],
-    "excluded": { "other_nature": 12, "not_share": 3, "share_program": 2, "not_current": 0, "non_sek": 1, "below_threshold": 9, "not_in_list": 30 },
+    "excluded": {
+      "other_nature": 12,
+      "not_share": 3,
+      "share_program": 2,
+      "not_current": 0,
+      "non_sek": 1,
+      "below_threshold": 9,
+      "not_in_list": 30
+    },
     "companies": [
       {
-        "ticker": "FJLH B", "name": "Fjällhem Fastigheter", "buy_value_sek": 1350000, "sell_value_sek": 0,
-        "net_value_sek": 1350000, "buyers": ["Anna Exempel", "Bo Påhittad"], "sellers": [],
-        "cluster_buy": true, "cluster_sell": false,
+        "ticker": "FJLH B",
+        "name": "Fjällhem Fastigheter",
+        "buy_value_sek": 1350000,
+        "sell_value_sek": 0,
+        "net_value_sek": 1350000,
+        "buyers": [
+          "Anna Exempel",
+          "Bo Påhittad"
+        ],
+        "sellers": [],
+        "cluster_buy": true,
+        "cluster_sell": false,
+        "under_offer": false,
         "transactions": [
-          { "person": "Anna Exempel", "position": "VD", "closely_associated": "", "side": "köp", "transaction_date": "2026-09-29", "published_date": "2026-09-30", "volume": 20000, "price": 45.0, "value_sek": 900000 },
-          { "person": "Bo Påhittad", "position": "Styrelseledamot", "closely_associated": "Ja", "side": "köp", "transaction_date": "2026-10-01", "published_date": "2026-10-02", "volume": 10000, "price": 45.0, "value_sek": 450000 }
+          {
+            "person": "Anna Exempel",
+            "position": "VD",
+            "closely_associated": "",
+            "side": "köp",
+            "transaction_date": "2026-09-29",
+            "published_date": "2026-09-30",
+            "volume": 20000,
+            "price": 45.0,
+            "value_sek": 900000
+          },
+          {
+            "person": "Bo Påhittad",
+            "position": "Styrelseledamot",
+            "closely_associated": "Ja",
+            "side": "köp",
+            "transaction_date": "2026-10-01",
+            "published_date": "2026-10-02",
+            "volume": 10000,
+            "price": 45.0,
+            "value_sek": 450000
+          }
         ]
       },
       {
-        "ticker": "KUST A", "name": "Kustbanken", "buy_value_sek": 0, "sell_value_sek": 250000,
-        "net_value_sek": -250000, "buyers": [], "sellers": ["Cia Fiktiv"],
-        "cluster_buy": false, "cluster_sell": false,
+        "ticker": "KUST A",
+        "name": "Kustbanken",
+        "buy_value_sek": 0,
+        "sell_value_sek": 250000,
+        "net_value_sek": -250000,
+        "buyers": [],
+        "sellers": [
+          "Cia Fiktiv"
+        ],
+        "cluster_buy": false,
+        "cluster_sell": false,
+        "under_offer": false,
         "transactions": [
-          { "person": "Cia Fiktiv", "position": "CFO", "closely_associated": "", "side": "försäljning", "transaction_date": "2026-09-30", "published_date": "2026-10-01", "volume": 1000, "price": 250.0, "value_sek": 250000 }
+          {
+            "person": "Cia Fiktiv",
+            "position": "CFO",
+            "closely_associated": "",
+            "side": "försäljning",
+            "transaction_date": "2026-09-30",
+            "published_date": "2026-10-01",
+            "volume": 1000,
+            "price": 250.0,
+            "value_sek": 250000
+          }
         ]
       }
     ]

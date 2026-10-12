@@ -159,6 +159,29 @@ def test_insyn_filter_trosklar_och_flera_insynspersoner(tmp_path, instruments):
     assert ins["days_missing"] == ["2026-10-10", "2026-10-11"]
 
 
+def test_forsaljning_i_malbolag_markeras_under_uppkopsbud(tmp_path, instruments):
+    insyn_days(tmp_path, {"2026-10-06": [
+        insyn_row("Kustbanken AB", KUST, "Cia C", "Avyttring", 10000, 20.0),
+        insyn_row("Fjällhem AB", FJLH, "Anna A", "Avyttring", 10000, 20.0),
+    ]})
+    ins = registers.build("2026-W41", tmp_path, instruments, NOW, under_offer={"KUST A"})["insider"]
+    by = {c["ticker"]: c["under_offer"] for c in ins["companies"]}
+    assert by == {"KUST A": True, "FJLH B": False}
+
+
+def test_main_laser_bid_target_ur_veckofilen(tmp_path, instruments):
+    raw = tmp_path / "raw"
+    insyn_days(raw, {"2026-10-06": [insyn_row("Kustbanken AB", KUST, "Cia C", "Avyttring", 10000, 20.0)]})
+    week_file = tmp_path / "w.json"
+    week_file.write_text(json.dumps({"sectors": [{"items": [{"companies": [
+        {"ticker": "KUST A", "bid_target": True}, {"ticker": "FJLH B"}]}]}]}), encoding="utf-8")
+    out = tmp_path / "a.json"
+    registers.main(["2026-W41", "--raw-dir", str(raw), "--instruments", str(validate.MOCK_DIR / "instruments.csv"),
+                    "--out", str(out), "--week-file", str(week_file)], now=NOW)
+    [c] = json.loads(out.read_text(encoding="utf-8"))["insider"]["companies"]
+    assert c["under_offer"] is True
+
+
 def test_insyn_publicerad_utanfor_veckan_tas_inte_med(tmp_path, instruments):
     insyn_days(tmp_path, {})
     write(tmp_path / "2026-W41" / "fi" / "insyn-2026-10-04.json",  # felplacerad fil från förra veckan

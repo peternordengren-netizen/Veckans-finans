@@ -162,7 +162,11 @@
           "description": "direkt = bolaget är föremål för nyheten; indirekt = påverkas via kunder, leverantörer, konkurrenter, räntor e.d.",
           "enum": ["direkt", "indirekt"]
         },
-        "rationale": { "description": "En mening om varför bolaget berörs.", "type": "string", "minLength": 1 }
+        "rationale": { "description": "En mening om varför bolaget berörs.", "type": "string", "minLength": 1 },
+        "bid_target": {
+          "description": "true om bolaget är målbolag i ett uppköpsbud, en avnotering eller en tvångsinlösen som nyheten handlar om. Används för att markera insynsförsäljningar under pågående bud.",
+          "type": "boolean"
+        }
       },
       "if": { "properties": { "match": { "const": "matchad" } } },
       "then": {

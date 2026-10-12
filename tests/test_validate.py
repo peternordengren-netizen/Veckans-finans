@@ -500,6 +500,39 @@ def test_sentiment_schema(week, instruments, sector_ids, bad):
     assert any(e.startswith("schema:") for e in run(week, instruments, sector_ids).errors)
 
 
+# --- Uppköpsbud (bid_target) -------------------------------------------------
+
+
+def takeover_item(week):
+    it = item(week, "fast-tallmo-forsaljning")
+    it["headline"] = "Fjällhem lägger offentligt uppköpsbud på Albion Biotech"
+    it["summary"] = "Albion Biotech ansöker om avnotering."
+    it["companies"].append({"name": "Albion Biotech", "match": "matchad", "ticker": "ALBN", "yahoo_ticker": "ALBN.MOCK",
+                            "exchange": "Exempelbörsen", "impact": "direkt", "rationale": "Målbolaget.",
+                            "bid_target": True})
+    return it
+
+
+def test_bid_target_pa_malbolaget_i_en_budnyhet_godkanns(week, instruments, sector_ids):
+    takeover_item(week)
+    assert run(week, instruments, sector_ids).errors == []
+    assert validate.bid_targets(week) == {"ALBN"}
+
+
+def test_bid_target_utan_budord_i_nyheten_underkanns(week, instruments, sector_ids):
+    it = takeover_item(week)
+    it["headline"], it["summary"] = "Fjällhem och Albion Biotech samarbetar", "Ett samarbetsavtal."
+    res = run(week, instruments, sector_ids)
+    assert any("nämner inget uppköpsbud" in e for e in res.errors)
+
+
+@pytest.mark.parametrize("change", [{"impact": "indirekt"}, {"match": "ej i listan", "ticker": None, "yahoo_ticker": None, "exchange": None}])
+def test_bid_target_maste_vara_matchat_och_direkt(week, instruments, sector_ids, change):
+    takeover_item(week)["companies"][-1].update(change)
+    res = run(week, instruments, sector_ids)
+    assert any("inte ett matchat, direkt berört bolag" in e for e in res.errors)
+
+
 # --- Rådata och mock-spärr -------------------------------------------------
 
 
