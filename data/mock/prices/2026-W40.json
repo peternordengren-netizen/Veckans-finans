@@ -4,12 +4,13 @@
   "fetched_at": "2026-10-04T18:05:00+02:00",
   "mock": true,
   "quotes": {
-    "FJLH-B.MOCK": { "change_pct": 4.8, "close": 5.12, "currency": "SEK" },
-    "KUST-A.MOCK": { "change_pct": -2.3, "close": 251.4, "currency": "SEK" },
-    "NRSK.MOCK": { "change_pct": 6.3, "close": 412.0, "currency": "SEK" },
-    "VAGN-B.MOCK": { "change_pct": -1.9, "close": 84.2, "currency": "SEK" },
-    "MOLN.MOCK": { "change_pct": 0.4, "close": 301.5, "currency": "SEK" }
+    "FJLH-B.MOCK": { "change_pct": 4.8, "close": 5.12, "currency": "SEK", "relative_pp": 3.8 },
+    "KUST-A.MOCK": { "change_pct": -2.3, "close": 251.4, "currency": "SEK", "relative_pp": -3.3 },
+    "NRSK.MOCK": { "change_pct": 6.3, "close": 412.0, "currency": "SEK", "relative_pp": 5.3 },
+    "VAGN-B.MOCK": { "change_pct": -1.9, "close": 84.2, "currency": "SEK", "relative_pp": -2.9 },
+    "MOLN.MOCK": { "change_pct": 0.4, "close": 301.5, "currency": "SEK", "relative_pp": -0.6 }
   },
+  "index": { "ticker": "^OMXSPI", "name": "OMX Stockholm PI", "change_pct": 1.0, "close": 1100.0, "currency": "SEK" },
   "errors": {
     "ALBN.MOCK": "Exempel: ingen data returnerades"
   }

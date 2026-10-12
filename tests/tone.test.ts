@@ -1,25 +1,27 @@
-// Tester för "avviker" (nyhetens ton mot veckans kursrörelse). Körs med `npm run test:js`.
+// Tester för "avviker" (nyhetens ton mot kursrörelsen relativt index). Körs med `npm run test:js`.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { divergesFromPrice } from "../src/lib/tone.ts";
 
-test("positiv ton och sjunkande kurs avviker", () => {
-  assert.equal(divergesFromPrice("positiv", { change_pct: -1.9 }), true);
+test("positiv ton och sämre än index avviker – även om kursen steg", () => {
+  assert.equal(divergesFromPrice("positiv", { relative_pp: -0.6 }), true);
 });
 
-test("negativ ton och stigande kurs avviker", () => {
-  assert.equal(divergesFromPrice("negativ", { change_pct: 0.4 }), true);
+test("negativ ton och bättre än index avviker – även om kursen föll", () => {
+  assert.equal(divergesFromPrice("negativ", { relative_pp: 0.4 }), true);
 });
 
-test("samma håll avviker inte", () => {
-  assert.equal(divergesFromPrice("positiv", { change_pct: 4.8 }), false);
-  assert.equal(divergesFromPrice("negativ", { change_pct: -2.3 }), false);
+test("samma håll som index-skillnaden avviker inte – även om kursen föll", () => {
+  assert.equal(divergesFromPrice("positiv", { relative_pp: 3.8 }), false);
+  assert.equal(divergesFromPrice("negativ", { relative_pp: -2.3 }), false);
 });
 
-test("neutral, oförändrad kurs, saknad kurs eller saknad ton avviker aldrig", () => {
-  assert.equal(divergesFromPrice("neutral", { change_pct: -5 }), false);
-  assert.equal(divergesFromPrice("positiv", { change_pct: 0 }), false);
+test("neutral, lika med index, saknad jämförelse, saknad kurs eller saknad ton avviker aldrig", () => {
+  assert.equal(divergesFromPrice("neutral", { relative_pp: -5 }), false);
+  assert.equal(divergesFromPrice("positiv", { relative_pp: 0 }), false);
+  assert.equal(divergesFromPrice("positiv", { relative_pp: null }), false);
+  assert.equal(divergesFromPrice("positiv", {}), false);
   assert.equal(divergesFromPrice("positiv", null), false);
-  assert.equal(divergesFromPrice(undefined, { change_pct: -5 }), false);
+  assert.equal(divergesFromPrice(undefined, { relative_pp: -5 }), false);
 });

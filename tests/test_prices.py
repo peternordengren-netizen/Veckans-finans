@@ -83,15 +83,57 @@ def test_pagaende_vecka_anvander_bara_kurser_till_och_med_i_dag():
     assert out["quotes"]["FJLH-B.MOCK"]["close"] == 101.0  # 2/10 räknas inte ännu
 
 
+INDEX = hist(("2026-09-25", 1000.0), ("2026-10-02", 1010.0))  # +1,0 %
+
+
+def test_relativ_forandring_mot_index():
+    out = prices.build_prices(MOCK_WEEK, fake_fetch({prices.INDEX_TICKER: INDEX, "FJLH-B.MOCK": NORMAL}),
+                              today=date(2026, 10, 5), now=NOW)
+    assert out["index"] == {"ticker": "^OMXSPI", "name": "OMX Stockholm PI", "change_pct": 1.0, "close": 1010.0,
+                            "currency": "SEK"}
+    assert out["quotes"]["FJLH-B.MOCK"]["relative_pp"] == 3.8  # 4,8 − 1,0
+    assert validate.validate_prices(out, "2026-W40").errors == []
+
+
+def test_aktie_i_annan_valuta_jamfors_inte_med_stockholmsindex():
+    dkk = hist(("2026-09-25", 100.0), ("2026-10-02", 102.0), currency="DKK")
+    out = prices.build_prices(MOCK_WEEK, fake_fetch({prices.INDEX_TICKER: INDEX, "NRSK.MOCK": dkk}),
+                              today=date(2026, 10, 5), now=NOW)
+    assert out["quotes"]["NRSK.MOCK"]["relative_pp"] is None
+
+
+def test_saknat_index_ger_ingen_jamforelse_men_kurser_finns():
+    out = prices.build_prices(MOCK_WEEK, fake_fetch({"FJLH-B.MOCK": NORMAL}), today=date(2026, 10, 5), now=NOW)
+    assert "index" not in out and prices.INDEX_TICKER in out["errors"]
+    assert out["quotes"]["FJLH-B.MOCK"] == {"change_pct": 4.8, "close": 104.8, "currency": "SEK", "relative_pp": None}
+    assert validate.validate_prices(out, "2026-W40").errors == []
+
+
+@pytest.mark.parametrize(
+    "change, message",
+    [
+        ({"relative_pp": 1.0}, "relative_pp 1.0 ≠ 4.8 − 1.0"),
+        ({"currency": "DKK"}, "mot Stockholmsindex för aktie i DKK"),
+    ],
+)
+def test_validering_av_relativ_forandring(change, message):
+    out = prices.build_prices(MOCK_WEEK, fake_fetch({prices.INDEX_TICKER: INDEX, "FJLH-B.MOCK": NORMAL}),
+                              today=date(2026, 10, 5), now=NOW)
+    out["quotes"]["FJLH-B.MOCK"].update(change)
+    assert any(message in e for e in validate.validate_prices(out, "2026-W40").errors)
+
+
 def test_delvisa_fel_hamnar_i_errors_och_filen_ar_giltig(tmp_path):
     out = tmp_path / "p.json"
-    table = {"FJLH-B.MOCK": NORMAL, "KUST-A.MOCK": hist(("2026-09-25", 250.0), ("2026-10-02", 245.0))}
+    table = {"FJLH-B.MOCK": NORMAL, "KUST-A.MOCK": hist(("2026-09-25", 250.0), ("2026-10-02", 245.0)),
+             prices.INDEX_TICKER: INDEX}
     code = prices.main(["2026-W40", "--mock", "--out", str(out)], fetch=fake_fetch(table), now=NOW)
     assert code == 0
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data["mock"] is True
     assert set(data["quotes"]) == {"FJLH-B.MOCK", "KUST-A.MOCK"}
     assert data["quotes"]["KUST-A.MOCK"]["change_pct"] == -2.0
+    assert data["quotes"]["KUST-A.MOCK"]["relative_pp"] == -3.0
     assert set(data["errors"]) == {"ALBN.MOCK", "MOLN.MOCK", "NRSK.MOCK", "VAGN-B.MOCK"}
     assert validate.validate_prices(data, "2026-W40").errors == []
 

@@ -607,6 +607,19 @@ def validate_prices(data: dict, expected_week: str | None) -> Result:
     if expected_week is not None and data["week"] != expected_week:
         res.errors.append(f"week {data['week']!r} matchar inte filnamnet {expected_week!r}")
     _check_datetime(data["fetched_at"], "fetched_at", res)
+    index = data.get("index")
+    for ticker, q in data["quotes"].items():
+        rel = q.get("relative_pp")
+        if rel is None:
+            if index is not None and q["currency"] == "SEK" and "relative_pp" in q:
+                res.errors.append(f"{ticker}: relative_pp saknas fast index finns")
+            continue
+        if index is None:
+            res.errors.append(f"{ticker}: relative_pp utan index")
+        elif q["currency"] != "SEK":
+            res.errors.append(f"{ticker}: relative_pp mot Stockholmsindex för aktie i {q['currency']}")
+        elif abs(q["change_pct"] - index["change_pct"] - rel) > 0.011:
+            res.errors.append(f"{ticker}: relative_pp {rel} ≠ {q['change_pct']} − {index['change_pct']}")
     return res
 
 

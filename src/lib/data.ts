@@ -27,6 +27,14 @@ export interface Quote {
   change_pct: number;
   close: number;
   currency: string;
+  /** Skillnad mot index i procentenheter; null/saknas om ingen jämförelse finns. */
+  relative_pp?: number | null;
+}
+
+export interface IndexQuote {
+  ticker: string;
+  name: string;
+  change_pct: number;
 }
 
 export interface ListedCompany {
@@ -91,6 +99,8 @@ export interface WeekView {
   end: string;
   mock: boolean;
   hasPrices: boolean;
+  /** Jämförelseindex för veckan (ur kursfilen), om det kunde hämtas. */
+  index: IndexQuote | null;
   policyRate: PolicyRate | null;
   analysis: Analysis | null;
   sectors: SectorView[];
@@ -181,11 +191,12 @@ export function loadAnalysis(week: string): Analysis | null {
 }
 
 /** Kursfilen är valfri – saknas den, eller är den trasig, visas sidan utan kurser. */
-function loadQuotes(week: string): Record<string, Quote> | null {
+function loadPrices(week: string): { quotes: Record<string, Quote>; index: IndexQuote | null } | null {
   const path = join(PRICES_DIR, `${week}.json`);
   if (!existsSync(path)) return null;
   try {
-    return readJson<{ quotes: Record<string, Quote> }>(path).quotes ?? null;
+    const data = readJson<{ quotes: Record<string, Quote>; index?: IndexQuote }>(path);
+    return data.quotes ? { quotes: data.quotes, index: data.index ?? null } : null;
   } catch (err) {
     console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan kurser:`, err);
     return null;
@@ -238,7 +249,8 @@ export function loadWeek(week: string): WeekView {
   const sectors = loadSectors();
   const byId = new Map(sectors.map((s) => [s.id, s]));
   const sectorOf = (id: string): Sector => byId.get(id) ?? { id, name: id };
-  const quotes = loadQuotes(week);
+  const prices = loadPrices(week);
+  const quotes = prices?.quotes ?? null;
 
   const toItem = (it: RawItem): ItemView => ({
     id: it.id,
@@ -282,6 +294,7 @@ export function loadWeek(week: string): WeekView {
     end: raw.period.end,
     mock: Boolean(raw.mock),
     hasPrices: quotes !== null,
+    index: prices?.index ?? null,
     policyRate: pr
       ? {
           value: pr.value,

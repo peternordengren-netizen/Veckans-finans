@@ -7,7 +7,9 @@ samma svar).
 Veckans förändring = senaste stängning t.o.m. veckans söndag (eller i dag, om
 veckan pågår) jämfört med senaste stängning före veckans måndag. Förändringen
 räknas på justerad stängning (utdelningar och splittar påverkar inte), medan
-"close" är den faktiska stängningskursen.
+"close" är den faktiska stängningskursen. Samma förändring hämtas för
+jämförelseindexet (INDEX_TICKER) och varje aktie i SEK får relative_pp =
+förändring minus indexets förändring, i procentenheter.
 
 Fail-soft – sidan fungerar utan kursfilen:
 - en ticker som inte går att hämta hamnar i "errors" och övriga skrivs ändå
@@ -41,6 +43,12 @@ from validate import iso_week_period, validate_prices  # noqa: E402
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 DATA = ROOT / "data"
 LOOKBACK_DAYS = 10  # tillräckligt för att hitta föregående stängning även över långhelger
+
+# Jämförelseindex. Hittat med yfinance Search och kontrollerat 2026-10-12: börs STO,
+# valuta SEK, typ INDEX. Brett index eftersom listan är Large och Mid Cap.
+# Obs: prisindex (utan utdelningar), medan bolagens förändring räknas på justerad stängning.
+INDEX_TICKER = "^OMXSPI"
+INDEX_NAME = "OMX Stockholm PI"
 
 
 @dataclass
@@ -107,18 +115,32 @@ def build_prices(week_data: dict, fetch: Fetcher, today: date, now: datetime) ->
     end = min(end, today)
     quotes: dict[str, dict] = {}
     errors: dict[str, str] = {}
-    for ticker in matched_tickers(week_data):
+
+    def get(ticker: str) -> dict | None:
         try:
-            quotes[ticker] = week_change(fetch(ticker, start - timedelta(days=LOOKBACK_DAYS), end), start, end)
+            return week_change(fetch(ticker, start - timedelta(days=LOOKBACK_DAYS), end), start, end)
         except Exception as err:  # noqa: BLE001 – varje tickerfel ska bara loggas
             errors[ticker] = f"{type(err).__name__}: {err}"[:200]
             print(f"[{ticker}] FEL: {errors[ticker]}", file=sys.stderr)
+            return None
+
+    index = get(INDEX_TICKER)
+    for ticker in matched_tickers(week_data):
+        q = get(ticker)
+        if q is None:
+            continue
+        # Skillnad mot index i procentenheter – bara för aktier i SEK, eftersom indexet
+        # är Stockholmsbörsens (Novo Nordisk i DKK eller Salesforce i USD jämförs inte).
+        q["relative_pp"] = round(q["change_pct"] - index["change_pct"], 2) if index and q["currency"] == "SEK" else None
+        quotes[ticker] = q
     out = {
         "schema_version": 1,
         "week": week,
         "fetched_at": now.isoformat(timespec="seconds"),
         "quotes": quotes,
     }
+    if index:
+        out["index"] = {"ticker": INDEX_TICKER, "name": INDEX_NAME, **index}
     if week_data.get("mock"):
         out["mock"] = True
     if errors:
@@ -155,7 +177,9 @@ def main(argv: list[str] | None = None, fetch: Fetcher | None = None,
 
     now = now or datetime.now(STOCKHOLM)
     prices = build_prices(week_data, fetch, now.date(), now)
-    n_ok, n_err = len(prices["quotes"]), len(prices.get("errors", {}))
+    n_ok, n_err = len(prices["quotes"]), len([t for t in prices.get("errors", {}) if t != INDEX_TICKER])
+    if "index" not in prices:
+        print(f"Index {INDEX_TICKER} kunde inte hämtas – ingen jämförelse mot index.", file=sys.stderr)
     if n_ok == 0:
         print(f"Ingen av {n_err} tickers kunde hämtas – ingen kursfil skrivs.", file=sys.stderr)
         return 1

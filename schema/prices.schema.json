@@ -21,8 +21,25 @@
         "properties": {
           "change_pct": { "description": "Förändring i procent från föregående veckas sista stängning till veckans sista stängning.", "type": "number" },
           "close": { "type": "number" },
-          "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+          "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+          "relative_pp": {
+            "description": "change_pct minus indexets change_pct, i procentenheter. null om index saknas eller aktien inte handlas i SEK.",
+            "type": ["number", "null"]
+          }
         }
+      }
+    },
+    "index": {
+      "description": "Jämförelseindex för veckan.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ticker", "name", "change_pct", "close", "currency"],
+      "properties": {
+        "ticker": { "type": "string" },
+        "name": { "type": "string" },
+        "change_pct": { "type": "number" },
+        "close": { "type": "number" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
       }
     },
     "errors": {

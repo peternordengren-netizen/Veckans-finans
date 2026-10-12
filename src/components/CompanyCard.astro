@@ -1,17 +1,25 @@
 ---
 /** Aktiekort för ett matchat (noterat) bolag. Kursraden visas bara när veckan har en kursfil. */
-import type { ListedCompany } from "../lib/data";
+import type { IndexQuote, ListedCompany } from "../lib/data";
 import { divergesFromPrice, type Tone } from "../lib/tone";
 
 interface Props {
   company: ListedCompany;
   hasPrices: boolean;
+  /** Jämförelseindex – används för texten "… mot <index>". */
+  index?: IndexQuote | null;
   /** Nyhetens ton – jämförs bara med kursen för direkt berörda bolag. */
   tone?: Tone;
 }
-const { company, hasPrices, tone } = Astro.props;
+const { company, hasPrices, index, tone } = Astro.props;
 const q = company.quote;
+// "Avviker" bygger på skillnaden mot index, inte på den absoluta rörelsen.
 const diverges = company.impact === "direkt" && divergesFromPrice(tone, q);
+const rel = q?.relative_pp;
+const relText =
+  rel !== null && rel !== undefined && index
+    ? `${new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" }).format(rel)} pe mot index`
+    : null;
 
 const pct = q
   ? new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" }).format(q.change_pct)
@@ -42,9 +50,14 @@ const arrow = { up: "▲", down: "▼", flat: "■" }[trend];
               {close} {q.currency}
             </span>
             <span class="sr-only">kursförändring under veckan</span>
+            {relText && (
+              <span class="relative" title={`Skillnad mot ${index!.name} (${index!.ticker}), i procentenheter`}>
+                {relText}
+              </span>
+            )}
             {diverges && (
-              <span class="diverges" title="Nyhetens ton och veckans kursrörelse går åt olika håll. Inget samband är fastställt.">
-                avviker
+              <span class="diverges" title="Nyhetens ton och kursrörelsen mot index går åt olika håll. Inget samband är fastställt.">
+                avviker mot index
               </span>
             )}
           </>
@@ -130,6 +143,11 @@ const arrow = { up: "▲", down: "▼", flat: "■" }[trend];
   }
   .price {
     flex-wrap: wrap;
+  }
+  .relative {
+    flex-basis: 100%;
+    font-size: 0.8125rem;
+    color: var(--muted);
   }
   .diverges {
     flex-basis: 100%;

@@ -42,6 +42,12 @@ const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
           <div>
             <h1>{weekLabel(view.week)}</h1>
             <p class="period">{formatDate(view.start)} – {formatDate(view.end)}</p>
+            {view.index && (
+              <p class="period index-line">
+                {view.index.name}:{" "}
+                {new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }).format(view.index.change_pct)} % under veckan
+              </p>
+            )}
           </div>
           {
             weeks.length > 1 && (
@@ -148,7 +154,7 @@ const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
                 {it.listed.length > 0 && (
                   <div class="cards">
                     {it.listed.map((c) => (
-                      <CompanyCard company={c} hasPrices={view.hasPrices} tone={it.sentiment?.label} />
+                      <CompanyCard company={c} hasPrices={view.hasPrices} index={view.index} tone={it.sentiment?.label} />
                     ))}
                   </div>
                 )}

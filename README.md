@@ -59,8 +59,8 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
   - motiveringen innehåller inga ord om kurs eller råd
   - rutinmeddelanden är neutrala
 
-  Sidan visar tonen och markerar "avviker" på aktiekortet när tonen och veckans kursrörelse går åt olika håll, utan
-  att påstå något samband.
+  Sidan visar tonen och markerar "avviker mot index" på aktiekortet när tonen och kursrörelsen *relativt index* går åt
+  olika håll, utan att påstå något samband. Utan jämförelse mot index markeras inget.
 - **Nyckeltal:** `key_figures.policy_rate` innehåller Riksbankens styrränta, alltså senaste observationen i veckan,
   värdet före senaste ändringen och ändringsdatumet, med länk till
   [Riksbankens sida om styrräntan](https://www.riksbank.se/sv/statistik/rantor-och-valutakurser/styrranta-in--och-utlaningsranta/).
@@ -115,6 +115,11 @@ Körs lokalt efter `/sammanfatta-veckan`:
 
 - Skriptet läser `yahoo_ticker` för matchade bolag i `data/weeks/<vecka>.json` och skriver `data/prices/<vecka>.json`.
 - Förändringen räknas från föregående veckas sista stängning till veckans sista stängning, på justerad stängning.
+- **Jämförelse mot index:** samma förändring hämtas för **OMX Stockholm PI (`^OMXSPI`)**. Tickern är hittad med
+  yfinance Search och kontrollerad 2026-10-12: börs STO, valuta SEK, typ INDEX. `^OMX` (OMXS30) kontrollerades också,
+  men ett brett index passar listan bättre. Varje aktie i SEK får `relative_pp`, alltså förändring minus indexets
+  förändring i procentenheter. Aktier i andra valutor jämförs inte. Indexet är ett prisindex, medan aktiernas
+  förändring räknas på justerad stängning, så veckor med utdelning skiljer de sig något.
 - Fail-soft: en ticker som inte går att hämta hamnar i `errors`. Om ingen ticker går att hämta skrivs ingen fil,
   och en befintlig fil lämnas orörd. Sidan fungerar i båda fallen.
 - `--mock --out <fil>` läser mockveckan. Den kurerade mockkursfilen skrivs aldrig över.
