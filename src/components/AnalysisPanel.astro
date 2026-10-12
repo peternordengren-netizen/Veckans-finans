@@ -5,6 +5,7 @@
  */
 import type { Analysis, ShortBlock } from "../lib/data";
 import { formatDate } from "../lib/data";
+import { shortRange } from "../lib/format";
 
 interface Props {
   analysis: Analysis;
@@ -12,8 +13,7 @@ interface Props {
 const { analysis } = Astro.props;
 const n = analysis.top_n;
 
-const pp = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" });
-const pct = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const num2 = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const sek = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 });
 const kr = (v: number) => `${sek.format(v)} kr`;
 
@@ -51,13 +51,14 @@ const ins = analysis.insider;
                   <li>
                     <div class="row">
                       <span class="co">{c.name} <span class="tk">{c.ticker}</span></span>
-                      <span class:list={["chg", c.change_pp > 0 ? "up" : "down"]}>{pp.format(c.change_pp)} pe</span>
                     </div>
-                    <div class="sub">{pct.format(c.start_pct)} % → {pct.format(c.end_pct)} %</div>
+                    <div class:list={["sub", "chg", c.change_pp > 0 ? "up" : "down"]}>
+                      {shortRange(c.start_pct, c.end_pct, c.change_pp, { threshold: 0.5 })}
+                    </div>
                     {c.holders && c.holders.length > 0 && (
                       <ul class="holders">
                         {c.holders.map((h) => (
-                          <li>{h.holder}: {pct.format(h.start_pct)} → {pct.format(h.end_pct)} %</li>
+                          <li>{h.holder}: {shortRange(h.start_pct, h.end_pct, h.change_pp, { threshold: 0.5, newHolder: true })}</li>
                         ))}
                       </ul>
                     )}
@@ -91,9 +92,10 @@ const ins = analysis.insider;
                   <li>
                     <div class="row">
                       <span class="co">{c.name} <span class="tk">{c.ticker}</span></span>
-                      <span class:list={["chg", c.change_pp > 0 ? "up" : "down"]}>{pp.format(c.change_pp)} pe</span>
                     </div>
-                    <div class="sub">{pct.format(c.start_pct)} % → {pct.format(c.end_pct)} %</div>
+                    <div class:list={["sub", "chg", c.change_pp > 0 ? "up" : "down"]}>
+                      {shortRange(c.start_pct, c.end_pct, c.change_pp, { threshold: 0.1 })}
+                    </div>
                   </li>
                 ))}
               </ol>
@@ -143,7 +145,7 @@ const ins = analysis.insider;
                 <li>
                   <span class:list={["side", t.side === "köp" ? "buy" : "sell"]}>{t.side}</span>
                   {t.person}{t.closely_associated ? " (närstående)" : ""}, {t.position}:
-                  {" "}{sek.format(t.volume)} st × {pct.format(t.price)} kr = {kr(t.value_sek)}
+                  {" "}{sek.format(t.volume)} st × {num2.format(t.price)} kr = {kr(t.value_sek)}
                   <span class="date"> · {formatDate(t.transaction_date)}</span>
                   {t.off_exchange && <span class="offer"> · utanför börsen</span>}
                   {t.side === "försäljning" && c.under_offer && <span class="offer"> · under pågående uppköpsbud</span>}
@@ -227,7 +229,6 @@ const ins = analysis.insider;
   .chg {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
   }
   .chg.up {
     color: var(--neg); /* mer blankning */

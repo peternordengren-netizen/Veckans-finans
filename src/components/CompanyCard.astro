@@ -1,6 +1,7 @@
 ---
 /** Aktiekort för ett matchat (noterat) bolag. Kursraden visas bara när veckan har en kursfil. */
 import type { IndexQuote, ListedCompany } from "../lib/data";
+import { relativeToIndex } from "../lib/format";
 import { divergesFromPrice, type Tone } from "../lib/tone";
 
 interface Props {
@@ -16,10 +17,7 @@ const q = company.quote;
 // "Avviker" bygger på skillnaden mot index, inte på den absoluta rörelsen.
 const diverges = company.impact === "direkt" && divergesFromPrice(tone, q);
 const rel = q?.relative_pp;
-const relText =
-  rel !== null && rel !== undefined && index
-    ? `${new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" }).format(rel)} pe mot index`
-    : null;
+const relText = rel !== null && rel !== undefined && index ? relativeToIndex(rel) : null;
 
 const pct = q
   ? new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" }).format(q.change_pct)
@@ -51,7 +49,7 @@ const arrow = { up: "▲", down: "▼", flat: "■" }[trend];
             </span>
             <span class="sr-only">kursförändring under veckan</span>
             {relText && (
-              <span class="relative" title={`Skillnad mot ${index!.name} (${index!.ticker}), i procentenheter`}>
+              <span class="relative" title={`Veckans kursrörelse jämfört med ${index!.name} (${index!.ticker})`}>
                 {relText}
               </span>
             )}
