@@ -5,6 +5,14 @@ argument-hint: "[ISO-vecka, t.ex. 2026-W40 – utelämnas = senaste mappen i dat
 
 Du ska skriva veckans sammanfattning för Veckans finans. Vecka: `$ARGUMENTS`. Om ingen vecka anges, ta den senaste mappen i `data/raw/`.
 
+## Schemalagd körning
+
+Varje måndag kör `scripts/run_weekly.ps1` kommandot utan att någon tittar på, med behörighetsläget `dontAsk`.
+Bara de verktyg och kommandon som står i den här filen är tillåtna. Allt annat nekas automatiskt, till exempel
+PowerShell, webben, andra git-kommandon och skrivning utanför `data/weeks/`. Om något nekas ska du inte försöka ta dig
+runt det med ett annat verktyg eller kommando. Nämn det i slutrapporten och fortsätt med resten. Ditt sista svar
+sparas som slutrapporten.
+
 ## Indata och utdata
 
 - `data/raw/` är en klon av det privata repot `veckans-finans-raw`. Kör `git -C data/raw pull` först. Om det
@@ -19,8 +27,12 @@ Du ska skriva veckans sammanfattning för Veckans finans. Vecka: `$ARGUMENTS`. O
 
 Veckan har typiskt flera hundra poster. Läs dem inte alla.
 
-1. **Läs `data/raw/<vecka>/index.json`.** Varje post har `title`, `company` (en slug ur källans URL, alltså inte ett
-   bolagsnamn), `source`, `published` (svensk tid), `tags`, `routine`, `text_kind` och `path`.
+1. **Läs indexet via översikten:** kör `.venv/Scripts/python scripts/index_overview.py <vecka>` och sedan
+   `--sida 2`, `--sida 3` och så vidare tills alla sidor är lästa (första raden visar antalet sidor). Varje rad är
+   `nr | källa | publicerad | company | R/- (rutin) | F/U (fulltext/utdrag) | path | rubrik`. Behöver du `url`,
+   `tags` eller `also_in` för en vald post läser du den posten i `data/raw/<vecka>/index.json`. Varje post har
+   `title`, `company` (en slug ur källans URL, alltså inte ett bolagsnamn), `source`, `published` (svensk tid),
+   `tags`, `routine`, `text_kind` och `path`.
    - `routine: true` betyder kallelser, kommunikéer, återköp, antal aktier, inbjudningar och nyhetsbrev. Välj dem bara
      om de har tydlig betydelse för sektorn.
    - `text_kind: "utdrag"` (Cision) betyder att filen bara innehåller början av pressmeddelandet. Allt du skriver om
@@ -51,7 +63,7 @@ Veckan har typiskt flera hundra poster. Läs dem inte alla.
      - Om `changed_on` ligger inom veckan har räntan ändrats den här veckan. Då ska det stå först i
        makrosammanfattningen, med "sänkt" eller "höjd" från `previous_value`.
    - Om Riksbanksposter saknas i veckan utelämnar du `key_figures` och nämner det i slutrapporten.
-5. **Källfel:** kontrollera `runs` i indexet. Om någon källa har `status: "fel"` i flera körningar i följd kan veckan
+5. **Källfel:** kontrollera `runs` i indexet (sista raden i översikten räknar fel per källa). Om någon källa har `status: "fel"` i flera körningar i följd kan veckan
    ha luckor. Nämn det i slutrapporten.
 
 ## Regler
@@ -121,21 +133,13 @@ Görs även om valideringen blev **EJ GODKÄND**, så att arbetet inte går för
    deterministiskt ur FI-datan i `data/raw/`. Du skriver eller ändrar ingenting i den. Den hamnar i
    `data/analysis/<vecka>.json`. Ta med i slutrapporten vad skriptet skriver ut, alltså antal bolag med
    blankningsförändring, om aggregatet är tillgängligt och vilka insynsdagar som saknas.
-2. **Säkerhetskopia till det privata repot** `data/raw/` (veckans-finans-raw):
-   1. Kontrollera att `git -C data/raw status --porcelain` är tomt. Om det inte är tomt: stanna och rapportera.
-      Committa aldrig någon annans ändringar.
-   2. Kör `git -C data/raw pull --rebase` för att hämta GitHub Actions senaste hämtningar.
-   3. Kopiera `data/weeks/<vecka>.json` till `data/raw/weeks/<vecka>.json`. Kopiera också `data/prices/<vecka>.json` till
-      `data/raw/prices/<vecka>.json` och `data/analysis/<vecka>.json` till `data/raw/analysis/<vecka>.json`, om de
-      finns. Skapa mapparna vid behov och skriv över en tidigare kopia av samma vecka.
-   4. Lägg bara till just dessa filer:
-      `git -C data/raw add weeks/<vecka>.json prices/<vecka>.json analysis/<vecka>.json`. Ta bara med de filer som
-      finns. Använd aldrig `git add -A` eller `git add .`.
-   5. Om något ändrats: `git -C data/raw commit -m "Säkerhetskopia <vecka> (validering OK)"`, eller `(validering EJ
-      GODKÄND)`. Om filerna är identiska med förra kopian hoppar du över commiten.
-   6. Kör `git -C data/raw push`. Om pushen avvisas för att Actions hunnit pusha emellan: kör
-      `git -C data/raw pull --rebase` och försök **en** gång till. Om det fortfarande misslyckas, eller om inloggningen
-      saknas: stanna och rapportera. Filerna finns kvar lokalt i `data/weeks/` och `data/prices/`.
+2. **Säkerhetskopia till det privata repot** `data/raw/` (veckans-finans-raw): kör
+   `.venv/Scripts/python scripts/backup_week.py <vecka>`. Skriptet gör alla git-steg själv. Det stannar om
+   `data/raw/` har oincheckade ändringar, kör `pull --rebase` och kopierar vecko-, kurs- och analysfilen till
+   `weeks/`, `prices/` och `analysis/`. Det lägger bara till just de filerna och committar med "Säkerhetskopia
+   <vecka> (validering OK|EJ GODKÄND)", där statusen räknas fram av skriptet. Sedan pushar det, med ett nytt försök
+   om Actions hunnit pusha emellan. Kör inga egna git-kommandon för säkerhetskopian. Om skriptet misslyckas:
+   rapportera dess sista rad. Filerna finns kvar lokalt.
 3. Committa eller pusha **aldrig** veckofilen, kursfilen eller analysfilen till det publika repot
    (`veckans-finans`). Där är `data/weeks/`, `data/prices/` och `data/analysis/` git-ignorerade, och så ska det förbli.
 

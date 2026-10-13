@@ -19,3 +19,6 @@ dist/
 
 # Hemligheter (används inte i dag, men ska aldrig hamna i ett publikt repo)
 .env
+
+# Loggar från schemalagda körningar (server och veckosammanfattning)
+logs/

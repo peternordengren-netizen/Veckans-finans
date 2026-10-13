@@ -1,0 +1,117 @@
+﻿# Kör /sammanfatta-veckan för förra ISO-veckan med Claude Code utan interaktion och bygger om sidan.
+#
+# Körs av den schemalagda uppgiften VeckansFinansVeckosammanfattning varje måndag 07:30.
+# - Veckan räknas fram i Europe/Stockholm (förra veckan) om -Week inte anges.
+# - Finns data/weeks/<vecka>.json redan avbryts körningen: en färdig vecka skrivs aldrig över.
+# - Claude körs i läget dontAsk med en uttömmande lista över tillåtna verktyg (se $Allowed);
+#   allt annat nekas automatiskt. PowerShell, webb och MCP-servrar är avstängda.
+# - Loggar i logs/weekly/: <vecka>-run.log (förlopp), <vecka>.json (Claudes svar i JSON),
+#   <vecka>.err (stderr), <vecka>-slutrapport.md (slutrapporten) och <vecka>-build.log.
+#
+# Manuellt: powershell -NoProfile -File scripts\run_weekly.ps1 [-Week 2026-W42] [-DryRun]
+# -DryRun kör allt utom själva sammanfattningen (Claude får ett ofarligt testprompt i stället).
+
+param(
+    [string]$Week = "",
+    [switch]$DryRun
+)
+
+$ErrorActionPreference = "Stop"
+$Root = Split-Path -Parent $PSScriptRoot
+$LogDir = Join-Path $Root "logs\weekly"
+New-Item -ItemType Directory -Force $LogDir | Out-Null
+Set-Location $Root
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$env:PYTHONIOENCODING = "utf-8"
+$Python = Join-Path $Root ".venv\Scripts\python.exe"
+
+if (-not $Week) {
+    $Week = & $Python -c "from datetime import datetime, timedelta; from zoneinfo import ZoneInfo; y, w, _ = (datetime.now(ZoneInfo('Europe/Stockholm')) - timedelta(days=7)).isocalendar(); print(f'{y}-W{w:02d}')"
+}
+if ($Week -notmatch '^\d{4}-W\d{2}$') { throw "Ogiltig vecka: '$Week'" }
+
+$RunLog = Join-Path $LogDir "$Week-run.log"
+function Log([string]$Text) {
+    $line = "{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $Text
+    Add-Content -Path $RunLog -Value $line -Encoding UTF8
+    Write-Output $line
+}
+
+Log "Start, vecka $Week$(if ($DryRun) { ' (DryRun)' })"
+
+$WeekFile = Join-Path $Root "data\weeks\$Week.json"
+if ((Test-Path $WeekFile) -and -not $DryRun) {
+    Log "data\weeks\$Week.json finns redan - avbryter, en färdig vecka skrivs aldrig över."
+    exit 0
+}
+
+$Claude = Join-Path $env:USERPROFILE ".local\bin\claude.exe"
+if (-not (Test-Path $Claude)) {
+    Log "Hittar inte den fristående Claude Code-CLI:n ($Claude) - avbryter."
+    exit 1
+}
+
+# Claude Code-variabler från en eventuell värdprocess (t.ex. skrivbordsappen) får inte ärvas:
+# då försöker CLI:n använda värdens inloggning i stället för den egna.
+foreach ($name in @(Get-ChildItem env: | Where-Object { $_.Name -match '^(CLAUDE|ANTHROPIC)' } | ForEach-Object Name)) {
+    [Environment]::SetEnvironmentVariable($name, $null, "Process")
+}
+
+# Via cmd så att gits stderr inte blir ett avbrytande PowerShell-fel; ett misslyckat pull loggas bara.
+& cmd.exe /c "git -C data/raw pull -q 2>&1" | ForEach-Object { Log "git pull: $_" }
+Log "git -C data/raw pull: exit $LASTEXITCODE"
+
+# Uttömmande lista. Edit-regeln gäller även Write. Bash-regler med :* är prefix; kedjade
+# kommandon (&&, ;, |) kontrolleras del för del och nekas om någon del saknas här.
+$Allowed = @(
+    "Read", "Glob", "Grep",
+    "Edit(./data/weeks/**)",
+    "Bash(git -C data/raw pull)",
+    "Bash(.venv/Scripts/python scripts/index_overview.py:*)",
+    "Bash(.venv/Scripts/python scripts/validate.py:*)",
+    "Bash(.venv/Scripts/python scripts/prices.py:*)",
+    "Bash(.venv/Scripts/python scripts/registers.py:*)",
+    "Bash(.venv/Scripts/python scripts/backup_week.py:*)"
+)
+$Disallowed = @("PowerShell", "WebFetch", "WebSearch")
+
+$Prompt = if ($DryRun) {
+    "Det här är ett test av den schemalagda körningen. Kör Bash-kommandot .venv/Scripts/python scripts/index_overview.py $Week och svara med dess första rad. Skriv ingenting."
+} else {
+    "/sammanfatta-veckan $Week"
+}
+
+function Quote([string]$s) { '"' + ($s -replace '"', '\"') + '"' }
+$ArgList = @("-p", (Quote $Prompt), "--permission-mode", "dontAsk", "--allowedTools") +
+    ($Allowed | ForEach-Object { Quote $_ }) +
+    @("--disallowedTools") + ($Disallowed | ForEach-Object { Quote $_ }) +
+    @("--strict-mcp-config", "--no-session-persistence", "--output-format", "json")
+
+$JsonOut = Join-Path $LogDir "$Week.json"
+$ErrOut = Join-Path $LogDir "$Week.err"
+Log "Startar Claude Code: $Prompt"
+$proc = Start-Process -FilePath $Claude -ArgumentList $ArgList -NoNewWindow -PassThru -Wait `
+    -RedirectStandardOutput $JsonOut -RedirectStandardError $ErrOut
+Log "Claude Code klar: exit $($proc.ExitCode)"
+
+$Report = Join-Path $LogDir "$Week-slutrapport.md"
+try {
+    $result = Get-Content $JsonOut -Raw -Encoding UTF8 | ConvertFrom-Json
+    $denied = @($result.permission_denials | ForEach-Object {
+        $in = $_.tool_input
+        $what = if ($in.command) { $in.command } elseif ($in.file_path) { $in.file_path } else { ($in | ConvertTo-Json -Compress) }
+        "- $($_.tool_name): $what"
+    })
+    $text = "# Slutrapport $Week`n`n$($result.result)`n`n---`n" +
+        "Fel: $($result.is_error), turer: $($result.num_turns), tid: $([math]::Round($result.duration_ms / 60000, 1)) min`n" +
+        "Nekade verktygsanrop: $(if ($denied.Count) { "`n" + ($denied -join "`n") } else { 'inga' })`n"
+    [IO.File]::WriteAllText($Report, $text, (New-Object Text.UTF8Encoding $true))
+    Log "Slutrapport: $Report (nekade anrop: $($denied.Count))"
+} catch {
+    Log "Kunde inte läsa Claudes svar ($JsonOut): $_"
+}
+
+$BuildLog = Join-Path $LogDir "$Week-build.log"
+& cmd.exe /c "npm run build > `"$BuildLog`" 2>&1"
+Log "npm run build: exit $LASTEXITCODE (logg: $BuildLog)"
+Log "Klart"

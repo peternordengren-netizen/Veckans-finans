@@ -176,6 +176,21 @@ npm run preview       # visa dist/ lokalt
 
 ## Läsa veckan lokalt
 
+### Automatiskt (schemalagda uppgifter)
+
+Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
+
+- **VeckansFinansServer** startar `scripts/serve.ps1` dolt vid inloggning. Sidan finns på
+  http://localhost:4321/veckans-finans/. Utskrifterna hamnar i `logs/server.log`.
+- **VeckansFinansVeckosammanfattning** kör `scripts/run_weekly.ps1` måndagar 07:30 och väcker datorn om den är
+  ansluten till ström. Skriptet kör `/sammanfatta-veckan` för förra veckan med den fristående Claude Code-CLI:n i
+  läget `dontAsk`, med en uttömmande lista över tillåtna verktyg. Därefter bygger det om sidan. Finns veckofilen redan
+  avbryts körningen. Loggarna och slutrapporten (`<vecka>-slutrapport.md`) hamnar i `logs/weekly/`.
+- Skrivbordsgenvägen **Veckans finans** kör `scripts/open_site.ps1`. Den startar servern om den inte svarar och
+  öppnar sidan.
+
+### Manuellt
+
 Arbetsgång varje vecka, efter att veckan är slut. Kör kommandona i repots rot.
 
 1. Hämta rådatan: `git -C data/raw pull`. `/sammanfatta-veckan` gör det också själv.
