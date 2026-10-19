@@ -1,6 +1,8 @@
 ﻿# Kör /sammanfatta-veckan för förra ISO-veckan med Claude Code utan interaktion och bygger om sidan.
 #
-# Körs av den schemalagda uppgiften VeckansFinansVeckosammanfattning varje måndag 07:30.
+# Körs av den schemalagda uppgiften VeckansFinansVeckosammanfattning varje måndag 07:30, samt
+# fem minuter efter inloggning och upplåsning för att ta igen en missad körning.
+# - Högst två automatiska försök per vecka (räknas i <vecka>-run.log); -Week kringgår gränsen.
 # - Veckan räknas fram i Europe/Stockholm (förra veckan) om -Week inte anges.
 # - Finns data/weeks/<vecka>.json redan avbryts körningen: en färdig vecka skrivs aldrig över.
 # - Claude körs i läget dontAsk med en uttömmande lista över tillåtna verktyg (se $Allowed);
@@ -37,13 +39,24 @@ function Log([string]$Text) {
     Write-Output $line
 }
 
-Log "Start, vecka $Week$(if ($DryRun) { ' (DryRun)' })"
-
+# Uppgiften startas även vid inloggning och upplåsning (för att ta igen en missad måndag).
+# Då är veckan oftast redan klar, så de här kontrollerna skriver bara till konsolen, inte
+# till loggfilen, för att inte fylla den med en rad per upplåsning.
 $WeekFile = Join-Path $Root "data\weeks\$Week.json"
 if ((Test-Path $WeekFile) -and -not $DryRun) {
-    Log "data\weeks\$Week.json finns redan - avbryter, en färdig vecka skrivs aldrig över."
+    Write-Output "data\weeks\$Week.json finns redan - inget att göra, en färdig vecka skrivs aldrig över."
     exit 0
 }
+# Högst MaxAttempts riktiga försök per vecka, så att ett återkommande fel (t.ex. utloggad CLI)
+# inte startar en ny Claude-körning vid varje upplåsning. Fler försök: kör skriptet manuellt med -Week.
+$MaxAttempts = 2
+$attempts = if (Test-Path $RunLog) { @(Select-String -Path $RunLog -SimpleMatch "Startar Claude Code: /sammanfatta-veckan").Count } else { 0 }
+if ($attempts -ge $MaxAttempts -and -not $DryRun -and -not $PSBoundParameters.ContainsKey("Week")) {
+    Write-Output "Redan $attempts försök för $Week - avbryter. Se $RunLog."
+    exit 0
+}
+
+Log "Start, vecka $Week$(if ($DryRun) { ' (DryRun)' })"
 
 $Claude = Join-Path $env:USERPROFILE ".local\bin\claude.exe"
 if (-not (Test-Path $Claude)) {

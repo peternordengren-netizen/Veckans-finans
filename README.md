@@ -182,8 +182,10 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
 
 - **VeckansFinansServer** startar `scripts/serve.ps1` dolt vid inloggning. Sidan finns på
   http://localhost:4321/veckans-finans/. Utskrifterna hamnar i `logs/server.log`.
-- **VeckansFinansVeckosammanfattning** kör `scripts/run_weekly.ps1` måndagar 07:30 och väcker datorn om den är
-  ansluten till ström. Skriptet kör `/sammanfatta-veckan` för förra veckan med den fristående Claude Code-CLI:n i
+- **VeckansFinansVeckosammanfattning** kör `scripts/run_weekly.ps1` måndagar 07:30 lokal tid och väcker datorn om
+  den är ansluten till ström. Uppgiften startar också fem minuter efter inloggning och upplåsning, så att en missad
+  måndag tas igen, till exempel när datorn låg i viloläge till disk. Varje vecka får högst två automatiska försök.
+  Fler försök kör du manuellt med `-Week`. Om senaste veckan saknas visar sidan en varning överst. Skriptet kör `/sammanfatta-veckan` för förra veckan med den fristående Claude Code-CLI:n i
   läget `dontAsk`, med en uttömmande lista över tillåtna verktyg. Därefter bygger det om sidan. Finns veckofilen redan
   avbryts körningen. Loggarna och slutrapporten (`<vecka>-slutrapport.md`) hamnar i `logs/weekly/`.
 - Skrivbordsgenvägen **Veckans finans** kör `scripts/open_site.ps1`. Den startar servern om den inte svarar och
