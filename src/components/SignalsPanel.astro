@@ -1,0 +1,331 @@
+---
+/**
+ * Signalöversikt per bolag i en sorterbar tabell. Filtret "bara bolag med signal" är
+ * förvalt; utan JavaScript visas alla bolag i filens ordning.
+ */
+import type { SignalsView } from "../lib/data";
+import { SIGNAL_LABELS, ratio, sek, shortChange, signedPct } from "../lib/signals";
+
+interface Props {
+  signals: SignalsView;
+}
+const { signals } = Astro.props;
+const rows = [...signals.rows].sort((a, b) => b.signals.length - a.signals.length || a.name.localeCompare(b.name, "sv"));
+const flagged = rows.filter((r) => r.signals.length > 0).length;
+const t = signals.thresholds;
+const n = (v: number) => new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 }).format(v);
+const toneOrder = { positiv: 3, blandad: 2, neutral: 1, negativ: 0 };
+
+// Kolumner: nyckel för sortering och om värdet är tal eller text.
+const columns = [
+  { key: "name", label: "Bolag", type: "text" },
+  { key: "signals", label: "Signaler", type: "num" },
+  { key: "tone", label: "Ton", type: "num" },
+  { key: "change", label: "Vecka", type: "num" },
+  { key: "relative", label: "Mot index", type: "num" },
+  { key: "volume", label: "Omsättning", type: "num" },
+  { key: "high", label: "Från 52 v högsta", type: "num" },
+  { key: "low", label: "Från 52 v lägsta", type: "num" },
+  { key: "insider", label: "Insyn netto", type: "num" },
+  { key: "short", label: "Blankning", type: "num" },
+] as const;
+const v = (x: number | null) => (x === null ? "" : String(x));
+---
+
+<div class="signals" data-signals>
+  <p class="lead">
+    Alla {rows.length} bolag i bevakningslistan, med veckans kurs, omsättning och 52-veckorsläge samt nyhetston, insyn och
+    blankning. Klicka på en kolumnrubrik för att sortera.
+  </p>
+  <details class="legend">
+    <summary>Så räknas signalerna</summary>
+    <ul>
+      <li><strong>Insyn:</strong> insynspersoner har köpt eller sålt för mer än 100 000 kr under veckan.</li>
+      <li>
+        <strong>Blankning:</strong> en enskild position över 0,5 % har ändrats, eller den sammanlagda blankningen har
+        ändrats med minst {n(t.short_aggregate_pp)} procentenheter.
+      </li>
+      <li><strong>Avviker mot index:</strong> nyhetens ton och kursen mot index går åt olika håll.</li>
+      <li>
+        <strong>Hög omsättning:</strong> veckans snittomsättning är minst {n(t.volume_ratio)} gånger snittet för de 20
+        handelsdagarna före.
+      </li>
+      <li>
+        <strong>Nära 52 v högsta/lägsta:</strong> fredagens stängning ligger högst {n(t.near_52w_pct)} % från årets högsta
+        eller lägsta kurs.
+      </li>
+    </ul>
+    <p>Signalerna är mekaniska och säger inget om varför något hänt. De är inga köp- eller säljsignaler.</p>
+  </details>
+
+  <div class="controls">
+    <label>
+      <input type="checkbox" data-only-flagged checked />
+      Bara bolag med signal denna vecka
+    </label>
+    <span class="shown" data-shown aria-live="polite">{flagged} av {rows.length} bolag har en signal</span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          {
+            columns.map((c) => (
+              <th scope="col" data-key={c.key} data-type={c.type} aria-sort="none">
+                <button type="button">{c.label}</button>
+              </th>
+            ))
+          }
+        </tr>
+      </thead>
+      <tbody>
+        {
+          rows.map((r) => {
+            const s = shortChange(r);
+            return (
+              <tr data-flagged={r.signals.length > 0 ? "1" : "0"}>
+                <th scope="row" data-v={r.name}>
+                  <span class="name">{r.name}</span> <span class="ticker">{r.ticker}</span>
+                </th>
+                <td data-v={r.signals.length}>
+                  <span class="chips">
+                    {r.signals.map((sig) => (
+                      <span class:list={["chip", sig]}>{SIGNAL_LABELS[sig]}</span>
+                    ))}
+                  </span>
+                </td>
+                <td data-v={r.tone === null ? "" : toneOrder[r.tone]}>
+                  {r.tone ? <span class:list={["tone", r.tone]}>{r.tone}</span> : <span class="none">–</span>}
+                </td>
+                <td class="num" data-v={v(r.change_pct)}>{signedPct(r.change_pct)}</td>
+                <td class:list={["num", r.relative_pp !== null && (r.relative_pp > 0 ? "pos" : r.relative_pp < 0 ? "neg" : "")]} data-v={v(r.relative_pp)}>
+                  {signedPct(r.relative_pp)}
+                </td>
+                <td class="num" data-v={v(r.volume_ratio)}>{ratio(r.volume_ratio)}</td>
+                <td class="num" data-v={v(r.from_high_pct)}>{signedPct(r.from_high_pct)}</td>
+                <td class="num" data-v={v(r.from_low_pct)}>{signedPct(r.from_low_pct)}</td>
+                <td
+                  class="num"
+                  data-v={v(r.insider_net_sek)}
+                  title={r.insider_net_sek !== null ? `${r.insider_buyers} köpare, ${r.insider_sellers} säljare` : undefined}
+                >
+                  {sek(r.insider_net_sek)}
+                </td>
+                <td
+                  class="num"
+                  data-v={v(s)}
+                  title={r.short_positions_pp !== null ? "enskilda positioner över 0,5 %" : s !== null ? "sammanlagd blankning" : undefined}
+                >
+                  {signedPct(s, 2)}
+                </td>
+              </tr>
+            );
+          })
+        }
+      </tbody>
+    </table>
+  </div>
+  <p class="note">
+    "Mot index" jämför med OMX Stockholm PI och visas bara för aktier i kronor. Blankning visar förändringen i andel av
+    aktierna.
+  </p>
+</div>
+
+<script>
+  import { compareValues } from "../lib/signals";
+
+  for (const root of document.querySelectorAll<HTMLElement>("[data-signals]")) {
+    const tbody = root.querySelector("tbody")!;
+    const rows = Array.from(tbody.querySelectorAll<HTMLTableRowElement>("tr"));
+    const checkbox = root.querySelector<HTMLInputElement>("[data-only-flagged]")!;
+    const shown = root.querySelector<HTMLElement>("[data-shown]")!;
+    const flagged = rows.filter((r) => r.dataset.flagged === "1").length;
+
+    const applyFilter = () => {
+      for (const r of rows) r.hidden = checkbox.checked && r.dataset.flagged !== "1";
+      shown.textContent = checkbox.checked
+        ? `Visar ${flagged} bolag med signal av ${rows.length}`
+        : `Visar alla ${rows.length} bolag, varav ${flagged} med signal`;
+    };
+    checkbox.addEventListener("change", applyFilter);
+    applyFilter();
+
+    const headers = Array.from(root.querySelectorAll<HTMLTableCellElement>("thead th"));
+    headers.forEach((th, col) => {
+      th.querySelector("button")!.addEventListener("click", () => {
+        // Första klicket: text stigande, tal fallande (störst först).
+        const current = th.getAttribute("aria-sort");
+        const ascending = current === "none" ? th.dataset.type === "text" : current === "descending";
+        headers.forEach((h) => h.setAttribute("aria-sort", "none"));
+        th.setAttribute("aria-sort", ascending ? "ascending" : "descending");
+        const value = (r: HTMLTableRowElement) => {
+          const raw = (r.children[col] as HTMLElement).dataset.v ?? "";
+          if (raw === "") return null;
+          return th.dataset.type === "num" ? Number(raw) : raw;
+        };
+        rows.sort((a, b) => compareValues(value(a), value(b), ascending));
+        tbody.append(...rows);
+      });
+    });
+  }
+</script>
+
+<style>
+  .lead {
+    margin: 0 0 8px;
+    max-width: 70ch;
+  }
+  .legend {
+    margin: 0 0 12px;
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+  .legend summary {
+    cursor: pointer;
+    color: var(--accent);
+  }
+  .legend ul {
+    margin: 6px 0;
+    padding-left: 18px;
+  }
+  .legend p {
+    margin: 0;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 0.9375rem;
+  }
+  .controls label {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    cursor: pointer;
+  }
+  .shown {
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+  }
+  th,
+  td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    vertical-align: top;
+  }
+  tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--surface-2);
+    padding: 0;
+  }
+  thead button {
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    background: none;
+    border: 0;
+    padding: 8px 10px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    white-space: nowrap;
+  }
+  thead th[aria-sort="ascending"] button::after {
+    content: " ▲";
+  }
+  thead th[aria-sort="descending"] button::after {
+    content: " ▼";
+  }
+  tbody th {
+    font-weight: normal;
+    position: sticky;
+    left: 0;
+    background: var(--surface);
+  }
+  .name {
+    font-weight: 600;
+  }
+  .ticker,
+  .none {
+    color: var(--muted);
+  }
+  .ticker {
+    font-size: 0.75rem;
+  }
+  .num {
+    text-align: right;
+  }
+  .pos {
+    color: var(--pos);
+  }
+  .neg {
+    color: var(--neg);
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 12rem;
+    white-space: normal;
+  }
+  .chip {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 4px;
+    background: var(--direct-bg);
+    color: var(--direct-fg);
+  }
+  .chip.avviker,
+  .chip.blankning {
+    background: var(--banner-bg);
+    color: var(--banner-fg);
+  }
+  .chip.insyn {
+    background: var(--indirect-bg);
+    color: var(--indirect-fg);
+  }
+  .tone {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    color: var(--muted);
+  }
+  .tone.positiv {
+    color: var(--pos);
+  }
+  .tone.negativ {
+    color: var(--neg);
+  }
+  tr[hidden] {
+    display: none;
+  }
+  .note {
+    margin: 8px 0 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+</style>

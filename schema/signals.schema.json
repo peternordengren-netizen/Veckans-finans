@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "signals.schema.json",
+  "title": "Signalöversikt per bolag för en vecka (scripts/signals.py)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "week", "period", "generated_at", "thresholds", "index", "companies", "errors"],
+  "$defs": {
+    "num": { "type": ["number", "null"] }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "week": { "type": "string", "pattern": "^\\d{4}-W\\d{2}$" },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "string", "format": "date" },
+        "end": { "type": "string", "format": "date" }
+      }
+    },
+    "generated_at": { "type": "string" },
+    "mock": { "const": true },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["volume_ratio", "near_52w_pct", "short_aggregate_pp"],
+      "properties": {
+        "volume_ratio": { "type": "number", "exclusiveMinimum": 0 },
+        "near_52w_pct": { "type": "number", "minimum": 0 },
+        "short_aggregate_pp": { "type": "number", "minimum": 0 }
+      }
+    },
+    "index": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["ticker", "name", "change_pct"],
+      "properties": {
+        "ticker": { "type": "string" },
+        "name": { "type": "string" },
+        "change_pct": { "type": "number" }
+      }
+    },
+    "companies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ticker", "name", "yahoo_ticker", "sector", "change_pct", "relative_pp", "close", "volume_ratio",
+          "high_52w", "low_52w", "from_high_pct", "from_low_pct", "tone", "news", "insider_net_sek", "insider_buyers",
+          "insider_sellers", "short_positions_pp", "short_aggregate_pp", "signals"],
+        "properties": {
+          "ticker": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "yahoo_ticker": { "type": "string", "minLength": 1 },
+          "sector": { "type": ["string", "null"] },
+          "change_pct": { "$ref": "#/$defs/num" },
+          "relative_pp": { "$ref": "#/$defs/num" },
+          "close": { "$ref": "#/$defs/num" },
+          "volume_ratio": { "$ref": "#/$defs/num" },
+          "high_52w": { "$ref": "#/$defs/num" },
+          "low_52w": { "$ref": "#/$defs/num" },
+          "from_high_pct": { "$ref": "#/$defs/num" },
+          "from_low_pct": { "$ref": "#/$defs/num" },
+          "tone": { "enum": ["positiv", "negativ", "neutral", "blandad", null] },
+          "news": { "type": "integer", "minimum": 0 },
+          "insider_net_sek": { "$ref": "#/$defs/num" },
+          "insider_buyers": { "type": "integer", "minimum": 0 },
+          "insider_sellers": { "type": "integer", "minimum": 0 },
+          "short_positions_pp": { "$ref": "#/$defs/num" },
+          "short_aggregate_pp": { "$ref": "#/$defs/num" },
+          "signals": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "enum": ["insyn", "blankning", "avviker", "omsättning", "52v-högsta", "52v-lägsta"] }
+          }
+        }
+      }
+    },
+    "errors": { "type": "array", "items": { "type": "string" } }
+  }
+}

@@ -9,7 +9,8 @@
 #   allt annat nekas automatiskt. PowerShell, webb och MCP-servrar är avstängda.
 # - Loggar i logs/weekly/: <vecka>-run.log (förlopp), <vecka>.json (Claudes svar i JSON),
 #   <vecka>.err (stderr), <vecka>-slutrapport.md (slutrapporten) och <vecka>-build.log.
-# - Efter Claude skrivs rapportkalendern för veckan efter (scripts/report_calendar.py).
+# - Efter Claude skrivs signalöversikten (scripts/signals.py, säkerhetskopieras med
+#   backup_week.py) och rapportkalendern för veckan efter (scripts/report_calendar.py).
 #
 # Manuellt: powershell -NoProfile -File scripts\run_weekly.ps1 [-Week 2026-W42] [-DryRun]
 # -DryRun kör allt utom själva sammanfattningen (Claude får ett ofarligt testprompt i stället).
@@ -126,6 +127,16 @@ try {
     Log "Slutrapport: $Report (nekade anrop: $($denied.Count))"
 } catch {
     Log "Kunde inte läsa Claudes svar ($JsonOut): $_"
+}
+
+# Signalöversikten (fliken "Signaler") bygger på veckofilen och analysfilen, och
+# säkerhetskopieras sedan till det privata repot tillsammans med dem.
+if (Test-Path $WeekFile) {
+    & cmd.exe /c ".venv\Scripts\python.exe scripts\signals.py $Week 2>&1" | ForEach-Object { Log "signaler: $_" }
+    Log "signals.py ${Week}: exit $LASTEXITCODE"
+    if (-not $DryRun) {
+        & cmd.exe /c ".venv\Scripts\python.exe scripts\backup_week.py $Week 2>&1" | Select-Object -Last 1 | ForEach-Object { Log "$_" }
+    }
 }
 
 # Rapportkalendern för veckan efter (visas på veckans sida under "Kommande vecka").

@@ -6,6 +6,7 @@ data/weeks/
 data/prices/
 data/analysis/
 data/calendar/
+data/signals/
 
 # Python
 .venv/

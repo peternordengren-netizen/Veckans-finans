@@ -777,12 +777,52 @@ def validate_calendar(data: dict, expected_week: str | None, instruments: dict[s
     return res
 
 
+def validate_signals(data: dict, expected_week: str | None, instruments: dict[str, Instrument]) -> Result:
+    """Signalöversikten (scripts/signals.py): schema, bolagen finns i listan och
+    signalerna stämmer med värdena och trösklarna i filen (räknas om här)."""
+    from signals import signals_for  # sent, eftersom signals.py importerar den här modulen
+
+    res = Result()
+    res.errors += _schema_errors(_schema_validator("signals.schema.json"), data)
+    if res.errors:
+        return res
+    week = data["week"]
+    if expected_week is not None and week != expected_week:
+        res.errors.append(f"week {week!r} stämmer inte med filnamnet {expected_week!r}")
+    start, end = iso_week_period(week)
+    if data["period"] != {"start": start.isoformat(), "end": end.isoformat()}:
+        res.errors.append(f"period stämmer inte med {week}")
+    _check_datetime(data["generated_at"], "generated_at", res)
+    seen: set[str] = set()
+    for c in data["companies"]:
+        where = f"{c['name']} ({c['ticker']})"
+        inst = instruments.get(c["ticker"])
+        if inst is None or inst.yahoo_ticker != c["yahoo_ticker"] or inst.namn != c["name"]:
+            res.errors.append(f"{where}: bolaget finns inte i instruments.csv med samma namn och yahoo_ticker")
+        if c["ticker"] in seen:
+            res.errors.append(f"{where}: dubblett")
+        seen.add(c["ticker"])
+        if (c["tone"] is None) != (c["news"] == 0):
+            res.errors.append(f"{where}: ton utan nyheter eller nyheter utan ton")
+        if c["relative_pp"] is not None and (c["change_pct"] is None or data["index"] is None):
+            res.errors.append(f"{where}: jämförelse mot index utan kurs eller index")
+        elif c["relative_pp"] is not None and abs(c["change_pct"] - data["index"]["change_pct"] - c["relative_pp"]) > 0.011:
+            res.errors.append(f"{where}: relative_pp ≠ förändring − indexets förändring")
+        if (c["from_high_pct"] or 0) > 0 or (c["from_low_pct"] or 0) < 0:
+            res.errors.append(f"{where}: stängningen ligger utanför 52-veckorsintervallet")
+        expected = signals_for(c, data["thresholds"])
+        if sorted(c["signals"]) != sorted(expected):
+            res.errors.append(f"{where}: signalerna {c['signals']} stämmer inte med värdena (väntat {expected})")
+    return res
+
+
 def _default_targets() -> list[Path]:
     return sorted(
         [*DATA_DIR.glob("weeks/*.json"), *DATA_DIR.glob("prices/*.json"), *DATA_DIR.glob("analysis/*.json"),
-         *DATA_DIR.glob("calendar/*.json"),
+         *DATA_DIR.glob("calendar/*.json"), *DATA_DIR.glob("signals/*.json"),
          *DATA_DIR.glob("mock/weeks/*.json"), *DATA_DIR.glob("mock/prices/*.json"),
-         *DATA_DIR.glob("mock/analysis/*.json"), *DATA_DIR.glob("mock/calendar/*.json")]
+         *DATA_DIR.glob("mock/analysis/*.json"), *DATA_DIR.glob("mock/calendar/*.json"),
+         *DATA_DIR.glob("mock/signals/*.json")]
     )
 
 
@@ -799,6 +839,8 @@ def main(argv: list[str]) -> int:
             res = validate_prices(data, path.stem)
         elif path.parent.name == "analysis":
             res = validate_analysis(data, path.stem)
+        elif path.parent.name == "signals":
+            res = validate_signals(data, path.stem, mock_instruments if in_mock_dir else instruments)
         elif path.parent.name == "calendar":
             # Mockkalendern länkar till påhittade MFN-poster, så rådatan kontrolleras inte där.
             res = validate_calendar(data, path.stem, mock_instruments if in_mock_dir else instruments,

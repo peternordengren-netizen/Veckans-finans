@@ -176,6 +176,26 @@ sidans vecka. Veckokörningen skapar den efter sammanfattningen.
   och att MFN-länkarna finns i rådatan.
 - Kalendern säkerhetskopieras inte till det privata repot. Den gäller framåt och skapas om varje gång.
 
+### Signaler (`scripts/signals.py`)
+
+`signals.py <vecka>` skriver `data/signals/<vecka>.json` (git-ignorerad) för alla bolag i `instruments.csv`.
+Veckans sida visar den under fliken **Signaler**, en sorterbar tabell där filtret "bara bolag med signal denna vecka"
+är förvalt. Kursdatan hämtas i ett enda batchanrop till Yahoo (yfinance) för hela listan och jämförelseindexet. Ton
+kommer ur veckofilen och insyn och blankning ur analysfilen. Veckokörningen skapar filen efter sammanfattningen och
+säkerhetskopierar den med `backup_week.py`. Om du kör `/sammanfatta-veckan` manuellt kör du `signals.py` efteråt.
+
+| Signal | Villkor |
+|---|---|
+| Insyn | insynstransaktioner över 100 000 kr under veckan (från `registers.py`) |
+| Blankning | ändrad position över 0,5 %, eller sammanlagd blankning ändrad minst 0,5 procentenheter |
+| Avviker mot index | nyhetens ton och kursen mot index går åt olika håll (samma regel som på aktiekorten) |
+| Hög omsättning | veckans snittomsättning minst 2 gånger snittet för de 20 handelsdagarna före |
+| Nära 52 v högsta/lägsta | fredagens stängning högst 2 % från 52-veckorshögsta respektive -lägsta |
+
+Hög omsättning räknas på veckans snitt, inte på största dagen. I W42 gav största dagen 74 av 266 bolag och
+veckosnittet 20. Trösklarna sparas i filen, och valideringen räknar om signalerna från värdena. Jämförelsen mot index
+görs bara för `.ST`-tickers, som antas vara i kronor.
+
 ## Sidan (Astro)
 
 Kräver Node 22 eller senare.

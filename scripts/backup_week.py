@@ -7,8 +7,8 @@ inte för git i allmänhet:
 1. Kontrollerar att data/raw/ inte har egna oincheckade ändringar – annars stopp,
    eftersom någon annans ändringar aldrig ska committas.
 2. git pull --rebase (hämtar GitHub Actions senaste hämtningar).
-3. Kopierar data/weeks/<vecka>.json och, om de finns, data/prices/<vecka>.json och
-   data/analysis/<vecka>.json till weeks/, prices/ och analysis/ i data/raw/.
+3. Kopierar data/weeks/<vecka>.json och, om de finns, data/prices/<vecka>.json,
+   data/analysis/<vecka>.json och data/signals/<vecka>.json till motsvarande mapp i data/raw/.
 4. Lägger bara till just de filerna (aldrig git add -A), committar med
    "Säkerhetskopia <vecka> (validering OK|EJ GODKÄND)" om något ändrats.
    Valideringsstatusen räknas fram här med validate.py, den anges inte av anroparen.
@@ -33,7 +33,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import validate  # noqa: E402
 
 WEEK_RE = re.compile(r"^\d{4}-W\d{2}$")
-KINDS = ("weeks", "prices", "analysis")
+KINDS = ("weeks", "prices", "analysis", "signals")
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess:

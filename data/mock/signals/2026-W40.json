@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "week": "2026-W40",
+  "period": {
+    "start": "2026-09-28",
+    "end": "2026-10-04"
+  },
+  "generated_at": "2026-10-05T07:45:00+02:00",
+  "thresholds": {
+    "volume_ratio": 2.0,
+    "near_52w_pct": 2.0,
+    "short_aggregate_pp": 0.5
+  },
+  "index": {
+    "ticker": "^OMXSPI",
+    "name": "OMX Stockholm PI",
+    "change_pct": 1.0
+  },
+  "companies": [
+    {
+      "ticker": "FJLH B",
+      "name": "Fjällhem Fastigheter",
+      "yahoo_ticker": "FJLH-B.MOCK",
+      "sector": "fastigheter",
+      "change_pct": 8.26,
+      "relative_pp": null,
+      "close": 108.35,
+      "volume_ratio": 2.6,
+      "high_52w": 109.43,
+      "low_52w": 98.89,
+      "from_high_pct": -0.99,
+      "from_low_pct": 9.57,
+      "tone": "positiv",
+      "news": 2,
+      "insider_net_sek": 1350000,
+      "insider_buyers": 2,
+      "insider_sellers": 0,
+      "short_positions_pp": 1.25,
+      "short_aggregate_pp": 1.35,
+      "signals": [
+        "insyn",
+        "blankning",
+        "omsättning",
+        "52v-högsta"
+      ]
+    },
+    {
+      "ticker": "KUST A",
+      "name": "Kustbanken",
+      "yahoo_ticker": "KUST-A.MOCK",
+      "sector": "banker-finans",
+      "change_pct": -5.87,
+      "relative_pp": null,
+      "close": 94.21,
+      "volume_ratio": 1.1,
+      "high_52w": 101.16,
+      "low_52w": 93.27,
+      "from_high_pct": -6.87,
+      "from_low_pct": 1.01,
+      "tone": "negativ",
+      "news": 1,
+      "insider_net_sek": -250000,
+      "insider_buyers": 0,
+      "insider_sellers": 1,
+      "short_positions_pp": -0.8,
+      "short_aggregate_pp": -0.75,
+      "signals": [
+        "insyn",
+        "blankning",
+        "52v-lägsta"
+      ]
+    },
+    {
+      "ticker": "NRSK",
+      "name": "Norrsken Pharma",
+      "yahoo_ticker": "NRSK.MOCK",
+      "sector": "halsovard",
+      "change_pct": 1.0,
+      "relative_pp": null,
+      "close": 101.0,
+      "volume_ratio": 1.0,
+      "high_52w": 102.01,
+      "low_52w": 98.49,
+      "from_high_pct": -0.99,
+      "from_low_pct": 2.55,
+      "tone": "positiv",
+      "news": 1,
+      "insider_net_sek": null,
+      "insider_buyers": 0,
+      "insider_sellers": 0,
+      "short_positions_pp": null,
+      "short_aggregate_pp": null,
+      "signals": [
+        "52v-högsta"
+      ]
+    },
+    {
+      "ticker": "ALBN",
+      "name": "Albion Biotech",
+      "yahoo_ticker": "ALBN.MOCK",
+      "sector": "halsovard",
+      "change_pct": 12.59,
+      "relative_pp": null,
+      "close": 112.5,
+      "volume_ratio": 3.2,
+      "high_52w": 113.63,
+      "low_52w": 98.57,
+      "from_high_pct": -0.99,
+      "from_low_pct": 14.13,
+      "tone": null,
+      "news": 0,
+      "insider_net_sek": null,
+      "insider_buyers": 0,
+      "insider_sellers": 0,
+      "short_positions_pp": null,
+      "short_aggregate_pp": null,
+      "signals": [
+        "omsättning",
+        "52v-högsta"
+      ]
+    },
+    {
+      "ticker": "VAGN B",
+      "name": "Vågnät Telekom",
+      "yahoo_ticker": "VAGN-B.MOCK",
+      "sector": "telekom",
+      "change_pct": -1.99,
+      "relative_pp": null,
+      "close": 97.93,
+      "volume_ratio": 0.9,
+      "high_52w": 101.33,
+      "low_52w": 96.95,
+      "from_high_pct": -3.36,
+      "from_low_pct": 1.01,
+      "tone": "positiv",
+      "news": 1,
+      "insider_net_sek": null,
+      "insider_buyers": 0,
+      "insider_sellers": 0,
+      "short_positions_pp": 0.3,
+      "short_aggregate_pp": null,
+      "signals": [
+        "blankning",
+        "52v-lägsta"
+      ]
+    },
+    {
+      "ticker": "MOLN",
+      "name": "Molnbyrån Software",
+      "yahoo_ticker": "MOLN.MOCK",
+      "sector": "teknik",
+      "change_pct": 0.51,
+      "relative_pp": null,
+      "close": 100.49,
+      "volume_ratio": 1.2,
+      "high_52w": 101.51,
+      "low_52w": 98.98,
+      "from_high_pct": -1.0,
+      "from_low_pct": 1.53,
+      "tone": "positiv",
+      "news": 1,
+      "insider_net_sek": null,
+      "insider_buyers": 0,
+      "insider_sellers": 0,
+      "short_positions_pp": null,
+      "short_aggregate_pp": null,
+      "signals": [
+        "52v-högsta",
+        "52v-lägsta"
+      ]
+    }
+  ],
+  "errors": [],
+  "mock": true
+}

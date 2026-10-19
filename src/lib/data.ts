@@ -14,6 +14,7 @@ const WEEKS_DIR = IS_MOCK ? join(DATA, "mock", "weeks") : join(DATA, "weeks");
 const PRICES_DIR = IS_MOCK ? join(DATA, "mock", "prices") : join(DATA, "prices");
 const ANALYSIS_DIR = IS_MOCK ? join(DATA, "mock", "analysis") : join(DATA, "analysis");
 const CALENDAR_DIR = IS_MOCK ? join(DATA, "mock", "calendar") : join(DATA, "calendar");
+const SIGNALS_DIR = IS_MOCK ? join(DATA, "mock", "signals") : join(DATA, "signals");
 const WEEK_RE = /^\d{4}-W\d{2}$/;
 
 export type Impact = "direkt" | "indirekt";
@@ -62,6 +63,7 @@ export interface SectorImpact {
 import type { Tone } from "./tone";
 export type { Tone } from "./tone";
 import type { CalendarEvent } from "./calendar";
+import type { SignalRow } from "./signals";
 import { isoWeek } from "./weekCheck";
 
 export interface Sentiment {
@@ -108,7 +110,28 @@ export interface WeekView {
   analysis: Analysis | null;
   /** Rapportkalendern för veckan efter, om den finns. */
   calendar: CalendarView | null;
+  /** Signalöversikten per bolag, om den finns. */
+  signals: SignalsView | null;
   sectors: SectorView[];
+}
+
+export interface SignalsView {
+  generatedAt: string;
+  thresholds: { volume_ratio: number; near_52w_pct: number; short_aggregate_pp: number };
+  rows: SignalRow[];
+}
+
+/** Signalfilen är valfri – saknas den, eller är den trasig, visas ingen flik för den. */
+export function loadSignals(week: string): SignalsView | null {
+  const path = join(SIGNALS_DIR, `${week}.json`);
+  if (!existsSync(path)) return null;
+  try {
+    const raw = readJson<{ generated_at: string; thresholds: SignalsView["thresholds"]; companies: SignalRow[] }>(path);
+    return { generatedAt: raw.generated_at, thresholds: raw.thresholds, rows: raw.companies };
+  } catch (err) {
+    console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan signaler:`, err);
+    return null;
+  }
 }
 
 export interface CalendarView {
@@ -346,6 +369,7 @@ export function loadWeek(week: string): WeekView {
       : null,
     analysis: loadAnalysis(week),
     calendar: loadCalendar(weekAfter(raw.period.end)),
+    signals: loadSignals(week),
     sectors: sectorViews,
   };
 }

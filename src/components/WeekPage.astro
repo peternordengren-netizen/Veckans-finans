@@ -6,6 +6,7 @@
 import Base from "../layouts/Base.astro";
 import AnalysisPanel from "./AnalysisPanel.astro";
 import CalendarPanel from "./CalendarPanel.astro";
+import SignalsPanel from "./SignalsPanel.astro";
 import CompanyCard from "./CompanyCard.astro";
 import { formatDate, weekLabel, type WeekView } from "../lib/data";
 import { describePolicyRate, formatRate } from "../lib/policyRate";
@@ -108,6 +109,22 @@ const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
           ))
         }
         {
+          view.signals && (
+            <button
+              type="button"
+              role="tab"
+              id="tab-signaler"
+              aria-controls="sektor-signaler"
+              aria-selected="false"
+              tabindex={-1}
+              data-sector="signaler"
+            >
+              Signaler
+              <span class="count">{view.signals.rows.filter((r) => r.signals.length > 0).length}</span>
+            </button>
+          )
+        }
+        {
           view.calendar && (
             <button
               type="button"
@@ -208,6 +225,15 @@ const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
             ))}
           </section>
         ))
+      }
+
+      {
+        view.signals && (
+          <section class="sector" id="sektor-signaler" role="tabpanel" aria-labelledby="tab-signaler" tabindex="0">
+            <h2>Signaler</h2>
+            <SignalsPanel signals={view.signals} />
+          </section>
+        )
       }
 
       {
