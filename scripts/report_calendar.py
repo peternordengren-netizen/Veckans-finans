@@ -37,6 +37,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from retry import with_retries  # noqa: E402
 from validate import (  # noqa: E402
     DATA_DIR, RAW_DIR, Instrument, iso_week_period, load_instruments, validate_calendar,
 )
@@ -267,7 +268,8 @@ def build(
 
     for inst in instruments.values():
         try:
-            ydates = [d for d in get_dates(inst.yahoo_ticker) if d >= today]
+            ydates = [d for d in with_retries(lambda: get_dates(inst.yahoo_ticker), f"{inst.yahoo_ticker} (rapportdatum)")
+                      if d >= today]
         except Exception as exc:  # noqa: BLE001 – en ticker får aldrig stoppa resten
             errors.append(f"{inst.yahoo_ticker}: {type(exc).__name__}")
             ydates = []

@@ -38,6 +38,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from retry import with_retries  # noqa: E402
 from validate import iso_week_period, validate_prices  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
@@ -118,7 +119,8 @@ def build_prices(week_data: dict, fetch: Fetcher, today: date, now: datetime) ->
 
     def get(ticker: str) -> dict | None:
         try:
-            return week_change(fetch(ticker, start - timedelta(days=LOOKBACK_DAYS), end), start, end)
+            hist = with_retries(lambda: fetch(ticker, start - timedelta(days=LOOKBACK_DAYS), end), f"{ticker} (kurser)")
+            return week_change(hist, start, end)
         except Exception as err:  # noqa: BLE001 – varje tickerfel ska bara loggas
             errors[ticker] = f"{type(err).__name__}: {err}"[:200]
             print(f"[{ticker}] FEL: {errors[ticker]}", file=sys.stderr)

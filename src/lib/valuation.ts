@@ -7,6 +7,7 @@ export type ValuationStatus =
   | "ok"
   | "kontrollera bolagshändelse"
   | "känd bolagshändelse"
+  | "noterad under året"
   | "fastighetsbolag"
   | "investmentbolag"
   | "annan valuta"
@@ -64,6 +65,7 @@ export const STATUS_TEXT: Record<ValuationStatus, string> = {
   ok: "",
   "kontrollera bolagshändelse": "kontrollera bolagshändelse",
   "känd bolagshändelse": "känd bolagshändelse",
+  "noterad under året": "noterad under året",
   fastighetsbolag: "fastighetsbolag – se förvaltningsresultatet",
   investmentbolag: "investmentbolag – substansvärdet är måttet",
   "annan valuta": "redovisar i annan valuta",
@@ -74,7 +76,7 @@ export const STATUS_TEXT: Record<ValuationStatus, string> = {
 
 /** Tolkning eller status: det som visas i sista kolumnen. */
 export function interpretation(r: Pick<ValuationRow, "status" | "verdict" | "pe_over_max" | "event_label">): string {
-  if (r.status === "känd bolagshändelse" && r.event_label) return r.event_label;
+  if ((r.status === "känd bolagshändelse" || r.status === "noterad under året") && r.event_label) return r.event_label;
   if (r.status !== "ok") return STATUS_TEXT[r.status];
   if (r.pe_over_max) return "P/E över 100 – ingen tolkning";
   return r.verdict ?? "";

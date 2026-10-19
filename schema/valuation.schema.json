@@ -76,7 +76,7 @@
           "adjusted_ex_dates": { "type": "array", "items": { "type": "string", "format": "date" } },
           "event_label": { "type": ["string", "null"], "description": "Etikett för en känd bolagshändelse som inte går att justera." },
           "status": {
-            "enum": ["ok", "kontrollera bolagshändelse", "känd bolagshändelse", "fastighetsbolag", "investmentbolag", "annan valuta",
+            "enum": ["ok", "kontrollera bolagshändelse", "känd bolagshändelse", "noterad under året", "fastighetsbolag", "investmentbolag", "annan valuta",
               "otillräcklig vinsthistorik", "förlust", "kurs saknas"]
           }
         }

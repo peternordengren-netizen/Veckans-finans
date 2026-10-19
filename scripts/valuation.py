@@ -17,6 +17,8 @@ Status per bolag (P/E visas bara vid "ok"):
 - "känd bolagshändelse": som ovan, men dagen är utredd och händelsen känd fast den inte går att
   justera (investigated med label i corporate_actions.json); etiketten visas, t.ex.
   "noterad i Stockholm 9 jan", och varken kurs i år eller P/E
+- "noterad under året": ingen kurs vid årets början, och första handelsdagen i år är verifierad
+  (listings i corporate_actions.json); etiketten visar dagen, t.ex. "noterad under året (12 jun)"
 - "fastighetsbolag" (sektor fastigheter): vinsten styrs av värdeförändringar
 - "investmentbolag" (kolumnen typ i instruments.csv): substansvärdet är rätt mått
 - "annan valuta": vinsten redovisas i annan valuta än kursen (valutaeffekt)
@@ -48,6 +50,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from prices import INDEX_NAME, INDEX_TICKER  # noqa: E402
+from retry import with_retries  # noqa: E402
 from signals import Bar, BarFetcher, yahoo_bars  # noqa: E402
 from validate import DATA_DIR, Instrument, iso_week_period, load_instruments, validate_valuation  # noqa: E402
 
@@ -95,6 +98,22 @@ def load_actions(path: Path = CORPORATE_ACTIONS) -> dict[str, list[dict]]:
     for a in json.loads(path.read_text(encoding="utf-8")).get("actions", []):
         out.setdefault(a["ticker"], []).append(a)
     return out
+
+
+def load_listings(path: Path = CORPORATE_ACTIONS) -> dict[str, str]:
+    """Verifierade första handelsdagar för bolag noterade under året: {ticker: datum}."""
+    if not path.exists():
+        return {}
+    return {x["ticker"]: x["first_trading_day"]
+            for x in json.loads(path.read_text(encoding="utf-8")).get("listings", [])}
+
+
+MONTHS_SHORT = ["jan", "feb", "mars", "apr", "maj", "juni", "juli", "aug", "sep", "okt", "nov", "dec"]
+
+
+def listing_label(day: str) -> str:
+    d = date.fromisoformat(day)
+    return f"noterad under året ({d.day} {MONTHS_SHORT[d.month - 1]})"
 
 
 def load_known(path: Path = CORPORATE_ACTIONS) -> dict[str, list[dict]]:
@@ -148,7 +167,7 @@ def verdict(pe_change: float | None) -> str | None:
 
 def company(inst: Instrument, bars: list[Bar], eps: list[tuple[date, float]], actions: list[dict],
             year_start: date, asof: date, index_ytd: float | None, fin_ccy: str | None,
-            known: list[dict] | None = None) -> dict:
+            known: list[dict] | None = None, listed_on: str | None = None) -> dict:
     """Värden och status för ett bolag."""
     moves = big_moves(bars, year_start, asof)
     explained = {a["ex_date"] for a in actions}
@@ -166,7 +185,11 @@ def company(inst: Instrument, bars: list[Bar], eps: list[tuple[date, float]], ac
         "status": "ok", "event_label": None,
     }
     if p0 is None or p1 is None:
-        c["status"] = "kurs saknas"
+        if p0 is None and listed_on and year_start.isoformat() <= listed_on <= asof.isoformat():
+            c["status"] = "noterad under året"
+            c["event_label"] = listing_label(listed_on)
+        else:
+            c["status"] = "kurs saknas"
         return c
     if unexplained:
         known_dates = {d: k["label"] for k in (known or []) for d in k["yahoo_dates"]}
@@ -207,12 +230,13 @@ def company(inst: Instrument, bars: list[Bar], eps: list[tuple[date, float]], ac
 
 def build(week: str, instruments: dict[str, Instrument], fetch_bars: BarFetcher, fetch_eps: EpsFetcher,
           currencies: dict[str, str | None], now: datetime, actions: dict[str, list[dict]] | None = None,
-          known: dict[str, list[dict]] | None = None) -> dict:
+          known: dict[str, list[dict]] | None = None, listings: dict[str, str] | None = None) -> dict:
     _, end = iso_week_period(week)
     asof = min(end, now.date())
     year_start = date(asof.year, 1, 1)
     actions = load_actions() if actions is None else actions
     known = load_known() if known is None else known
+    listings = load_listings() if listings is None else listings
     bars = fetch_bars([*[i.yahoo_ticker for i in instruments.values()], INDEX_TICKER],
                       year_start - timedelta(days=20), asof)
     idx = [(b.day, b.close) for b in bars.get(INDEX_TICKER, [])]
@@ -221,12 +245,13 @@ def build(week: str, instruments: dict[str, Instrument], fetch_bars: BarFetcher,
     companies, errors = [], []
     for inst in instruments.values():
         try:
-            eps = fetch_eps(inst.yahoo_ticker)
+            eps = with_retries(lambda: fetch_eps(inst.yahoo_ticker), f"{inst.yahoo_ticker} (vinsthistorik)")
         except Exception as exc:  # noqa: BLE001 – ett bolag får aldrig stoppa resten
             errors.append(f"{inst.yahoo_ticker}: {type(exc).__name__}")
             eps = []
         companies.append(company(inst, bars.get(inst.yahoo_ticker, []), eps, actions.get(inst.ticker, []),
-                                 year_start, asof, index_ytd, currencies.get(inst.ticker), known.get(inst.ticker)))
+                                 year_start, asof, index_ytd, currencies.get(inst.ticker), known.get(inst.ticker),
+                                 listings.get(inst.ticker)))
     return {
         "schema_version": 1, "week": week, "as_of": asof.isoformat(), "year_start": year_start.isoformat(),
         "generated_at": now.isoformat(timespec="seconds"), "thresholds": THRESHOLDS,

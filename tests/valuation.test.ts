@@ -37,3 +37,11 @@ test("känd bolagshändelse visar etiketten", () => {
   );
   assert.equal(interpretation({ status: "känd bolagshändelse", verdict: null, pe_over_max: false }), "känd bolagshändelse");
 });
+
+test("noterad under året visar dagen", () => {
+  assert.equal(
+    interpretation({ status: "noterad under året", verdict: null, pe_over_max: false, event_label: "noterad under året (12 juni)" }),
+    "noterad under året (12 juni)",
+  );
+  assert.equal(interpretation({ status: "kurs saknas", verdict: null, pe_over_max: false }), "kurs saknas");
+});

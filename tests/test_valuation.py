@@ -143,3 +143,27 @@ def test_kand_handelse_som_inte_gar_att_justera(tmp_path):
     g2 = {x["ticker"]: x for x in build(WEEK, INSTRUMENTS, fetch_bars, lambda t: EPS[t], {}, NOW, actions={},
                                          known=known2)["companies"]}["GAMA"]
     assert g2["status"] == "kontrollera bolagshändelse" and g2["event_label"] is None
+
+
+def test_noterad_under_aret(tmp_path):
+    from valuation import listing_label
+
+    def fetch_new(t, s, e):
+        out = fetch_bars(t, s, e)
+        out["ZETA.ST"] = [b for b in out["ZETA.ST"] if b.day >= date(2026, 6, 12)]  # noterad 12 juni
+        return out
+
+    listings = {"ZETA": "2026-06-12"}
+    data = build(WEEK, INSTRUMENTS, fetch_new, lambda t: EPS[t], {}, NOW, actions={}, known={}, listings=listings)
+    z = {x["ticker"]: x for x in data["companies"]}["ZETA"]
+    assert (z["status"], z["event_label"], z["ytd_pct"]) == ("noterad under året", "noterad under året (12 juni)", None)
+    assert listing_label("2026-09-25") == "noterad under året (25 sep)"
+    p = tmp_path / "ca.json"
+    p.write_text(json.dumps({"actions": [], "listings": [{"ticker": "ZETA", "first_trading_day": "2026-06-12"}]}),
+                 encoding="utf-8")
+    assert validate_valuation(data, WEEK, INSTRUMENTS, p).errors == []
+    # Utan verifierad notering ska det stå "kurs saknas".
+    p.write_text(json.dumps({"actions": [], "listings": []}), encoding="utf-8")
+    assert any("notering" in e for e in validate_valuation(data, WEEK, INSTRUMENTS, p).errors)
+    none = build(WEEK, INSTRUMENTS, fetch_new, lambda t: EPS[t], {}, NOW, actions={}, known={}, listings={})
+    assert {x["ticker"]: x for x in none["companies"]}["ZETA"]["status"] == "kurs saknas"

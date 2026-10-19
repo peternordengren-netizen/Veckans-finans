@@ -48,6 +48,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from prices import INDEX_NAME, INDEX_TICKER  # noqa: E402
+from retry import retry_missing  # noqa: E402
 from validate import DATA_DIR, Instrument, iso_week_period, load_instruments, validate_signals  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
@@ -74,7 +75,12 @@ BarFetcher = Callable[[list[str], date, date], dict[str, list[Bar]]]
 
 
 def yahoo_bars(tickers: list[str], start: date, end_inclusive: date) -> dict[str, list[Bar]]:
-    """Dagsdata för alla tickers i ett batchanrop (yfinance.download)."""
+    """Dagsdata för alla tickers i ett batchanrop (yfinance.download). Tickers som saknas i svaret
+    hämtas om upp till två gånger (scripts/retry.py); de som fortfarande saknas utelämnas."""
+    return retry_missing(lambda ks: _download_bars(ks, start, end_inclusive), tickers, "kursdata (batch)")
+
+
+def _download_bars(tickers: list[str], start: date, end_inclusive: date) -> dict[str, list[Bar]]:
     import yfinance as yf
 
     df = yf.download(tickers, start=start.isoformat(), end=(end_inclusive + timedelta(days=1)).isoformat(),

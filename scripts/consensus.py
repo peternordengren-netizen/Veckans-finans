@@ -38,6 +38,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from retry import with_retries  # noqa: E402
 from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, validate_consensus  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
@@ -100,7 +101,7 @@ def build(day: date, now: datetime, instruments: dict[str, Instrument],
     companies, errors = [], []
     for inst in instruments.values():
         try:
-            c = get(inst.yahoo_ticker)
+            c = with_retries(lambda: get(inst.yahoo_ticker), f"{inst.yahoo_ticker} (konsensus)")
         except Exception as exc:  # noqa: BLE001 – ett bolag får aldrig stoppa resten
             errors.append(f"{inst.yahoo_ticker}: {type(exc).__name__}")
             continue

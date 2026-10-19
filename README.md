@@ -264,6 +264,14 @@ men flaggas inte heller.
 - **Intrum:** företrädesemission. Fallet ligger 1 juni, före stämmans beslut.
 - **Morrow Bank:** omnotering från Oslo 9 januari. Det finns inga handelskurser i Stockholm före den dagen.
 
+**Noterade under året** (`listings`, med verifierad första handelsdag) visas som "noterad under året (dag)" i
+stället för "kurs saknas". Det gäller Linjemontage (25 sep) och Tången Industrikapital (12 juni).
+
+**Nya försök mot Yahoo:** alla hämtningar från Yahoo görs upp till tre gånger med 2 sekunders paus, via
+`scripts/retry.py`. Det gäller vinsthistorik, konsensus, rapportdatum och kurser. Varje misslyckat försök loggas på
+stderr, till exempel `[försök 1/3] VICO.ST (vinsthistorik): KeyError – nytt försök om 2 s`. Batchhämtningen av kurser
+hämtar om de tickers som saknas i svaret.
+
 Veckokörningen kör `valuation.py` före `signals.py`, eftersom signalen "P/E +30 % i år" bygger på den.
 
 ### Signaler (`scripts/signals.py`)

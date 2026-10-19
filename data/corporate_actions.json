@@ -1,5 +1,5 @@
 {
-  "description": "Verifierade förklaringar till en enskild kursdag över ±40 % i Yahoos serie. En post gäller bara om den stora kursrörelsen ligger exakt på ex_date (kursdagen) i serien; då multipliceras kurserna före ex_date med factor. factor 1.0 = verklig kursrörelse (t.ex. efter en rapport) som inte ska justeras men inte heller flaggas. Saknas en verifierad post visas varken kurs i år eller P/E, bara 'kontrollera bolagshändelse'. Poster läggs bara in efter kontroll mot bolagets eget pressmeddelande och kursserien. Under investigated står händelser som är kända men inte går att justera; har en post label och yahoo_dates visas etiketten i stället för kurs i år och P/E (status känd bolagshändelse).",
+  "description": "Verifierade förklaringar till en enskild kursdag över ±40 % i Yahoos serie. En post gäller bara om den stora kursrörelsen ligger exakt på ex_date (kursdagen) i serien; då multipliceras kurserna före ex_date med factor. factor 1.0 = verklig kursrörelse (t.ex. efter en rapport) som inte ska justeras men inte heller flaggas. Saknas en verifierad post visas varken kurs i år eller P/E, bara 'kontrollera bolagshändelse'. Poster läggs bara in efter kontroll mot bolagets eget pressmeddelande och kursserien. Under investigated står händelser som är kända men inte går att justera; har en post label och yahoo_dates visas etiketten i stället för kurs i år och P/E (status känd bolagshändelse). Under listings står bolag som noterats under året (verifierad första handelsdag): de visas som noterad under året i stället för kurs saknas.",
   "actions": [
     {
       "ticker": "CYNCA",
@@ -82,6 +82,22 @@
       "yahoo_dates": [
         "2026-01-09"
       ]
+    }
+  ],
+  "listings": [
+    {
+      "ticker": "LMGAB",
+      "first_trading_day": "2026-09-25",
+      "source_url": "https://mfn.se/a/linjemontage/meddelande-om-stabiliseringsatgarder",
+      "note": "ABG:s stabiliseringsmeddelande 6 okt (i rådatan, 2026-W41): handel på Nasdaq Stockholm från 25 september 2026, pris i erbjudandet 46 kr.",
+      "verified": "2026-10-19"
+    },
+    {
+      "ticker": "TANGEN B",
+      "first_trading_day": "2026-06-12",
+      "source_url": "https://storage.mfn.se/bc573c82-3e1d-4778-b3cd-13fceb358fab/forsta-dag-for-handel-i-tangens-aktier-av-serie-b-pa-nasdaq-stockholm.pdf",
+      "note": "Bolagets meddelande: handeln i B-aktien inleds 12 juni 2026 under TANGEN B, ISIN SE0029278985 (citerat via sökning; PDF:en gick inte att läsa direkt). Yahoos serie börjar samma dag.",
+      "verified": "2026-10-19"
     }
   ]
 }
