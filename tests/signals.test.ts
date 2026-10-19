@@ -2,7 +2,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { compareValues, ratio, sek, shortChange, signedPct } from "../src/lib/signals.ts";
+import { compareValues, defaultOrder, ratio, sek, shortChange, signedPct } from "../src/lib/signals.ts";
+
+test("förvald ordning: flest signaler först, sedan namn", () => {
+  const rows = [
+    { name: "Ödla", signals: ["insyn"] },
+    { name: "Beta", signals: [] },
+    { name: "Ärla", signals: ["insyn", "omsättning"] },
+    { name: "Alfa", signals: ["insyn"] },
+    { name: "Zeta", signals: ["insyn", "blankning", "avviker"] },
+  ];
+  assert.deepEqual(defaultOrder(rows).map((r) => r.name), ["Zeta", "Ärla", "Alfa", "Ödla", "Beta"]);
+  assert.equal(rows[0].name, "Ödla"); // originalet ändras inte
+});
 
 const MINUS = "−";
 

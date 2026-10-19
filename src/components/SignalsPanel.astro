@@ -4,13 +4,14 @@
  * förvalt; utan JavaScript visas alla bolag i filens ordning.
  */
 import type { SignalsView } from "../lib/data";
-import { SIGNAL_LABELS, ratio, sek, shortChange, signedPct } from "../lib/signals";
+import { SIGNAL_LABELS, defaultOrder, ratio, sek, shortChange, signedPct } from "../lib/signals";
 
 interface Props {
   signals: SignalsView;
 }
 const { signals } = Astro.props;
-const rows = [...signals.rows].sort((a, b) => b.signals.length - a.signals.length || a.name.localeCompare(b.name, "sv"));
+// Förvald sortering: kolumnen "Antal signaler", flest först (se DEFAULT_SORT nedan).
+const rows = defaultOrder(signals.rows);
 const flagged = rows.filter((r) => r.signals.length > 0).length;
 const t = signals.thresholds;
 const n = (v: number) => new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 }).format(v);
@@ -19,7 +20,8 @@ const toneOrder = { positiv: 3, blandad: 2, neutral: 1, negativ: 0 };
 // Kolumner: nyckel för sortering och om värdet är tal eller text.
 const columns = [
   { key: "name", label: "Bolag", type: "text" },
-  { key: "signals", label: "Signaler", type: "num" },
+  { key: "count", label: "Antal signaler", type: "num" },
+  { key: "signals", label: "Signaler", type: "text" },
   { key: "tone", label: "Ton", type: "num" },
   { key: "change", label: "Vecka", type: "num" },
   { key: "relative", label: "Mot index", type: "num" },
@@ -30,6 +32,7 @@ const columns = [
   { key: "short", label: "Blankning", type: "num" },
 ] as const;
 const v = (x: number | null) => (x === null ? "" : String(x));
+const DEFAULT_SORT = "count";
 ---
 
 <div class="signals" data-signals>
@@ -76,7 +79,7 @@ const v = (x: number | null) => (x === null ? "" : String(x));
         <tr>
           {
             columns.map((c) => (
-              <th scope="col" data-key={c.key} data-type={c.type} aria-sort="none">
+              <th scope="col" data-key={c.key} data-type={c.type} aria-sort={c.key === DEFAULT_SORT ? "descending" : "none"}>
                 <button type="button">{c.label}</button>
               </th>
             ))
@@ -92,7 +95,10 @@ const v = (x: number | null) => (x === null ? "" : String(x));
                 <th scope="row" data-v={r.name}>
                   <span class="name">{r.name}</span> <span class="ticker">{r.ticker}</span>
                 </th>
-                <td data-v={r.signals.length}>
+                <td class="num" data-v={r.signals.length}>
+                  {r.signals.length}
+                </td>
+                <td data-v={r.signals.map((sig) => SIGNAL_LABELS[sig]).join(", ")}>
                   <span class="chips">
                     {r.signals.map((sig) => (
                       <span class:list={["chip", sig]}>{SIGNAL_LABELS[sig]}</span>
@@ -168,7 +174,9 @@ const v = (x: number | null) => (x === null ? "" : String(x));
           if (raw === "") return null;
           return th.dataset.type === "num" ? Number(raw) : raw;
         };
-        rows.sort((a, b) => compareValues(value(a), value(b), ascending));
+        // Lika värden ordnas efter bolagsnamn, så att t.ex. "flest signaler först" alltid ger samma ordning.
+        const name = (r: HTMLTableRowElement) => (r.children[0] as HTMLElement).dataset.v ?? "";
+        rows.sort((a, b) => compareValues(value(a), value(b), ascending) || compareValues(name(a), name(b), true));
         tbody.append(...rows);
       });
     });

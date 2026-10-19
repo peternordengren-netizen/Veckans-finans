@@ -59,6 +59,11 @@ export function shortChange(row: Pick<SignalRow, "short_positions_pp" | "short_a
   return row.short_positions_pp ?? row.short_aggregate_pp;
 }
 
+/** Tabellens förvalda ordning: flest signaler först, därefter bolagsnamn (svensk ordning). */
+export function defaultOrder<T extends { name: string; signals: unknown[] }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => b.signals.length - a.signals.length || a.name.localeCompare(b.name, "sv"));
+}
+
 /**
  * Jämför två värden för sortering. Saknade värden hamnar alltid sist, oavsett riktning.
  * Text jämförs på svenska (å, ä, ö sist).
