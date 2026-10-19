@@ -153,6 +153,29 @@ Data dateras till gårdagen, så att lördagsmorgonens bild hamnar i fredagens v
 Valideringen kontrollerar att siffrorna hänger ihop: förändring = slut − start, netto = köp − sälj, värde = volym × pris,
 tröskeln och markeringarna.
 
+### Rapportkalender (`scripts/report_calendar.py`)
+
+`report_calendar.py <vecka>` skriver `data/calendar/<vecka>.json` (git-ignorerad). Filen innehåller rapportdatum och
+stämmor för bolagen i `instruments.csv`. Veckans sida visar den under fliken **Kommande vecka**, med veckan efter
+sidans vecka. Veckokörningen skapar den efter sammanfattningen.
+
+- **Yahoo är grunden** (yfinance `Ticker.calendar`, ett anrop per bolag). Datumet kan vara uppskattat tills bolaget
+  har meddelat det.
+- **MFN och Cision:** inbjudningar till rapportpresentationer och kallelser till stämmor från de senaste sex veckornas
+  rådata. Datumet tas ur texten:
+  - bara datum efter publiceringsdagen räknas
+  - datum i en rapportperiod ("1 januari – 30 september") räknas inte
+  - ett datum i rubriken går först, därefter ett datum i samma mening som "rapport"/"publicerar"
+  - kapitalmarknadsdagar räknas inte som rapporter
+- **Status:**
+  - *bekräftat* när Yahoo och MFN anger samma datum
+  - *olika datum* när de skiljer sig; båda visas
+  - *enligt Yahoo* respektive *enligt MFN* när bara en källa har datumet
+  - stämmor kommer bara från MFN
+- Valideringen kontrollerar att datumen ligger i veckan, att statusen stämmer med datumen, att bolagen finns i listan
+  och att MFN-länkarna finns i rådatan.
+- Kalendern säkerhetskopieras inte till det privata repot. Den gäller framåt och skapas om varje gång.
+
 ## Sidan (Astro)
 
 Kräver Node 22 eller senare.

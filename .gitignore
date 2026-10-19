@@ -5,6 +5,7 @@ data/raw/
 data/weeks/
 data/prices/
 data/analysis/
+data/calendar/
 
 # Python
 .venv/

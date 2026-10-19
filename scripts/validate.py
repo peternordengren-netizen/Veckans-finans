@@ -716,11 +716,73 @@ def validate_analysis(data: dict, expected_week: str | None) -> Result:
     return res
 
 
+def _raw_urls(raw_dir: Path) -> set[str] | None:
+    """Alla käll-URL:er i rådatans index, eller None om rådata saknas."""
+    indexes = list(raw_dir.glob("*/index.json")) if raw_dir.exists() else []
+    if not indexes:
+        return None
+    urls: set[str] = set()
+    for p in indexes:
+        for it in json.loads(p.read_text(encoding="utf-8")).get("items", []):
+            urls.add(it.get("url"))
+            urls.update(a.get("url") for a in it.get("also_in", []))
+    return urls
+
+
+def validate_calendar(data: dict, expected_week: str | None, instruments: dict[str, Instrument],
+                      raw_dir: Path = RAW_DIR) -> Result:
+    """Rapportkalendern (scripts/report_calendar.py): schema, att datumen ligger i veckan,
+    att statusen stämmer med datumen, att bolagen finns i listan och att MFN-länkarna
+    finns i rådatan (så att ingen källa är påhittad)."""
+    res = Result()
+    res.errors += _schema_errors(_schema_validator("calendar.schema.json"), data)
+    if res.errors:
+        return res
+    week = data["week"]
+    if expected_week is not None and week != expected_week:
+        res.errors.append(f"week {week!r} stämmer inte med filnamnet {expected_week!r}")
+    start, end = iso_week_period(week)
+    if data["period"] != {"start": start.isoformat(), "end": end.isoformat()}:
+        res.errors.append(f"period stämmer inte med {week}")
+    _check_datetime(data["generated_at"], "generated_at", res)
+    urls = _raw_urls(raw_dir)
+    if urls is None:
+        res.warnings.append("rådata saknas – MFN-länkarna kontrolleras inte")
+    seen: set[tuple[str, str]] = set()
+    for i, e in enumerate(data["events"]):
+        where = f"events[{i}] ({e['name']}, {e['kind']})"
+        if not start.isoformat() <= e["date"] <= end.isoformat():
+            res.errors.append(f"{where}: {e['date']} ligger utanför veckan")
+        inst = instruments.get(e["ticker"])
+        if inst is None or inst.yahoo_ticker != e["yahoo_ticker"] or inst.namn != e["name"]:
+            res.errors.append(f"{where}: bolaget finns inte i instruments.csv med samma namn och yahoo_ticker")
+        if (e["ticker"], e["kind"]) in seen:
+            res.errors.append(f"{where}: dubblett")
+        seen.add((e["ticker"], e["kind"]))
+        y, m = e["yahoo_date"], e["mfn_date"]
+        expected = {
+            "bekräftat": y is not None and y == m and e["date"] == y,
+            "avvikelse": y is not None and m is not None and y != m and e["date"] in (y, m),
+            "yahoo": y is not None and m is None and e["date"] == y,
+            "mfn": y is None and m is not None and e["date"] == m,
+        }[e["status"]]
+        if not expected:
+            res.errors.append(f"{where}: status {e['status']!r} stämmer inte med datumen (Yahoo {y}, MFN {m})")
+        if e["kind"] == "stämma" and e["status"] != "mfn":
+            res.errors.append(f"{where}: stämmor kommer bara från MFN")
+        if (m is None) != (e["mfn_url"] is None) or (m is None) != (e["mfn_title"] is None):
+            res.errors.append(f"{where}: mfn_date, mfn_url och mfn_title ska finnas tillsammans")
+        if urls is not None and e["mfn_url"] is not None and e["mfn_url"] not in urls:
+            res.errors.append(f"{where}: {e['mfn_url']} finns inte i rådatan")
+    return res
+
+
 def _default_targets() -> list[Path]:
     return sorted(
         [*DATA_DIR.glob("weeks/*.json"), *DATA_DIR.glob("prices/*.json"), *DATA_DIR.glob("analysis/*.json"),
+         *DATA_DIR.glob("calendar/*.json"),
          *DATA_DIR.glob("mock/weeks/*.json"), *DATA_DIR.glob("mock/prices/*.json"),
-         *DATA_DIR.glob("mock/analysis/*.json")]
+         *DATA_DIR.glob("mock/analysis/*.json"), *DATA_DIR.glob("mock/calendar/*.json")]
     )
 
 
@@ -737,6 +799,10 @@ def main(argv: list[str]) -> int:
             res = validate_prices(data, path.stem)
         elif path.parent.name == "analysis":
             res = validate_analysis(data, path.stem)
+        elif path.parent.name == "calendar":
+            # Mockkalendern länkar till påhittade MFN-poster, så rådatan kontrolleras inte där.
+            res = validate_calendar(data, path.stem, mock_instruments if in_mock_dir else instruments,
+                                    MOCK_DIR / "raw" if in_mock_dir else RAW_DIR)
         else:
             res = validate_week(data, path.stem, mock_instruments if in_mock_dir else instruments, sector_ids)
         if data.get("mock", False) != in_mock_dir:

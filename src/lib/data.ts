@@ -13,6 +13,7 @@ const IS_MOCK = import.meta.env.MODE === "mock";
 const WEEKS_DIR = IS_MOCK ? join(DATA, "mock", "weeks") : join(DATA, "weeks");
 const PRICES_DIR = IS_MOCK ? join(DATA, "mock", "prices") : join(DATA, "prices");
 const ANALYSIS_DIR = IS_MOCK ? join(DATA, "mock", "analysis") : join(DATA, "analysis");
+const CALENDAR_DIR = IS_MOCK ? join(DATA, "mock", "calendar") : join(DATA, "calendar");
 const WEEK_RE = /^\d{4}-W\d{2}$/;
 
 export type Impact = "direkt" | "indirekt";
@@ -60,6 +61,8 @@ export interface SectorImpact {
 
 import type { Tone } from "./tone";
 export type { Tone } from "./tone";
+import type { CalendarEvent } from "./calendar";
+import { isoWeek } from "./weekCheck";
 
 export interface Sentiment {
   label: Tone;
@@ -103,7 +106,35 @@ export interface WeekView {
   index: IndexQuote | null;
   policyRate: PolicyRate | null;
   analysis: Analysis | null;
+  /** Rapportkalendern för veckan efter, om den finns. */
+  calendar: CalendarView | null;
   sectors: SectorView[];
+}
+
+export interface CalendarView {
+  week: string;
+  generatedAt: string;
+  events: CalendarEvent[];
+}
+
+/** Veckan efter en veckas söndag ("2026-10-18" -> "2026-W43"). */
+export function weekAfter(sunday: string): string {
+  const d = new Date(`${sunday}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return isoWeek(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+}
+
+/** Kalenderfilen är valfri – saknas den, eller är den trasig, visas ingen flik för den. */
+export function loadCalendar(week: string): CalendarView | null {
+  const path = join(CALENDAR_DIR, `${week}.json`);
+  if (!existsSync(path)) return null;
+  try {
+    const raw = readJson<{ week: string; generated_at: string; events: CalendarEvent[] }>(path);
+    return { week: raw.week, generatedAt: raw.generated_at, events: raw.events };
+  } catch (err) {
+    console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan kalender:`, err);
+    return null;
+  }
 }
 
 function readJson<T>(path: string): T {
@@ -314,6 +345,7 @@ export function loadWeek(week: string): WeekView {
         }
       : null,
     analysis: loadAnalysis(week),
+    calendar: loadCalendar(weekAfter(raw.period.end)),
     sectors: sectorViews,
   };
 }

@@ -1,0 +1,165 @@
+---
+/**
+ * Rapportkalendern för veckan efter: rapporter och stämmor per dag. Yahoo är grunden;
+ * "bekräftat" när MFN anger samma datum, och vid olika datum visas båda.
+ */
+import { byDay, statusText, weekdayDate } from "../lib/calendar";
+import type { CalendarView } from "../lib/data";
+import { weekLabel } from "../lib/data";
+
+interface Props {
+  calendar: CalendarView;
+}
+const { calendar } = Astro.props;
+const days = byDay(calendar.events);
+const reports = calendar.events.filter((e) => e.kind === "rapport").length;
+const meetings = calendar.events.length - reports;
+const generated = new Date(calendar.generatedAt).toLocaleString("sv-SE", {
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Europe/Stockholm",
+});
+---
+
+<div class="calendar">
+  <p class="lead">
+    {weekLabel(calendar.week)}: {reports} rapporter{meetings > 0 && `, ${meetings} ${meetings === 1 ? "stämma" : "stämmor"}`}.
+    Datumen kommer från Yahoo och jämförs med bolagens egna inbjudningar och kallelser på MFN. Hämtat {generated}.
+  </p>
+  <ul class="legend" aria-label="Förklaring">
+    <li><span class="status bekräftat">bekräftat av MFN</span> samma datum hos Yahoo och i bolagets inbjudan</li>
+    <li><span class="status avvikelse">olika datum</span> Yahoo och bolaget anger olika datum. Lita på bolagets.</li>
+    <li><span class="status yahoo">enligt Yahoo</span> ingen inbjudan ännu, och datumet kan vara uppskattat</li>
+  </ul>
+
+  {days.length === 0 && <p class="empty">Inga rapporter eller stämmor hittades för veckan.</p>}
+
+  {
+    days.map((day) => (
+      <section class="day">
+        <h3>
+          {weekdayDate(day.date)} <span class="n">{day.events.length}</span>
+        </h3>
+        <ul>
+          {day.events.map((e) => (
+            <li class:list={["event", e.status]}>
+              <span class="who">
+                <strong>{e.name}</strong> <span class="ticker">{e.ticker}</span>
+                {e.kind === "stämma" && <span class="kind">Stämma</span>}
+              </span>
+              <span class="src">
+                <span class:list={["status", e.status]}>{statusText(e)}</span>
+                {e.mfn_url && (
+                  <a href={e.mfn_url} rel="noopener noreferrer" target="_blank">
+                    {e.kind === "stämma" ? "kallelse" : "inbjudan"}
+                    <span class="sr-only"> (öppnas i ny flik)</span>
+                    <span aria-hidden="true"> ↗</span>
+                  </a>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))
+  }
+</div>
+
+<style>
+  .lead {
+    margin: 0 0 8px;
+    max-width: 70ch;
+  }
+  .legend {
+    list-style: none;
+    margin: 0 0 16px;
+    padding: 0;
+    display: grid;
+    gap: 4px;
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+  .legend .status {
+    margin-right: 6px;
+  }
+  .day {
+    background: var(--surface-2);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 12px;
+  }
+  .day h3 {
+    margin: 0 0 6px;
+    font-size: 1rem;
+  }
+  .n {
+    font-size: 0.75rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .day ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .event {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 2px 12px;
+    padding: 6px 0;
+    border-top: 1px solid var(--border);
+  }
+  .event:first-child {
+    border-top: 0;
+  }
+  .ticker {
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+  .kind {
+    margin-left: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 4px;
+    background: var(--indirect-bg);
+    color: var(--indirect-fg);
+  }
+  .src {
+    display: inline-flex;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 0.875rem;
+  }
+  .status {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .status.bekräftat {
+    color: var(--pos);
+  }
+  .status.avvikelse {
+    color: var(--banner-fg);
+    background: var(--banner-bg);
+    border-color: var(--banner-border);
+  }
+  .empty {
+    color: var(--muted);
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+</style>

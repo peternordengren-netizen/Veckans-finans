@@ -9,6 +9,7 @@
 #   allt annat nekas automatiskt. PowerShell, webb och MCP-servrar är avstängda.
 # - Loggar i logs/weekly/: <vecka>-run.log (förlopp), <vecka>.json (Claudes svar i JSON),
 #   <vecka>.err (stderr), <vecka>-slutrapport.md (slutrapporten) och <vecka>-build.log.
+# - Efter Claude skrivs rapportkalendern för veckan efter (scripts/report_calendar.py).
 #
 # Manuellt: powershell -NoProfile -File scripts\run_weekly.ps1 [-Week 2026-W42] [-DryRun]
 # -DryRun kör allt utom själva sammanfattningen (Claude får ett ofarligt testprompt i stället).
@@ -32,7 +33,10 @@ if (-not $Week) {
 }
 if ($Week -notmatch '^\d{4}-W\d{2}$') { throw "Ogiltig vecka: '$Week'" }
 
-$RunLog = Join-Path $LogDir "$Week-run.log"
+# Testkörningar (-DryRun) skriver till egna filer så att en riktig körnings loggar och
+# slutrapport aldrig skrivs över.
+$LogName = if ($DryRun) { "$Week-dryrun" } else { $Week }
+$RunLog = Join-Path $LogDir "$LogName-run.log"
 function Log([string]$Text) {
     $line = "{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $Text
     Add-Content -Path $RunLog -Value $line -Encoding UTF8
@@ -100,14 +104,14 @@ $ArgList = @("-p", (Quote $Prompt), "--permission-mode", "dontAsk", "--allowedTo
     @("--disallowedTools") + ($Disallowed | ForEach-Object { Quote $_ }) +
     @("--strict-mcp-config", "--no-session-persistence", "--output-format", "json")
 
-$JsonOut = Join-Path $LogDir "$Week.json"
-$ErrOut = Join-Path $LogDir "$Week.err"
+$JsonOut = Join-Path $LogDir "$LogName.json"
+$ErrOut = Join-Path $LogDir "$LogName.err"
 Log "Startar Claude Code: $Prompt"
 $proc = Start-Process -FilePath $Claude -ArgumentList $ArgList -NoNewWindow -PassThru -Wait `
     -RedirectStandardOutput $JsonOut -RedirectStandardError $ErrOut
 Log "Claude Code klar: exit $($proc.ExitCode)"
 
-$Report = Join-Path $LogDir "$Week-slutrapport.md"
+$Report = Join-Path $LogDir "$LogName-slutrapport.md"
 try {
     $result = Get-Content $JsonOut -Raw -Encoding UTF8 | ConvertFrom-Json
     $denied = @($result.permission_denials | ForEach-Object {
@@ -124,7 +128,13 @@ try {
     Log "Kunde inte läsa Claudes svar ($JsonOut): $_"
 }
 
-$BuildLog = Join-Path $LogDir "$Week-build.log"
+# Rapportkalendern för veckan efter (visas på veckans sida under "Kommande vecka").
+# Deterministiskt skript utanför Claude; fel här stoppar inte bygget.
+$NextWeek = & $Python -c "import sys; from datetime import date, timedelta; y, w = sys.argv[1].split('-W'); n = date.fromisocalendar(int(y), int(w), 1) + timedelta(weeks=1); c = n.isocalendar(); print(f'{c[0]}-W{c[1]:02d}')" $Week
+& cmd.exe /c ".venv\Scripts\python.exe scripts\report_calendar.py $NextWeek 2>&1" | ForEach-Object { Log "kalender: $_" }
+Log "report_calendar.py ${NextWeek}: exit $LASTEXITCODE"
+
+$BuildLog = Join-Path $LogDir "$LogName-build.log"
 & cmd.exe /c "npm run build > `"$BuildLog`" 2>&1"
 Log "npm run build: exit $LASTEXITCODE (logg: $BuildLog)"
 Log "Klart"

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "calendar.schema.json",
+  "title": "Rapportkalender för en vecka (scripts/report_calendar.py)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "week", "period", "generated_at", "events", "errors"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "week": { "type": "string", "pattern": "^\\d{4}-W\\d{2}$" },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "string", "format": "date" },
+        "end": { "type": "string", "format": "date" }
+      }
+    },
+    "generated_at": { "type": "string" },
+    "mock": { "const": true, "description": "Bara i data/mock/ (påhittade bolag)." },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "kind", "ticker", "yahoo_ticker", "name", "status", "yahoo_date", "mfn_date", "mfn_url", "mfn_title"],
+        "properties": {
+          "date": { "type": "string", "format": "date", "description": "Dagen händelsen listas under: Yahoos datum om det ligger i veckan, annars MFN:s." },
+          "kind": { "enum": ["rapport", "stämma"] },
+          "ticker": { "type": "string", "minLength": 1 },
+          "yahoo_ticker": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["bekräftat", "avvikelse", "yahoo", "mfn"] },
+          "yahoo_date": { "type": ["string", "null"], "format": "date" },
+          "mfn_date": { "type": ["string", "null"], "format": "date" },
+          "mfn_url": { "type": ["string", "null"], "format": "uri" },
+          "mfn_title": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "errors": { "type": "array", "items": { "type": "string" } }
+  }
+}

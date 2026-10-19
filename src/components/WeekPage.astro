@@ -5,6 +5,7 @@
  */
 import Base from "../layouts/Base.astro";
 import AnalysisPanel from "./AnalysisPanel.astro";
+import CalendarPanel from "./CalendarPanel.astro";
 import CompanyCard from "./CompanyCard.astro";
 import { formatDate, weekLabel, type WeekView } from "../lib/data";
 import { describePolicyRate, formatRate } from "../lib/policyRate";
@@ -107,6 +108,22 @@ const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
           ))
         }
         {
+          view.calendar && (
+            <button
+              type="button"
+              role="tab"
+              id="tab-kommande-vecka"
+              aria-controls="sektor-kommande-vecka"
+              aria-selected="false"
+              tabindex={-1}
+              data-sector="kommande-vecka"
+            >
+              Kommande vecka
+              <span class="count">{view.calendar.events.length}</span>
+            </button>
+          )
+        }
+        {
           view.analysis && (
             <button
               type="button"
@@ -191,6 +208,15 @@ const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
             ))}
           </section>
         ))
+      }
+
+      {
+        view.calendar && (
+          <section class="sector" id="sektor-kommande-vecka" role="tabpanel" aria-labelledby="tab-kommande-vecka" tabindex="0">
+            <h2>Kommande vecka</h2>
+            <CalendarPanel calendar={view.calendar} />
+          </section>
+        )
       }
 
       {

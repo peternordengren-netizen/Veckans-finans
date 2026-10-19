@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "week": "2026-W41",
+  "period": {
+    "start": "2026-10-05",
+    "end": "2026-10-11"
+  },
+  "generated_at": "2026-10-05T08:10:00+02:00",
+  "mock": true,
+  "events": [
+    {
+      "date": "2026-10-06",
+      "kind": "rapport",
+      "ticker": "KUST A",
+      "yahoo_ticker": "KUST-A.MOCK",
+      "name": "Kustbanken",
+      "status": "bekräftat",
+      "yahoo_date": "2026-10-06",
+      "mfn_date": "2026-10-06",
+      "mfn_url": "https://example.invalid/mfn/kustbanken-inbjudan-q3",
+      "mfn_title": "Inbjudan till presentation av Kustbankens delårsrapport"
+    },
+    {
+      "date": "2026-10-07",
+      "kind": "rapport",
+      "ticker": "NRSK",
+      "yahoo_ticker": "NRSK.MOCK",
+      "name": "Norrsken Pharma",
+      "status": "avvikelse",
+      "yahoo_date": "2026-10-07",
+      "mfn_date": "2026-10-09",
+      "mfn_url": "https://example.invalid/mfn/norrsken-inbjudan-q3",
+      "mfn_title": "Inbjudan till presentation av Norrsken Pharmas delårsrapport"
+    },
+    {
+      "date": "2026-10-08",
+      "kind": "rapport",
+      "ticker": "MOLN",
+      "yahoo_ticker": "MOLN.MOCK",
+      "name": "Molnbyrån Software",
+      "status": "yahoo",
+      "yahoo_date": "2026-10-08",
+      "mfn_date": null,
+      "mfn_url": null,
+      "mfn_title": null
+    },
+    {
+      "date": "2026-10-08",
+      "kind": "stämma",
+      "ticker": "FJLH B",
+      "yahoo_ticker": "FJLH-B.MOCK",
+      "name": "Fjällhem Fastigheter",
+      "status": "mfn",
+      "yahoo_date": null,
+      "mfn_date": "2026-10-08",
+      "mfn_url": "https://example.invalid/mfn/fjallhem-kallelse",
+      "mfn_title": "Kallelse till extra bolagsstämma i Fjällhem Fastigheter"
+    }
+  ],
+  "errors": []
+}
