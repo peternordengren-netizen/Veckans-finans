@@ -1,11 +1,36 @@
 [
-  { "id": "makro", "name": "Makro & räntor" },
-  { "id": "banker-finans", "name": "Banker & finans" },
-  { "id": "fastigheter", "name": "Fastigheter" },
-  { "id": "industri", "name": "Industri" },
-  { "id": "halsovard", "name": "Hälsovård" },
-  { "id": "teknik", "name": "Teknik" },
-  { "id": "telekom", "name": "Telekom" },
-  { "id": "energi-ravaror", "name": "Energi & råvaror" },
-  { "id": "konsument", "name": "Konsument & handel" }
+  { "id": "makro", "name": "Makro & räntor", "kpis": [],
+    "kpi_note": "Inga bolagsrapporter. Styrräntan visas som nyckeltal; KPIF från SCB senare." },
+  { "id": "banker-finans", "name": "Banker & finans", "kpis": [
+    { "id": "rantenetto", "name": "Räntenetto", "kind": "belopp" },
+    { "id": "kreditforluster", "name": "Kreditförluster", "kind": "belopp" }
+  ] },
+  { "id": "fastigheter", "name": "Fastigheter", "kpis": [
+    { "id": "forvaltningsresultat-per-aktie", "name": "Förvaltningsresultat per aktie", "kind": "per_aktie" },
+    { "id": "belaningsgrad", "name": "Belåningsgrad", "kind": "procent" }
+  ] },
+  { "id": "industri", "name": "Industri", "kpis": [
+    { "id": "orderingang", "name": "Orderingång (organisk förändring)", "kind": "belopp" },
+    { "id": "rorelsemarginal", "name": "Rörelsemarginal", "kind": "procent" }
+  ] },
+  { "id": "halsovard", "name": "Hälsovård", "kpis": [
+    { "id": "organisk-tillvaxt", "name": "Organisk försäljningstillväxt", "kind": "procent" },
+    { "id": "kassa", "name": "Kassa och kassaförbrukning (forskningsbolag)", "kind": "belopp" }
+  ] },
+  { "id": "teknik", "name": "Teknik", "kpis": [
+    { "id": "organisk-tillvaxt", "name": "Organisk tillväxt", "kind": "procent" },
+    { "id": "ebita-marginal", "name": "Rörelsemarginal (EBITA)", "kind": "procent" }
+  ] },
+  { "id": "telekom", "name": "Telekom", "kpis": [
+    { "id": "tjansteintakter", "name": "Tjänsteintäkter (organisk tillväxt)", "kind": "belopp" },
+    { "id": "ebitda", "name": "EBITDA", "kind": "belopp" }
+  ] },
+  { "id": "energi-ravaror", "name": "Energi & råvaror", "kpis": [
+    { "id": "produktionsvolym", "name": "Produktionsvolym", "kind": "volym" },
+    { "id": "realiserat-pris", "name": "Realiserat pris", "kind": "pris" }
+  ] },
+  { "id": "konsument", "name": "Konsument & handel", "kpis": [
+    { "id": "jamforbar-forsaljning", "name": "Jämförbar försäljning", "kind": "procent" },
+    { "id": "bruttomarginal", "name": "Bruttomarginal", "kind": "procent" }
+  ] }
 ]

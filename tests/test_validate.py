@@ -730,3 +730,30 @@ def test_mockfil_utanfor_mockmappen_underkanns(week, tmp_path, capsys):
     path.write_text(json.dumps(week), encoding="utf-8")
     assert validate.main([str(path)]) == 1
     assert "får inte vara mock" in capsys.readouterr().out
+
+
+def test_nyckeltal_per_sektor():
+    from validate import KPI_KINDS, load_sector_ids, load_sector_kpis
+
+    kpis = load_sector_kpis()
+    assert set(kpis) == load_sector_ids()
+    assert kpis["makro"] == []
+    for sector, items in kpis.items():
+        if sector != "makro":
+            assert len(items) == 2, sector
+            assert all(k["kind"] in KPI_KINDS for k in items)
+    assert kpis["fastigheter"][0]["id"] == "forvaltningsresultat-per-aktie"
+
+
+def test_ogiltigt_nyckeltal_underkanns(tmp_path):
+    import json as _json
+
+    import pytest
+
+    from validate import load_sector_kpis
+
+    p = tmp_path / "sectors.json"
+    p.write_text(_json.dumps([{"id": "x", "name": "X", "kpis": [{"id": "a", "name": "A", "kind": "okänd"}]}]),
+                 encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_sector_kpis(p)

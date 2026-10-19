@@ -274,6 +274,28 @@ def load_sector_ids(path: Path = DATA_DIR / "sectors.json") -> set[str]:
     return {s["id"] for s in json.loads(path.read_text(encoding="utf-8"))}
 
 
+KPI_KINDS = {"belopp", "procent", "per_aktie", "volym", "pris"}
+
+
+def load_sector_kpis(path: Path = DATA_DIR / "sectors.json") -> dict[str, list[dict]]:
+    """Nyckeltalen att bevaka per sektor ({sektor: [{id, name, kind}]}), i prioritetsordning.
+
+    Används av /rapportutfall och valideringen av rapportutfall. Kastar ValueError om ett
+    nyckeltal saknar id/namn, har okänd typ eller förekommer två gånger i samma sektor.
+    """
+    out: dict[str, list[dict]] = {}
+    for s in json.loads(path.read_text(encoding="utf-8")):
+        kpis = s.get("kpis", [])
+        ids = [k.get("id") for k in kpis]
+        if len(set(ids)) != len(ids):
+            raise ValueError(f"sectors.json: dubblett bland nyckeltalen i {s['id']}")
+        for k in kpis:
+            if not k.get("id") or not k.get("name") or k.get("kind") not in KPI_KINDS:
+                raise ValueError(f"sectors.json: ogiltigt nyckeltal i {s['id']}: {k}")
+        out[s["id"]] = kpis
+    return out
+
+
 def _schema_validator(name: str) -> Draft202012Validator:
     schema = json.loads((SCHEMA_DIR / name).read_text(encoding="utf-8"))
     return Draft202012Validator(schema, format_checker=FormatChecker())
