@@ -1,6 +1,34 @@
 {
-  "description": "Verifierade bolagshändelser (nyemission, avknoppning, sammanläggning …) som förklarar en enskild kursdag över ±40 % i Yahoos serie. En post gäller bara om den stora kursrörelsen ligger exakt på ex_date i kursserien; då multipliceras kurserna före ex_date med factor. Saknas en verifierad post visas varken kurs i år eller P/E, bara 'kontrollera bolagshändelse'. Poster läggs bara in efter kontroll mot bolagets eget pressmeddelande (source_url) och kursserien.",
-  "actions": [],
+  "description": "Verifierade förklaringar till en enskild kursdag över ±40 % i Yahoos serie. En post gäller bara om den stora kursrörelsen ligger exakt på ex_date (kursdagen) i serien; då multipliceras kurserna före ex_date med factor. factor 1.0 = verklig kursrörelse (t.ex. efter en rapport) som inte ska justeras men inte heller flaggas. Saknas en verifierad post visas varken kurs i år eller P/E, bara 'kontrollera bolagshändelse'. Poster läggs bara in efter kontroll mot bolagets eget pressmeddelande och kursserien.",
+  "actions": [
+    {
+      "ticker": "CYNCA",
+      "ex_date": "2026-09-14",
+      "kind": "extrautdelning",
+      "factor": 0.187726,
+      "source_url": "https://www.inderes.se/releases/kallelse-till-extra-bolagsstamma-i-cynca-nordic-ab-publ",
+      "note": "Cyncas kallelse (11 aug): utdelning 13,50 kr per aktie, avstämningsdag tisdag 15 sep 2026, sammanläggning 10:1; beslutat på stämman 11 sep. Första dag utan rätt = måndag 14 sep, samma dag som fallet i Yahoos serie (166,20 -> 35,25 kr) och Yahoos egen utdelningspost (135 kr = 13,50 x 10 efter sammanläggningen). Faktor = (166,20 - 135) / 166,20.",
+      "verified": "2026-10-19"
+    },
+    {
+      "ticker": "NELLY",
+      "ex_date": "2026-04-28",
+      "kind": "verklig kursrörelse",
+      "factor": 1.0,
+      "source_url": "https://mfn.se/a/nelly-group/nelly-group-delarsrapport-forsta-kvartalet-2026",
+      "note": "Delårsrapport Q1 2026 publicerad 2026-04-28 08:00; kursen föll −41,0 % samma dag. Ingen bolagshändelse – kursrörelsen är verklig och justeras inte.",
+      "verified": "2026-10-19"
+    },
+    {
+      "ticker": "NETI B",
+      "ex_date": "2026-07-07",
+      "kind": "verklig kursrörelse",
+      "factor": 1.0,
+      "source_url": "https://mfn.se/a/net-insight/net-insight-ab-publ-resultatuppdatering-avseende-andra-kvartalet-2026",
+      "note": "Resultatuppdatering Q2 2026 (vinstvarning) publicerad 2026-07-06 19:10, efter stängning; kursen föll −41,9 % nästa handelsdag. Ingen bolagshändelse – kursrörelsen är verklig och justeras inte.",
+      "verified": "2026-10-19"
+    }
+  ],
   "investigated": [
     {
       "ticker": "ELUX B",
@@ -18,6 +46,24 @@
       "source_url": "https://www.inderes.se/releases/forsta-handelsdagen-i-volati-utan-ratt-till-utdelning-av-aktier-i-salix-group",
       "yahoo_big_move": "2026-06-08: 84,90 -> 32,07 kr (-62,2 %); 10 juni: 32,90 -> 36,45 kr (+10,8 %)",
       "conclusion": "Ej verifierad: rörelsen i Yahoos serie ligger inte på ex-dagen. Ingen justering.",
+      "checked": "2026-10-19"
+    },
+    {
+      "ticker": "INTRUM",
+      "event": "Företrädesemission om 7,5 mdr kr (1 teckningsrätt per aktie, 18 nya aktier per rätt, 2,45 kr), beslutad på extra stämma 9 juni; avstämningsdag 11 juni enligt rapportering",
+      "ex_date_per_company": "2026-06-10 (avstämningsdag 11 juni; bolagets villkors-PDF gick inte att läsa)",
+      "source_url": "https://storage.mfn.se/9faa63c4-3e71-4c5c-b410-bb3090fd1021/intrum-offentliggor-villkoren-for-den-fullt-garanterade-kapitalanskaffningen-om-7-5-miljarder-kronor.pdf",
+      "yahoo_big_move": "2026-06-01: 20,16 -> 3,85 kr (-80,9 %), åtta dagar före stämman; 2026-06-10: 3,15 -> 4,69 kr (+48,9 %)",
+      "conclusion": "Ej verifierad: fallet ligger före stämmans beslut och kan inte vara ex-dagen, och på ex-dagen steg kursen. Ingen justering.",
+      "checked": "2026-10-19"
+    },
+    {
+      "ticker": "MORROW",
+      "event": "Omnotering från Oslo Børs till Nasdaq Stockholm genom gränsöverskridande fusion (aktier 1:1), första handelsdag 9 januari 2026",
+      "ex_date_per_company": "2026-01-09 (första handelsdag i Stockholm)",
+      "source_url": "https://storage.mfn.se/6029b78a-c0fd-4342-98f0-4e431ecdfb4e/morrow-bank-ab-forsta-handelsdagen-pa-nasdaq-stockholm-9-januari-2026.pdf",
+      "yahoo_big_move": "2026-01-09: 5,48 -> 14,40 kr (+162,8 %); 5,48 kr före dess har noll omsättning",
+      "conclusion": "Händelsen är verifierad, men det finns ingen faktor att justera med: kurserna före 9 januari är inga handelskurser i Stockholm. Kurs i år kan inte räknas från årsskiftet. Ingen justering.",
       "checked": "2026-10-19"
     }
   ]

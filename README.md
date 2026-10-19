@@ -249,11 +249,19 @@ Underlaget:
 `data/corporate_actions.json`. En post förklarar rörelsen bara om den ligger exakt på bolagets ex-dag; då justeras
 kurserna före med faktorn. Tills dess visas varken kurs i år eller P/E, bara "kontrollera bolagshändelse".
 
-Utredda fall finns under `investigated`:
+En post med faktor 1,0 betyder att rörelsen är verklig och verifierad, till exempel efter en rapport. Den justeras inte
+men flaggas inte heller.
+
+**Verifierade** (`actions`):
+- **Cyncly:** extrautdelning 13,50 kr per aktie, första dag utan rätt 14 september. Justeras.
+- **Nelly:** Q1-rapporten 28 april. Verklig rörelse.
+- **Net Insight:** vinstvarning 6 juli kl. 19:10. Verklig rörelse.
+
+**Ej verifierade** (`investigated`):
 - **Electrolux:** företrädesemission, ex-dag 28 maj, men Yahoos fall ligger 19 maj.
 - **Volati:** avknoppning av Salix, ex-dag 10 juni, men Yahoos fall ligger 8 juni.
-
-I båda fallen stämmer datumen inte med bolagens pressmeddelanden, så ingen justering görs.
+- **Intrum:** företrädesemission. Fallet ligger 1 juni, före stämmans beslut.
+- **Morrow Bank:** omnotering från Oslo 9 januari. Det finns inga handelskurser i Stockholm före den dagen.
 
 Veckokörningen kör `valuation.py` före `signals.py`, eftersom signalen "P/E +30 % i år" bygger på den.
 
