@@ -60,14 +60,18 @@ export function expectedChange(e: Estimate): number | null {
 const signedPct = (v: number) =>
   `${new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0, signDisplay: "exceptZero" }).format(v)} %`;
 
+/** Över så stor förändring (±procent) visas fjolårets värde i stället för en svårläst procentsats. */
+export const MAX_SHOWN_PCT = 200;
+
 /**
  * "2,37 kr (+25 % mot fjol, 4 analytiker)". Går förändringen inte att uttrycka i procent
- * (tecknet byts, fjolåret är noll) visas fjolårets värde: "0,40 kr (i fjol −0,20 kr, 2 analytiker)".
+ * (tecknet byts, fjolåret är noll) eller är den större än ±MAX_SHOWN_PCT % visas fjolårets
+ * värde: "0,40 kr (i fjol −0,20 kr, 2 analytiker)".
  */
 export function estimateText(e: Estimate, format: (v: number, c: string | null) => string): string {
   const parts = [];
   const change = expectedChange(e);
-  if (change !== null) parts.push(`${signedPct(change)} mot fjol`);
+  if (change !== null && Math.abs(change) <= MAX_SHOWN_PCT) parts.push(`${signedPct(change)} mot fjol`);
   else if (e.year_ago !== null) parts.push(`i fjol ${format(e.year_ago, e.currency)}`);
   if (e.analysts !== null) parts.push(`${e.analysts} analytiker`);
   return parts.length ? `${format(e.avg, e.currency)} (${parts.join(", ")})` : format(e.avg, e.currency);
