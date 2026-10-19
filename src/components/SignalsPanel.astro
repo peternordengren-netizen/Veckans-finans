@@ -47,6 +47,10 @@ const v = (x: number | null) => (x === null ? "" : String(x));
       </li>
       <li><strong>Avviker mot index:</strong> nyhetens ton och kursen mot index går åt olika håll.</li>
       <li>
+        <strong>Stor rörelse mot index:</strong> veckans kurs skiljer sig mer än ±{n(t.big_move_pp)} % från index, oavsett
+        om det finns någon nyhet.
+      </li>
+      <li>
         <strong>Hög omsättning:</strong> veckans snittomsättning är minst {n(t.volume_ratio)} gånger snittet för de 20
         handelsdagarna före.
       </li>
@@ -298,6 +302,7 @@ const v = (x: number | null) => (x === null ? "" : String(x));
     color: var(--direct-fg);
   }
   .chip.avviker,
+  .chip.stor-rörelse,
   .chip.blankning {
     background: var(--banner-bg);
     color: var(--banner-fg);

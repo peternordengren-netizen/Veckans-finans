@@ -189,6 +189,7 @@ säkerhetskopierar den med `backup_week.py`. Om du kör `/sammanfatta-veckan` ma
 | Insyn | insynstransaktioner över 100 000 kr under veckan (från `registers.py`) |
 | Blankning | ändrad position över 0,5 %, eller sammanlagd blankning ändrad minst 0,5 procentenheter |
 | Avviker mot index | nyhetens ton och kursen mot index går åt olika håll (samma regel som på aktiekorten) |
+| Stor rörelse mot index | veckans kurs skiljer sig mer än ±5 % från index (bara aktier i kronor) |
 | Hög omsättning | veckans snittomsättning minst 2 gånger snittet för de 20 handelsdagarna före |
 | Nära 52 v högsta/lägsta | fredagens stängning högst 2 % från 52-veckorshögsta respektive -lägsta |
 

@@ -9,7 +9,8 @@
   "thresholds": {
     "volume_ratio": 2.0,
     "near_52w_pct": 2.0,
-    "short_aggregate_pp": 0.5
+    "short_aggregate_pp": 0.5,
+    "big_move_pp": 5.0
   },
   "index": {
     "ticker": "^OMXSPI",

@@ -84,9 +84,11 @@ def test_varden_och_signaler():
     alfa = c["ALFA"]
     assert (alfa["change_pct"], alfa["relative_pp"], alfa["volume_ratio"]) == (10.0, 9.0, 3.0)
     assert alfa["from_high_pct"] == 0.0 and alfa["tone"] == "negativ" and alfa["news"] == 1
-    # Negativ ton men bättre än index -> avviker; omsättning; 52v-högsta.
-    assert alfa["signals"] == ["avviker", "omsättning", "52v-högsta"]
+    # Negativ ton men bättre än index -> avviker; +9 mot index -> stor rörelse; omsättning; 52v-högsta.
+    assert alfa["signals"] == ["avviker", "stor-rörelse", "omsättning", "52v-högsta"]
     beta = c["BETA"]
+    # −6 mot index: stor rörelse även nedåt.
+    assert beta["relative_pp"] == -6.0 and "stor-rörelse" in beta["signals"]
     assert "insyn" in beta["signals"] and "52v-lägsta" in beta["signals"]
     assert "blankning" not in beta["signals"]  # aggregatet ändrat 0,2 < 0,5
     gama = c["GAMA"]
@@ -100,8 +102,19 @@ def test_varden_och_signaler():
 def test_utan_vecko_och_analysfil():
     data = build(WEEK, INSTRUMENTS, None, None, fake_fetch, date(2026, 10, 19), NOW)
     c = by_ticker(data)
-    assert c["ALFA"]["tone"] is None and c["ALFA"]["signals"] == ["omsättning", "52v-högsta"]
+    assert c["ALFA"]["tone"] is None and c["ALFA"]["signals"] == ["stor-rörelse", "omsättning", "52v-högsta"]
     assert validate_signals(data, WEEK, INSTRUMENTS).errors == []
+
+
+def test_stor_rorelse_galler_bara_over_gransen():
+    from signals import signals_for
+
+    base = {"insider_net_sek": None, "short_positions_pp": None, "short_aggregate_pp": None, "tone": None,
+            "volume_ratio": None, "from_high_pct": None, "from_low_pct": None}
+    assert signals_for({**base, "relative_pp": 5.0}, THRESHOLDS) == []  # exakt 5 räknas inte ("mer än")
+    assert signals_for({**base, "relative_pp": 5.01}, THRESHOLDS) == ["stor-rörelse"]
+    assert signals_for({**base, "relative_pp": -5.2}, THRESHOLDS) == ["stor-rörelse"]
+    assert signals_for({**base, "relative_pp": None}, THRESHOLDS) == []
 
 
 def test_sammanvagd_ton():

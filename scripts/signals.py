@@ -13,6 +13,8 @@ Signaler (trösklarna i THRESHOLDS, sparas i filen så att valideringen kan räk
   short_aggregate_pp procentenheter
 - "avviker": nyhetens ton och kursen mot index går åt olika håll (samma regel som
   sidans "avviker mot index", src/lib/tone.ts)
+- "stor-rörelse": veckans kurs skiljer sig mer än big_move_pp procentenheter från index,
+  åt något håll (bara aktier i SEK, där jämförelsen mot index finns)
 - "omsättning": veckans snittomsättning (antal aktier per dag) minst volume_ratio gånger
   snittet för de VOLUME_BASE_DAYS handelsdagarna före veckan. Veckosnittet i stället för
   veckans största dag, så att en enstaka toppdag (t.ex. derivatförfall) inte räcker –
@@ -47,7 +49,7 @@ from prices import INDEX_NAME, INDEX_TICKER  # noqa: E402
 from validate import DATA_DIR, Instrument, iso_week_period, load_instruments, validate_signals  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
-THRESHOLDS = {"volume_ratio": 2.0, "near_52w_pct": 2.0, "short_aggregate_pp": 0.5}
+THRESHOLDS = {"volume_ratio": 2.0, "near_52w_pct": 2.0, "short_aggregate_pp": 0.5, "big_move_pp": 5.0}
 VOLUME_BASE_DAYS = 20
 HISTORY_DAYS = 400  # 52 veckor plus marginal för omsättningssnittet före veckan
 SEK_SUFFIX = ".ST"
@@ -160,6 +162,8 @@ def signals_for(c: dict, thresholds: dict) -> list[str]:
         out.append("blankning")
     if diverges(c["tone"], c["relative_pp"]):
         out.append("avviker")
+    if c["relative_pp"] is not None and abs(c["relative_pp"]) > thresholds["big_move_pp"]:
+        out.append("stor-rörelse")
     if c["volume_ratio"] is not None and c["volume_ratio"] >= thresholds["volume_ratio"]:
         out.append("omsättning")
     if c["from_high_pct"] is not None and c["from_high_pct"] >= -thresholds["near_52w_pct"]:
@@ -268,7 +272,7 @@ def main(argv: list[str] | None = None, fetch: BarFetcher | None = None, now: da
     tmp.replace(out)
     flagged = [c for c in data["companies"] if c["signals"]]
     counts = {s: sum(s in c["signals"] for c in data["companies"])
-              for s in ("insyn", "blankning", "avviker", "omsättning", "52v-högsta", "52v-lägsta")}
+              for s in ("insyn", "blankning", "avviker", "stor-rörelse", "omsättning", "52v-högsta", "52v-lägsta")}
     print(f"Signaler {args.week}: {with_prices} bolag med kurs, {len(flagged)} med signal "
           f"({', '.join(f'{k} {v}' for k, v in counts.items())}), {len(data['errors'])} utan kurs -> {out}")
     return 0

@@ -160,7 +160,7 @@ export interface WeekView {
 
 export interface SignalsView {
   generatedAt: string;
-  thresholds: { volume_ratio: number; near_52w_pct: number; short_aggregate_pp: number };
+  thresholds: { volume_ratio: number; near_52w_pct: number; short_aggregate_pp: number; big_move_pp: number };
   rows: SignalRow[];
 }
 

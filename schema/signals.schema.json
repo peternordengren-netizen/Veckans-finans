@@ -25,11 +25,12 @@
     "thresholds": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["volume_ratio", "near_52w_pct", "short_aggregate_pp"],
+      "required": ["volume_ratio", "near_52w_pct", "short_aggregate_pp", "big_move_pp"],
       "properties": {
         "volume_ratio": { "type": "number", "exclusiveMinimum": 0 },
         "near_52w_pct": { "type": "number", "minimum": 0 },
-        "short_aggregate_pp": { "type": "number", "minimum": 0 }
+        "short_aggregate_pp": { "type": "number", "minimum": 0 },
+        "big_move_pp": { "type": "number", "minimum": 0 }
       }
     },
     "index": {
@@ -73,7 +74,7 @@
           "signals": {
             "type": "array",
             "uniqueItems": true,
-            "items": { "enum": ["insyn", "blankning", "avviker", "omsättning", "52v-högsta", "52v-lägsta"] }
+            "items": { "enum": ["insyn", "blankning", "avviker", "stor-rörelse", "omsättning", "52v-högsta", "52v-lägsta"] }
           }
         }
       }
