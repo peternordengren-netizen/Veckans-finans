@@ -306,6 +306,7 @@ def _event(inst: Instrument, kind: str, d: date, status: str, y: date | None, ev
         "ticker": inst.ticker,
         "yahoo_ticker": inst.yahoo_ticker,
         "name": inst.namn,
+        "sector": inst.sektor,
         "status": status,
         "yahoo_date": y.isoformat() if y else None,
         "mfn_date": ev.date.isoformat() if ev else None,

@@ -11,6 +11,8 @@ export interface CalendarEvent {
   kind: "rapport" | "stämma";
   ticker: string;
   name: string;
+  /** Bolagets sektor (saknas i äldre kalenderfiler). */
+  sector?: string | null;
   status: CalendarStatus;
   yahoo_date: string | null;
   mfn_date: string | null;

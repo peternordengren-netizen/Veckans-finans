@@ -176,6 +176,24 @@ sidans vecka. Veckokörningen skapar den efter sammanfattningen.
   och att MFN-länkarna finns i rådatan.
 - Kalendern säkerhetskopieras inte till det privata repot. Den gäller framåt och skapas om varje gång.
 
+### Konsensus (`scripts/consensus.py`)
+
+`consensus.py` sparar Yahoos konsensus för alla bolag i listan i `data/consensus/<datum>.json` (git-ignorerad,
+säkerhetskopieras med `--backup`). Filen innehåller:
+- vinst per aktie och omsättning för innevarande kvartal: snitt, lägsta, högsta, antal analytiker, samma kvartal förra
+  året och valuta
+- nästa rapportdatum, senaste kvartal och redovisningsvaluta
+
+Morgonkörningen sparar en ny fil varje handelsdag. Det behövs eftersom Yahoos prognos för innevarande kvartal byter
+till nästa kvartal när bolaget rapporterat, så förväntan måste sparas före rapporten. "Kommande vecka" visar den senaste
+filen med varningar:
+- vid färre än 3 analytiker för vinst per aktie
+- när bolaget redovisar i annan valuta än kronor
+- för fastighetsbolag, där vinst per aktie styrs av värdeförändringar
+
+Sektorernas nyckeltal att bevaka finns under `kpis` i `data/sectors.json` och läses med
+`validate.load_sector_kpis()`.
+
 ### Signaler (`scripts/signals.py`)
 
 `signals.py <vecka>` skriver `data/signals/<vecka>.json` (git-ignorerad) för alla bolag i `instruments.csv`.

@@ -31,6 +31,7 @@
           "ticker": { "type": "string", "minLength": 1 },
           "yahoo_ticker": { "type": "string", "minLength": 1 },
           "name": { "type": "string", "minLength": 1 },
+          "sector": { "type": ["string", "null"], "description": "Bolagets sektor ur instruments.csv (saknas i äldre filer)." },
           "status": { "enum": ["bekräftat", "avvikelse", "yahoo", "mfn"] },
           "yahoo_date": { "type": ["string", "null"], "format": "date" },
           "mfn_date": { "type": ["string", "null"], "format": "date" },

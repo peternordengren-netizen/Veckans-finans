@@ -107,6 +107,7 @@ import type { Tone } from "./tone";
 export type { Tone } from "./tone";
 import type { CalendarEvent } from "./calendar";
 import type { SignalRow } from "./signals";
+import type { Consensus } from "./consensus";
 import { isoWeek } from "./weekCheck";
 
 export interface Sentiment {
@@ -180,7 +181,9 @@ export function loadSignals(week: string): SignalsView | null {
 export interface CalendarView {
   week: string;
   generatedAt: string;
-  events: CalendarEvent[];
+  /** Datum för konsensusfilen som visas, om någon finns. */
+  consensusDate: string | null;
+  events: (CalendarEvent & { consensus: Consensus | null })[];
 }
 
 /** Veckan efter en veckas söndag ("2026-10-18" -> "2026-W43"). */
@@ -190,13 +193,38 @@ export function weekAfter(sunday: string): string {
   return isoWeek(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
 }
 
+const CONSENSUS_DIR = IS_MOCK ? join(DATA, "mock", "consensus") : join(DATA, "consensus");
+
+/** Senaste konsensusfilen (scripts/consensus.py): datum och konsensus per ticker, eller null. */
+export function loadLatestConsensus(): { date: string; byTicker: Map<string, Consensus> } | null {
+  if (!existsSync(CONSENSUS_DIR)) return null;
+  const files = readdirSync(CONSENSUS_DIR).filter((f) => DATE_RE.test(f.slice(0, -5)) && f.endsWith(".json")).sort();
+  if (files.length === 0) return null;
+  try {
+    const raw = readJson<{ date: string; companies: Consensus[] }>(join(CONSENSUS_DIR, files[files.length - 1]));
+    return { date: raw.date, byTicker: new Map(raw.companies.map((c) => [c.ticker, c])) };
+  } catch (err) {
+    console.warn("[veckans-finans] kunde inte läsa konsensusfilen, visar kalendern utan konsensus:", err);
+    return null;
+  }
+}
+
 /** Kalenderfilen är valfri – saknas den, eller är den trasig, visas ingen flik för den. */
 export function loadCalendar(week: string): CalendarView | null {
   const path = join(CALENDAR_DIR, `${week}.json`);
   if (!existsSync(path)) return null;
   try {
     const raw = readJson<{ week: string; generated_at: string; events: CalendarEvent[] }>(path);
-    return { week: raw.week, generatedAt: raw.generated_at, events: raw.events };
+    const consensus = loadLatestConsensus();
+    return {
+      week: raw.week,
+      generatedAt: raw.generated_at,
+      consensusDate: consensus?.date ?? null,
+      events: raw.events.map((e) => ({
+        ...e,
+        consensus: e.kind === "rapport" ? (consensus?.byTicker.get(e.ticker) ?? null) : null,
+      })),
+    };
   } catch (err) {
     console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan kalender:`, err);
     return null;

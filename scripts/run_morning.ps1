@@ -6,6 +6,7 @@
 # - Finns dagens rapport redan avslutas skriptet direkt, utan att skriva i loggen.
 # - Högst två försök per dag (räknas i loggen), så att ett fel inte ger en ny hämtning
 #   från källorna vid varje upplåsning.
+# - Efter rapporten sparas Yahoos konsensus (scripts/consensus.py --backup).
 # - Logg i logs/morning/<datum>.log, bygget i logs/morning/<datum>-build.log.
 #
 # Manuellt: powershell -NoProfile -File scripts\run_morning.ps1
@@ -43,6 +44,14 @@ Log "Startar morning.py"
 & cmd.exe /c ".venv\Scripts\python.exe scripts\morning.py 2>&1" | ForEach-Object { Log "  $_" }
 $code = $LASTEXITCODE
 Log "morning.py: exit $code"
+
+# Yahoos konsensus sparas varje morgon (och säkerhetskopieras), så att förväntan finns kvar
+# efter att bolaget rapporterat. Fel här stoppar inte bygget.
+if (Test-Path $Report) {
+    & cmd.exe /c ".venv\Scripts\python.exe scripts\consensus.py --backup 2>&1" |
+        Where-Object { $_ -match '^(Konsensus|Säkerhetskopia|Ingen|Konsensusfilen)' } | ForEach-Object { Log "  $_" }
+    Log "consensus.py: exit $LASTEXITCODE"
+}
 
 if (Test-Path $Report) {
     $BuildLog = Join-Path $LogDir "$Today-build.log"
