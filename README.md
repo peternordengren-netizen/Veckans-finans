@@ -199,8 +199,10 @@ görs bara för `.ST`-tickers, som antas vara i kronor.
 
 ### Morgonrapport (`scripts/morning.py`)
 
-`morning.py` skriver `data/morning/<datum>.json` (git-ignorerad) varje handelsdag, utan Claude. Sidan visar den på
-`/morgon/`, med länk från veckosidan. Rapporten innehåller:
+`morning.py` skriver `data/morning/<datum>.json` (git-ignorerad) varje handelsdag, utan Claude. Startsidan visar den
+senaste morgonrapporten överst, med veckan och flikarna under. Om den inte är dagens rapport, till exempel på helgen
+eller före 08:10, står det så under rubriken med datum. Varje dags rapport finns också på `/morgon/` och
+`/morgon/<datum>/`. Rapporten innehåller:
 
 - **Rapporter i dag** ur rapportkalendern. Kalendern för innevarande vecka skrivs om varje morgon.
 - **Pressmeddelanden** för bolag i listan sedan förra handelsdagen kl. 17:30, utan rutinmeddelanden. Bolag som

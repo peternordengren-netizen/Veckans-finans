@@ -8,15 +8,19 @@ import AnalysisPanel from "./AnalysisPanel.astro";
 import CalendarPanel from "./CalendarPanel.astro";
 import SignalsPanel from "./SignalsPanel.astro";
 import CompanyCard from "./CompanyCard.astro";
-import { formatDate, listMorningDates, weekLabel, type WeekView } from "../lib/data";
+import MorningReportView from "./MorningReport.astro";
+import { weekdayDate } from "../lib/calendar";
+import { formatDate, listMorningDates, weekLabel, type MorningReport, type WeekView } from "../lib/data";
 import { shortDate } from "../lib/format";
 import { describePolicyRate, formatRate } from "../lib/policyRate";
 
 interface Props {
   view: WeekView;
   weeks: string[];
+  /** Startsidan: senaste morgonrapporten visas överst, före veckan och flikarna. */
+  morning?: MorningReport | null;
 }
-const { view, weeks } = Astro.props;
+const { view, weeks, morning = null } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const directionLabel = { positiv: "Positiv", negativ: "Negativ", blandad: "Blandad", oklar: "Oklar" };
 
@@ -24,6 +28,9 @@ const pr = view.policyRate;
 // "oförändrad sedan …" om senaste ändringen skedde före veckan, annars "sänkt/höjd från …".
 const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
 const latestMorning = listMorningDates()[0] ?? null;
+const morningTime = morning
+  ? new Date(morning.generated_at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" })
+  : null;
 ---
 
 <Base title={`${weekLabel(view.week)} – Veckans finans`}>
@@ -39,12 +46,32 @@ const latestMorning = listMorningDates()[0] ?? null;
       )
     }
 
-    <header class="page-head">
+    {
+      morning && (
+        <section class="morning-top" aria-labelledby="morgon-rubrik">
+          <div class="wrap">
+            <p class="brand">
+              <a href={`${base}/`}>Veckans finans</a>
+            </p>
+            <h2 id="morgon-rubrik" class="morning-title">
+              Morgonrapport {weekdayDate(morning.date).toLowerCase()}
+              <span class="morning-time">sammanställd kl. {morningTime}</span>
+            </h2>
+            <p class="morning-stale" data-morning-date={morning.date} hidden>
+              Dagens morgonrapport finns inte ännu, så det här är den senaste. På handelsdagar kommer den kl. 08:10.
+            </p>
+            <MorningReportView report={morning} level={3} after={{ href: "#vecka", label: `${weekLabel(view.week)} ↓` }} />
+          </div>
+        </section>
+      )
+    }
+
+    <header class="page-head" id="vecka">
       <div class="wrap">
-        <p class="brand">
-          <a href={`${base}/`}>Veckans finans</a>
+        <p class="brand" hidden={morning !== null}>
+          {!morning && <a href={`${base}/`}>Veckans finans</a>}
           {
-            latestMorning && (
+            latestMorning && !morning && (
               <>
                 <span aria-hidden="true"> · </span>
                 <a class="morning-link" href={`${base}/morgon/`}>Morgonrapport {shortDate(latestMorning)}</a>
@@ -327,6 +354,13 @@ const latestMorning = listMorningDates()[0] ?? null;
     });
   }
 
+  // Startsidan: säg till om morgonrapporten inte är dagens (helg, börsstängt eller före 08:10).
+  const stale = document.querySelector<HTMLElement>("[data-morning-date]");
+  if (stale) {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Stockholm" }).format(new Date());
+    stale.hidden = stale.dataset.morningDate === today;
+  }
+
   document.querySelector<HTMLSelectElement>("[data-week-select]")?.addEventListener("change", (e) => {
     location.href = (e.target as HTMLSelectElement).value;
   });
@@ -343,6 +377,35 @@ const latestMorning = listMorningDates()[0] ?? null;
 
   .page-head {
     padding: 24px 0 16px;
+    scroll-margin-top: 0;
+  }
+  .morning-top {
+    padding: 24px 0 8px;
+    border-bottom: 2px solid var(--border);
+  }
+  .morning-title {
+    margin: 0;
+    font-size: clamp(1.5rem, 4.5vw, 2rem);
+    line-height: 1.2;
+  }
+  .morning-time {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.9375rem;
+    font-weight: normal;
+    color: var(--muted);
+  }
+  .morning-stale {
+    margin: 8px 0 4px;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    background: var(--banner-bg);
+    color: var(--banner-fg);
+    border: 1px solid var(--banner-border);
+    font-size: 0.9375rem;
+  }
+  .morning-stale[hidden] {
+    display: none;
   }
   .brand {
     margin: 0 0 4px;
