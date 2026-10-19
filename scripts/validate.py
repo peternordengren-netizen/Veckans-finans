@@ -816,6 +816,30 @@ def validate_signals(data: dict, expected_week: str | None, instruments: dict[st
     return res
 
 
+def validate_consensus(data: dict, instruments: dict[str, Instrument]) -> Result:
+    """Konsensusfilen (scripts/consensus.py): schema, bolagen finns i listan och snittet
+    ligger mellan lägsta och högsta prognos."""
+    res = Result()
+    res.errors += _schema_errors(_schema_validator("consensus.schema.json"), data)
+    if res.errors:
+        return res
+    _check_datetime(data["fetched_at"], "fetched_at", res)
+    seen: set[str] = set()
+    for c in data["companies"]:
+        where = f"{c['name']} ({c['ticker']})"
+        inst = instruments.get(c["ticker"])
+        if inst is None or inst.namn != c["name"] or inst.yahoo_ticker != c["yahoo_ticker"]:
+            res.errors.append(f"{where}: finns inte i instruments.csv med samma namn och yahoo_ticker")
+        if c["ticker"] in seen:
+            res.errors.append(f"{where}: dubblett")
+        seen.add(c["ticker"])
+        for key in ("eps", "revenue"):
+            e = c[key]
+            if e and e["low"] is not None and e["high"] is not None and not e["low"] - 1e-9 <= e["avg"] <= e["high"] + 1e-9:
+                res.errors.append(f"{where}: {key} snitt {e['avg']} ligger utanför {e['low']}–{e['high']}")
+    return res
+
+
 def validate_morning(data: dict, instruments: dict[str, Instrument]) -> Result:
     """Morgonrapporten (scripts/morning.py): schema, handelsdag, bolagen finns i listan,
     nyheterna ligger i tidsfönstret och kurssignalerna stämmer med värdena."""
@@ -872,6 +896,7 @@ def _default_targets() -> list[Path]:
     return sorted(
         [*DATA_DIR.glob("weeks/*.json"), *DATA_DIR.glob("prices/*.json"), *DATA_DIR.glob("analysis/*.json"),
          *DATA_DIR.glob("calendar/*.json"), *DATA_DIR.glob("signals/*.json"), *DATA_DIR.glob("morning/*.json"),
+         *DATA_DIR.glob("consensus/*.json"),
          *DATA_DIR.glob("mock/weeks/*.json"), *DATA_DIR.glob("mock/prices/*.json"),
          *DATA_DIR.glob("mock/analysis/*.json"), *DATA_DIR.glob("mock/calendar/*.json"),
          *DATA_DIR.glob("mock/signals/*.json"), *DATA_DIR.glob("mock/morning/*.json")]
@@ -891,6 +916,8 @@ def main(argv: list[str]) -> int:
             res = validate_prices(data, path.stem)
         elif path.parent.name == "analysis":
             res = validate_analysis(data, path.stem)
+        elif path.parent.name == "consensus":
+            res = validate_consensus(data, mock_instruments if in_mock_dir else instruments)
         elif path.parent.name == "morning":
             res = validate_morning(data, mock_instruments if in_mock_dir else instruments)
         elif path.parent.name == "signals":

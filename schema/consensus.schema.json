@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "consensus.schema.json",
+  "title": "Yahoos konsensus för en dag (scripts/consensus.py)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "date", "fetched_at", "source", "companies", "errors"],
+  "$defs": {
+    "num": { "type": ["number", "null"] },
+    "estimate": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["avg", "low", "high", "analysts", "year_ago", "currency"],
+      "properties": {
+        "avg": { "type": "number" },
+        "low": { "$ref": "#/$defs/num" },
+        "high": { "$ref": "#/$defs/num" },
+        "analysts": { "type": ["integer", "null"], "minimum": 0 },
+        "year_ago": { "$ref": "#/$defs/num" },
+        "currency": { "type": ["string", "null"], "pattern": "^[A-Z]{3}$" }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "date": { "type": "string", "format": "date" },
+    "fetched_at": { "type": "string" },
+    "source": { "type": "string" },
+    "mock": { "const": true },
+    "companies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ticker", "name", "yahoo_ticker", "eps", "revenue", "next_report_date", "most_recent_quarter",
+          "financial_currency", "analyst_opinions"],
+        "properties": {
+          "ticker": { "type": "string" },
+          "name": { "type": "string" },
+          "yahoo_ticker": { "type": "string" },
+          "eps": { "$ref": "#/$defs/estimate" },
+          "revenue": { "$ref": "#/$defs/estimate" },
+          "next_report_date": { "type": ["string", "null"], "format": "date" },
+          "most_recent_quarter": { "type": ["string", "null"], "format": "date" },
+          "financial_currency": { "type": ["string", "null"] },
+          "analyst_opinions": { "type": ["integer", "null"], "minimum": 0 }
+        }
+      }
+    },
+    "errors": { "type": "array", "items": { "type": "string" } }
+  }
+}

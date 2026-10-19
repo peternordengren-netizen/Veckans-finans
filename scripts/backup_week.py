@@ -49,6 +49,18 @@ def backup(week: str, data_dir: Path, raw_dir: Path, validation_ok: bool) -> tup
         return False, f"ogiltig vecka: {week!r}"
     if not (data_dir / "weeks" / f"{week}.json").exists():
         return False, f"data/weeks/{week}.json saknas"
+    files = [(data_dir / kind / f"{week}.json", f"{kind}/{week}.json") for kind in KINDS
+             if (data_dir / kind / f"{week}.json").exists()]
+    label = "validering OK" if validation_ok else "validering EJ GODKÄND"
+    return commit_files(raw_dir, files, f"Säkerhetskopia {week} ({label})", label)
+
+
+def commit_files(raw_dir: Path, files: list[tuple[Path, str]], message: str, label: str = "") -> tuple[bool, str]:
+    """Kopierar (källa, sökväg i data/raw/) till det privata repot, committar bara de filerna och pushar.
+
+    Stannar om data/raw/ har egna oincheckade ändringar. Används av backup() och av andra
+    skript som säkerhetskopierar egna filer (t.ex. scripts/consensus.py).
+    """
     status = git(raw_dir, "status", "--porcelain")
     if status.returncode != 0:
         return False, f"git status misslyckades i {raw_dir}: {status.stderr.strip()}"
@@ -59,22 +71,18 @@ def backup(week: str, data_dir: Path, raw_dir: Path, validation_ok: bool) -> tup
         return False, f"git pull --rebase misslyckades: {pull.stderr.strip()}"
 
     added = []
-    for kind in KINDS:
-        src = data_dir / kind / f"{week}.json"
-        if not src.exists():
-            continue
-        dst = raw_dir / kind / f"{week}.json"
+    for src, rel in files:
+        dst = raw_dir / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dst)
-        added.append(f"{kind}/{week}.json")
+        added.append(rel)
     add = git(raw_dir, "add", "--", *added)
     if add.returncode != 0:
         return False, f"git add misslyckades: {add.stderr.strip()}"
     if git(raw_dir, "diff", "--cached", "--quiet").returncode == 0:
         return True, f"oförändrad sedan förra kopian ({', '.join(added)})"
 
-    label = "validering OK" if validation_ok else "validering EJ GODKÄND"
-    commit = git(raw_dir, "commit", "-q", "-m", f"Säkerhetskopia {week} ({label})")
+    commit = git(raw_dir, "commit", "-q", "-m", message)
     if commit.returncode != 0:
         return False, f"git commit misslyckades: {commit.stderr.strip()}"
     push = git(raw_dir, "push", "-q")
@@ -87,7 +95,8 @@ def backup(week: str, data_dir: Path, raw_dir: Path, validation_ok: bool) -> tup
                 f"push misslyckades (commit finns lokalt i data/raw/): {push.stderr.strip()}"
             )
     head = git(raw_dir, "rev-parse", "--short", "HEAD").stdout.strip()
-    return True, f"pushad till veckans-finans-raw: {head} ({label}; {', '.join(added)})"
+    detail = f"{label}; " if label else ""
+    return True, f"pushad till veckans-finans-raw: {head} ({detail}{', '.join(added)})"
 
 
 def main(argv: list[str]) -> int:
