@@ -265,7 +265,9 @@ men flaggas inte heller.
 - **Morrow Bank:** omnotering från Oslo 9 januari. Det finns inga handelskurser i Stockholm före den dagen.
 
 **Noterade under året** (`listings`, med verifierad första handelsdag) visas som "noterad under året (dag)" i
-stället för "kurs saknas". Det gäller Linjemontage (25 sep) och Tången Industrikapital (12 juni).
+stället för "kurs saknas". Det gäller Linjemontage (25 sep), Tången Industrikapital (12 juni), Silex (7 maj), Public Property Invest (20 maj), Octave
+(25 maj), Stockholm Nordtech (10 juni) och Salix (15 juni). Sampo räknas inte dit, eftersom bolaget handlats som
+depåbevis sedan 2022. Yahoos serie för A-aktien börjar först 31 mars, så det står "kurs saknas".
 
 **Nya försök mot Yahoo:** alla hämtningar från Yahoo görs upp till tre gånger med 2 sekunders paus, via
 `scripts/retry.py`. Det gäller vinsthistorik, konsensus, rapportdatum och kurser. Varje misslyckat försök loggas på

@@ -82,6 +82,14 @@
       "yahoo_dates": [
         "2026-01-09"
       ]
+    },
+    {
+      "ticker": "SAMPO SEK",
+      "event": "A-aktien handlas direkt på Nasdaq Stockholm (SAMPO SEK) från 16 februari 2026 och ersatte depåbevis som handlats i Stockholm sedan 22 november 2022 (sista dag 13 februari)",
+      "source_url": "https://www.sampo.com/media/releases-and-news/2026/trading-in-sampo-a-shares-on-nasdaq-stockholm-has-begun/",
+      "yahoo_big_move": "ingen; Yahoos serie för SAMPO-SEK.ST börjar först 31 mars 2026",
+      "conclusion": "Inte noterad under året (handlades som depåbevis). Ingen kurs vid årets början i Yahoos serie, och serien börjar inte på handelsstarten 16 feb. Ingen ändring: visas som kurs saknas.",
+      "checked": "2026-10-19"
     }
   ],
   "listings": [
@@ -97,6 +105,41 @@
       "first_trading_day": "2026-06-12",
       "source_url": "https://storage.mfn.se/bc573c82-3e1d-4778-b3cd-13fceb358fab/forsta-dag-for-handel-i-tangens-aktier-av-serie-b-pa-nasdaq-stockholm.pdf",
       "note": "Bolagets meddelande: handeln i B-aktien inleds 12 juni 2026 under TANGEN B, ISIN SE0029278985 (citerat via sökning; PDF:en gick inte att läsa direkt). Yahoos serie börjar samma dag.",
+      "verified": "2026-10-19"
+    },
+    {
+      "ticker": "SILEX",
+      "first_trading_day": "2026-05-07",
+      "source_url": "https://storage.mfn.se/92255508-5c8b-4f8b-bc09-dba4992d2b3c/forsta-dag-for-handel-i-silex-stamaktier-pa-nasdaq-stockholm.pdf",
+      "note": "Börsintroduktion; Nasdaq meddelade att handeln i SILEX inleddes på huvudmarknaden 7 maj 2026. Yahoos serie börjar samma dag.",
+      "verified": "2026-10-19"
+    },
+    {
+      "ticker": "PUBLI",
+      "first_trading_day": "2026-05-20",
+      "source_url": "https://mfn.se/a/public-property-invest/ppi-public-property-invest-ab-has-been-approved-for-listing-on-nasdaq-stockholm-and-euronext-oslo-bors",
+      "note": "Notering i Stockholm efter gränsöverskridande fusion (tidigare Public Property Invest ASA på Oslo Børs); Nasdaq meddelade handelsstart 20 maj 2026. Yahoos serie börjar samma dag.",
+      "verified": "2026-10-19"
+    },
+    {
+      "ticker": "OCTV SDB",
+      "first_trading_day": "2026-05-25",
+      "source_url": "https://www.inderes.se/releases/hexagon-octave-intelligence-plc-har-noterats-pa-nasdaq-stockholm",
+      "note": "Avknoppning från Hexagon; Hexagons meddelande 25 maj 2026 09:00 (Octave Intelligence plc har noterats på Nasdaq Stockholm): SDR:erna handlas under OCTV SDB, ISIN SE0028329433. Yahoos serie börjar samma dag.",
+      "verified": "2026-10-19"
+    },
+    {
+      "ticker": "NTECH",
+      "first_trading_day": "2026-06-10",
+      "source_url": "https://mfn.se/a/stockholm-nordtech-group/forsta-dag-for-handel-i-nordtechs-aktier-pa-nasdaq-stockholm",
+      "note": "Börsintroduktion; bolagets och Nasdaqs meddelanden: handel från 10 juni 2026 under NTECH. Yahoos serie börjar samma dag.",
+      "verified": "2026-10-19"
+    },
+    {
+      "ticker": "SALIX",
+      "first_trading_day": "2026-06-15",
+      "source_url": "https://www.placera.se/pressmeddelanden/volati-forsta-handelsdag-for-salix-group-pa-nasdaq-stockholm-20260615",
+      "note": "Avknoppning från Volati; pressmeddelandet Första handelsdag för Salix Group på Nasdaq Stockholm 15 juni 2026, kortnamn SALIX, ISIN SE0028329540. Yahoos serie börjar samma dag.",
       "verified": "2026-10-19"
     }
   ]
