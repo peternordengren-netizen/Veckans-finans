@@ -167,3 +167,23 @@ def test_noterad_under_aret(tmp_path):
     assert any("notering" in e for e in validate_valuation(data, WEEK, INSTRUMENTS, p).errors)
     none = build(WEEK, INSTRUMENTS, fetch_new, lambda t: EPS[t], {}, NOW, actions={}, known={}, listings={})
     assert {x["ticker"]: x for x in none["companies"]}["ZETA"]["status"] == "kurs saknas"
+
+
+def test_kand_handelse_nar_kursen_vid_arets_borjan_saknas(tmp_path):
+    def fetch_late(t, s, e):
+        out = fetch_bars(t, s, e)
+        out["ZETA.ST"] = [b for b in out["ZETA.ST"] if b.day >= date(2026, 3, 31)]  # serien börjar sent
+        return out
+
+    known = {"ZETA": [{"label": "A-aktie sedan 16 feb (tidigare depåbevis)", "yahoo_dates": [], "missing_price": True}]}
+    data = build(WEEK, INSTRUMENTS, fetch_late, lambda t: EPS[t], {}, NOW, actions={}, known=known, listings={})
+    z = {x["ticker"]: x for x in data["companies"]}["ZETA"]
+    assert (z["status"], z["event_label"], z["ytd_pct"]) == (
+        "känd bolagshändelse", "A-aktie sedan 16 feb (tidigare depåbevis)", None)
+    p = tmp_path / "ca.json"
+    p.write_text(json.dumps({"actions": [], "investigated": [
+        {"ticker": "ZETA", "label": "A-aktie sedan 16 feb (tidigare depåbevis)", "missing_price": True}]}),
+        encoding="utf-8")
+    assert validate_valuation(data, WEEK, INSTRUMENTS, p).errors == []
+    p.write_text(json.dumps({"actions": [], "investigated": []}), encoding="utf-8")
+    assert validate_valuation(data, WEEK, INSTRUMENTS, p).errors  # utan posten: "kurs saknas" väntas

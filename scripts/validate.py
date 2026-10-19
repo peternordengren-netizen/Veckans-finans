@@ -859,6 +859,7 @@ def validate_valuation(data: dict, expected_week: str | None, instruments: dict[
     th = data["thresholds"]
     verified: dict[str, set[str]] = {}
     known: dict[str, dict[str, str]] = {}  # ticker -> {yahoo-datum: etikett}
+    missing_known: dict[str, str] = {}  # ticker -> etikett när kursen vid årets början saknas
     if actions_path.exists():
         ca = json.loads(actions_path.read_text(encoding="utf-8"))
         for a in ca.get("actions", []):
@@ -866,6 +867,8 @@ def validate_valuation(data: dict, expected_week: str | None, instruments: dict[
         for e in ca.get("investigated", []):
             if e.get("label"):
                 known.setdefault(e["ticker"], {}).update({d: e["label"] for d in e.get("yahoo_dates", [])})
+                if e.get("missing_price"):
+                    missing_known[e["ticker"]] = e["label"]
         listings = {x["ticker"]: x["first_trading_day"] for x in ca.get("listings", [])}
     else:
         listings = {}
@@ -885,19 +888,27 @@ def validate_valuation(data: dict, expected_week: str | None, instruments: dict[
         st = c["status"]
         has_prices = c["price_start"] is not None and c["price_now"] is not None
         all_known = bool(unexplained) and all(m["date"] in known.get(c["ticker"], {}) for m in unexplained)
-        expected_st = (None if not (unexplained and has_prices) else
-                       "känd bolagshändelse" if all_known else "kontrollera bolagshändelse")
-        if (st in ("kontrollera bolagshändelse", "känd bolagshändelse") or expected_st) and st != expected_st:
-            res.errors.append(f"{w}: status {st!r} stämmer inte med de stora kursrörelserna (väntat {expected_st!r})")
         listed_on = listings.get(c["ticker"])
         listed = (c["price_start"] is None and listed_on is not None
                   and data["year_start"] <= listed_on <= data["as_of"])
         if (st == "noterad under året") != listed:
             res.errors.append(f"{w}: status {st!r} stämmer inte med verifierad notering under året")
+        # Saknad kurs vid årets början som förklaras av en känd händelse (missing_price).
+        missing_explained = (c["price_start"] is None and not listed and c["ticker"] in missing_known)
+        if missing_explained:
+            expected_st = "känd bolagshändelse"
+        else:
+            expected_st = (None if not (unexplained and has_prices) else
+                           "känd bolagshändelse" if all_known else "kontrollera bolagshändelse")
+        if (st in ("kontrollera bolagshändelse", "känd bolagshändelse") or expected_st) and st != expected_st:
+            res.errors.append(f"{w}: status {st!r} stämmer inte med kursrörelserna eller saknad kurs "
+                              f"(väntat {expected_st!r})")
         if listed:
             from valuation import listing_label  # sent, eftersom valuation.py importerar den här modulen
 
             expected_label = listing_label(listed_on)
+        elif missing_explained:
+            expected_label = missing_known[c["ticker"]]
         else:
             expected_label = ("; ".join(dict.fromkeys(known[c["ticker"]][m["date"]] for m in unexplained))
                               if expected_st == "känd bolagshändelse" else None)

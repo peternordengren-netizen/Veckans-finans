@@ -95,3 +95,24 @@ def test_konsensus_registrerar_fel_forst_efter_tre_forsok():
 
     data = build(date(2026, 10, 19), NOW, INSTRUMENTS, always_fails_beta)
     assert calls["n"] == 3 and data["errors"] == ["BETA.ST: ConnectionError"]
+
+
+def test_tomt_svar_gors_om_och_raknas_inte_som_fel():
+    from test_valuation import EPS, INSTRUMENTS, NOW, WEEK, fetch_bars
+    from valuation import NoEpsData, build
+
+    calls = {}
+
+    def eps(t):
+        calls[t] = calls.get(t, 0) + 1
+        if t == "ALFA.ST" and calls[t] == 1:
+            raise NoEpsData(t)  # tillfälligt tomt svar
+        if t == "ZETA.ST":
+            raise NoEpsData(t)  # saknas varje gång
+        return EPS[t]
+
+    data = build(WEEK, INSTRUMENTS, fetch_bars, eps, {}, NOW, actions={}, known={}, listings={})
+    c = {x["ticker"]: x for x in data["companies"]}
+    assert calls["ALFA.ST"] == 2 and c["ALFA"]["status"] == "ok"
+    assert calls["ZETA.ST"] == 3 and c["ZETA"]["status"] == "otillräcklig vinsthistorik"
+    assert data["errors"] == []

@@ -1,5 +1,5 @@
 {
-  "description": "Verifierade förklaringar till en enskild kursdag över ±40 % i Yahoos serie. En post gäller bara om den stora kursrörelsen ligger exakt på ex_date (kursdagen) i serien; då multipliceras kurserna före ex_date med factor. factor 1.0 = verklig kursrörelse (t.ex. efter en rapport) som inte ska justeras men inte heller flaggas. Saknas en verifierad post visas varken kurs i år eller P/E, bara 'kontrollera bolagshändelse'. Poster läggs bara in efter kontroll mot bolagets eget pressmeddelande och kursserien. Under investigated står händelser som är kända men inte går att justera; har en post label och yahoo_dates visas etiketten i stället för kurs i år och P/E (status känd bolagshändelse). Under listings står bolag som noterats under året (verifierad första handelsdag): de visas som noterad under året i stället för kurs saknas.",
+  "description": "Verifierade förklaringar till en enskild kursdag över ±40 % i Yahoos serie. En post gäller bara om den stora kursrörelsen ligger exakt på ex_date (kursdagen) i serien; då multipliceras kurserna före ex_date med factor. factor 1.0 = verklig kursrörelse (t.ex. efter en rapport) som inte ska justeras men inte heller flaggas. Saknas en verifierad post visas varken kurs i år eller P/E, bara 'kontrollera bolagshändelse'. Poster läggs bara in efter kontroll mot bolagets eget pressmeddelande och kursserien. Under investigated står händelser som är kända men inte går att justera; har en post label och yahoo_dates visas etiketten i stället för kurs i år och P/E (status känd bolagshändelse). Under listings står bolag som noterats under året (verifierad första handelsdag): de visas som noterad under året i stället för kurs saknas. En investigated-post med label och missing_price: true gäller när kurs vid årets början saknas.",
   "actions": [
     {
       "ticker": "CYNCA",
@@ -88,8 +88,10 @@
       "event": "A-aktien handlas direkt på Nasdaq Stockholm (SAMPO SEK) från 16 februari 2026 och ersatte depåbevis som handlats i Stockholm sedan 22 november 2022 (sista dag 13 februari)",
       "source_url": "https://www.sampo.com/media/releases-and-news/2026/trading-in-sampo-a-shares-on-nasdaq-stockholm-has-begun/",
       "yahoo_big_move": "ingen; Yahoos serie för SAMPO-SEK.ST börjar först 31 mars 2026",
-      "conclusion": "Inte noterad under året (handlades som depåbevis). Ingen kurs vid årets början i Yahoos serie, och serien börjar inte på handelsstarten 16 feb. Ingen ändring: visas som kurs saknas.",
-      "checked": "2026-10-19"
+      "conclusion": "Inte noterad under året (handlades som depåbevis). Yahoos serie börjar först 31 mars, så kurs i år kan inte räknas. Visas som känd bolagshändelse med etikett.",
+      "checked": "2026-10-19",
+      "label": "A-aktie sedan 16 feb (tidigare depåbevis)",
+      "missing_price": true
     }
   ],
   "listings": [

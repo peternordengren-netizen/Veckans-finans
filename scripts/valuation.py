@@ -16,7 +16,8 @@ Status per bolag (P/E visas bara vid "ok"):
   en verifierad post i data/corporate_actions.json – då visas varken kurs i år eller P/E
 - "känd bolagshändelse": som ovan, men dagen är utredd och händelsen känd fast den inte går att
   justera (investigated med label i corporate_actions.json); etiketten visas, t.ex.
-  "noterad i Stockholm 9 jan", och varken kurs i år eller P/E
+  "noterad i Stockholm 9 jan", och varken kurs i år eller P/E. Med missing_price gäller den
+  också när kursen vid årets början saknas, t.ex. "A-aktie sedan 16 feb (tidigare depåbevis)"
 - "noterad under året": ingen kurs vid årets början, och första handelsdagen i år är verifierad
   (listings i corporate_actions.json); etiketten visar dagen, t.ex. "noterad under året (12 jun)"
 - "fastighetsbolag" (sektor fastigheter): vinsten styrs av värdeförändringar
@@ -68,13 +69,18 @@ THRESHOLDS = {
 EpsFetcher = Callable[[str], list[tuple[date, float]]]
 
 
+class NoEpsData(Exception):
+    """Yahoo svarade utan vinsthistorik. Kan vara tillfälligt och görs därför om; ger alla
+    försök samma svar behandlas bolaget som utan historik (inget fel)."""
+
+
 def yahoo_eps(yahoo_ticker: str) -> list[tuple[date, float]]:
     """(rapportdag, rapporterad vinst per aktie) ur yfinance, nyast först."""
     import yfinance as yf
 
     df = yf.Ticker(yahoo_ticker).get_earnings_dates(limit=16)
     if df is None or df.empty:
-        return []
+        raise NoEpsData(yahoo_ticker)
     out = [(idx.date(), float(v)) for idx, v in df["Reported EPS"].items() if v == v]
     return sorted(out, reverse=True)
 
@@ -122,8 +128,9 @@ def load_known(path: Path = CORPORATE_ACTIONS) -> dict[str, list[dict]]:
         return {}
     out: dict[str, list[dict]] = {}
     for e in json.loads(path.read_text(encoding="utf-8")).get("investigated", []):
-        if e.get("label") and e.get("yahoo_dates"):
-            out.setdefault(e["ticker"], []).append({"label": e["label"], "yahoo_dates": e["yahoo_dates"]})
+        if e.get("label") and (e.get("yahoo_dates") or e.get("missing_price")):
+            out.setdefault(e["ticker"], []).append({"label": e["label"], "yahoo_dates": e.get("yahoo_dates", []),
+                                                    "missing_price": bool(e.get("missing_price"))})
     return out
 
 
@@ -185,9 +192,14 @@ def company(inst: Instrument, bars: list[Bar], eps: list[tuple[date, float]], ac
         "status": "ok", "event_label": None,
     }
     if p0 is None or p1 is None:
+        missing_label = next((k["label"] for k in (known or []) if k.get("missing_price")), None)
         if p0 is None and listed_on and year_start.isoformat() <= listed_on <= asof.isoformat():
             c["status"] = "noterad under året"
             c["event_label"] = listing_label(listed_on)
+        elif p0 is None and missing_label:
+            # Känd händelse som förklarar att kursen vid årets början saknas (t.ex. byte från depåbevis).
+            c["status"] = "känd bolagshändelse"
+            c["event_label"] = missing_label
         else:
             c["status"] = "kurs saknas"
         return c
@@ -246,6 +258,8 @@ def build(week: str, instruments: dict[str, Instrument], fetch_bars: BarFetcher,
     for inst in instruments.values():
         try:
             eps = with_retries(lambda: fetch_eps(inst.yahoo_ticker), f"{inst.yahoo_ticker} (vinsthistorik)")
+        except NoEpsData:
+            eps = []
         except Exception as exc:  # noqa: BLE001 – ett bolag får aldrig stoppa resten
             errors.append(f"{inst.yahoo_ticker}: {type(exc).__name__}")
             eps = []
