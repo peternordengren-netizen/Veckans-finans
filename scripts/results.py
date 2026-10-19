@@ -1,18 +1,24 @@
-"""Slår ihop veckans omgångar från /rapportutfall till data/results/<vecka>.json och jämför
-med föregående år och med förväntan.
+"""Slår ihop omgångarna från /rapportutfall och jämför med föregående år och med förväntan.
 
-- Omgångsfilerna data/results/<vecka>/omgang-<N>.json valideras var för sig; en omgång som
-  saknas eller underkänns tas inte med (listas i "missing_batches").
-- Förändring mot föregående år: den angivna procentsatsen, annars räknad ur värdena (inte
-  för procenttal, där jämförs värdena direkt).
+Två lägen (se scripts/report_list.py):
+- dag (morgonkörningen): data/results/morning/<datum>/omgang-<N>.json -> data/results/morning/<datum>.json
+- vecka (måndagens uppsamling): data/results/<vecka>/omgang-<N>.json plus veckans godkända
+  morgonfiler -> data/results/<vecka>.json. Varje rapport har "scope" = körningen den kom från.
+
+- Omgångsfilerna valideras var för sig; en omgång som saknas eller underkänns tas inte med
+  (listas i "missing_batches").
+- Förändring mot föregående år (yoy_pct): rapportens egen procentsats, annars uträknad ur
+  värdena (inte för procenttal, där jämförs värdena direkt).
 - Utfall mot förväntan: resultat per aktie och nettoomsättning för kvartalet jämförs med Yahoos
-  konsensus ur den senaste ögonblicksbilden *före* rapportdagen (data/consensus/<datum>.json),
-  och bara om ögonblicksbildens nästa rapportdatum ligger högst CONSENSUS_DATE_DAYS dagar från
-  rapporten (så att prognosen gäller samma kvartal) och valutan är densamma.
+  konsensus ur den senaste ögonblicksbilden daterad FÖRE rapportdagen (aldrig samma dag eller
+  efter), och aldrig med en post markerad "after_report" (bolaget hade redan rapporterat när
+  bilden togs). Ögonblicksbildens nästa rapportdatum måste ligga högst CONSENSUS_DATE_DAYS dagar
+  från rapporten (så att prognosen gäller samma kvartal) och valutan måste vara densamma.
 
 Användning:
-    python scripts/results.py 2026-W43
-Exit-kod: 0 = filen skriven, 1 = inga godkända omgångar eller valideringen underkände.
+    python scripts/results.py 2026-10-20 --backup   # morgonkörning, med säkerhetskopia
+    python scripts/results.py 2026-W43        # måndagens uppsamling
+Exit-kod: 0 = filen skriven, 1 = inga godkända rapportutfall eller valideringen underkände.
 """
 
 from __future__ import annotations
@@ -21,7 +27,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -29,9 +35,11 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from report_list import kpis_for, list_reports  # noqa: E402
+from report_list import DAY_RE, MORNING_RAW, WEEK_RE, kpis_for, list_scope  # noqa: E402
 from validate import DATA_DIR, RAW_DIR, Instrument, iso_week_period, load_instruments, load_sector_kpis  # noqa: E402
-from validate_results import surprise_pct, unit_factor, validate_batch, validate_results, verdict  # noqa: E402
+from validate_results import (  # noqa: E402
+    scope_period, surprise_pct, unit_factor, validate_batch, validate_results, verdict,
+)
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 RESULTS_DIR = DATA_DIR / "results"
@@ -39,8 +47,16 @@ CONSENSUS_DIR = DATA_DIR / "consensus"
 CONSENSUS_DATE_DAYS = 3
 
 
+def output_path(scope: str, results_dir: Path = RESULTS_DIR) -> Path:
+    return results_dir / "morning" / f"{scope}.json" if DAY_RE.match(scope) else results_dir / f"{scope}.json"
+
+
+def batch_dir(scope: str, results_dir: Path = RESULTS_DIR) -> Path:
+    return results_dir / "morning" / scope if DAY_RE.match(scope) else results_dir / scope
+
+
 def consensus_before(day: date, consensus_dir: Path = CONSENSUS_DIR) -> dict | None:
-    """Senaste konsensusfilen daterad före day."""
+    """Senaste konsensusfilen daterad före day (aldrig samma dag)."""
     files = sorted(p for p in consensus_dir.glob("*.json")
                    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", p.stem) and p.stem < day.isoformat())
     return json.loads(files[-1].read_text(encoding="utf-8")) if files else None
@@ -64,7 +80,7 @@ def vs_consensus(report: dict, published: date, consensus_dir: Path) -> dict | N
     if snap is None:
         return None
     c = next((c for c in snap["companies"] if c["ticker"] == report["ticker"]), None)
-    if c is None or not c.get("next_report_date"):
+    if c is None or c.get("after_report") or not c.get("next_report_date"):
         return None
     if abs((date.fromisoformat(c["next_report_date"]) - published).days) > CONSENSUS_DATE_DAYS:
         return None
@@ -86,24 +102,26 @@ def yoy_pct(k: dict, kind: str) -> float | None:
     return round((k["value"] - k["previous_value"]) / abs(k["previous_value"]) * 100, 1)
 
 
-def build(week: str, instruments: dict[str, Instrument], now: datetime, raw_dir: Path = RAW_DIR,
-          results_dir: Path = RESULTS_DIR, consensus_dir: Path = CONSENSUS_DIR) -> tuple[dict, list[str]]:
+def _merge_batches(scope: str, instruments: dict[str, Instrument], dirs: dict, results_dir: Path,
+                   consensus_dir: Path) -> tuple[list[dict], list[int], list[str]]:
+    """Godkända omgångar för ett läge, som rapporter i den sammanslagna filens format."""
     sector_kpis = load_sector_kpis()
-    listed = list_reports(raw_dir, week, instruments, sector_kpis)
+    listed = list_scope(scope, instruments, sector_kpis, **dirs)
     by_ticker = {r["ticker"]: r for r in listed}
     n_batches = max((r["batch"] for r in listed), default=0)
     reports, missing, problems = [], [], []
     for n in range(1, n_batches + 1):
-        path = results_dir / week / f"omgang-{n}.json"
+        path = batch_dir(scope, results_dir) / f"omgang-{n}.json"
         if not path.exists():
             missing.append(n)
             problems.append(f"omgång {n} saknas")
             continue
         data = json.loads(path.read_text(encoding="utf-8"))
-        res = validate_batch(data, week, n, instruments, raw_dir)
+        res = validate_batch(data, scope, n, instruments, dirs["raw_dir"], dirs["morning_raw"], results_dir)
         if res.errors:
             missing.append(n)
-            problems.append(f"omgång {n} underkänd: {res.errors[0]}" + (f" (+{len(res.errors) - 1})" if len(res.errors) > 1 else ""))
+            problems.append(f"omgång {n} underkänd: {res.errors[0]}"
+                            + (f" (+{len(res.errors) - 1})" if len(res.errors) > 1 else ""))
             continue
         for r in data["reports"]:
             inst = instruments[r["ticker"]]
@@ -114,19 +132,32 @@ def build(week: str, instruments: dict[str, Instrument], now: datetime, raw_dir:
                      "yoy_pct": yoy_pct(k, kinds[k["id"]]["kind"]),
                      "period_kind": k["period_kind"], "quote": k["quote"]}
                     for k in r["kpis"]]
-            # Sektorns nyckeltal först, i sectors.json-ordning.
-            order = list(kinds)
+            order = list(kinds)  # sektorns nyckeltal först, i sectors.json-ordning
             kpis.sort(key=lambda k: order.index(k["id"]))
-            out = {"ticker": r["ticker"], "name": inst.namn, "sector": inst.sektor,
+            out = {"ticker": r["ticker"], "name": inst.namn, "scope": scope, "sector": inst.sektor,
                    "published": listed_r["published"], "url": listed_r["url"],
                    "source_name": listed_r["source_name"], "raw_file": r["raw_file"], "period": r["period"],
                    "note": r["note"], "kpis": kpis}
             out["vs_consensus"] = vs_consensus(out, datetime.fromisoformat(listed_r["published"]).date(),
                                                consensus_dir)
             reports.append(out)
+    return reports, missing, problems
+
+
+def build(scope: str, instruments: dict[str, Instrument], now: datetime, raw_dir: Path = RAW_DIR,
+          results_dir: Path = RESULTS_DIR, consensus_dir: Path = CONSENSUS_DIR,
+          morning_raw: Path | None = MORNING_RAW) -> tuple[dict, list[str]]:
+    dirs = {"raw_dir": raw_dir, "morning_raw": morning_raw, "results_dir": results_dir}
+    reports, missing, problems = _merge_batches(scope, instruments, dirs, results_dir, consensus_dir)
+    if WEEK_RE.match(scope):
+        # Veckans morgonkörningar: redan godkända när de skrevs, valideras igen i validate_results.
+        start, _ = iso_week_period(scope)
+        for i in range(7):
+            p = output_path((start + timedelta(days=i)).isoformat(), results_dir)
+            if p.exists():
+                reports += json.loads(p.read_text(encoding="utf-8"))["reports"]
     reports.sort(key=lambda r: (r["published"], r["name"]))
-    start, end = iso_week_period(week)
-    return ({"schema_version": 1, "week": week, "period": {"start": start.isoformat(), "end": end.isoformat()},
+    return ({"schema_version": 1, "week": scope, "period": scope_period(scope),
              "generated_at": now.isoformat(timespec="seconds"), "reports": reports, "missing_batches": missing},
             problems)
 
@@ -135,28 +166,37 @@ def main(argv: list[str] | None = None, now: datetime | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8")
     p = argparse.ArgumentParser()
-    p.add_argument("week")
+    p.add_argument("scope", help="vecka (2026-W43) eller dag (2026-10-20)")
+    p.add_argument("--backup", action="store_true",
+                   help="säkerhetskopiera filen till det privata repot (veckan sköts annars av backup_week.py)")
     args = p.parse_args(argv)
-    if not re.fullmatch(r"\d{4}-W\d{2}", args.week):
-        print(f"ogiltig vecka: {args.week!r}", file=sys.stderr)
+    if not (WEEK_RE.match(args.scope) or DAY_RE.match(args.scope)):
+        print(f"ogiltig vecka eller dag: {args.scope!r}", file=sys.stderr)
         return 1
     instruments = load_instruments()
-    data, problems = build(args.week, instruments, now or datetime.now(STOCKHOLM))
+    data, problems = build(args.scope, instruments, now or datetime.now(STOCKHOLM))
     for msg in problems:
         print(f"varning: {msg}")
     if not data["reports"]:
         print("Inga godkända rapportutfall – ingen fil skrivs.", file=sys.stderr)
         return 1
-    res = validate_results(data, args.week, instruments)
+    res = validate_results(data, args.scope, instruments)
     if res.errors:
         print("Rapportutfallen klarar inte valideringen – skrivs inte:", *res.errors, sep="\n  ", file=sys.stderr)
         return 1
-    out = RESULTS_DIR / f"{args.week}.json"
+    out = output_path(args.scope)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     with_cons = sum(r["vs_consensus"] is not None for r in data["reports"])
-    print(f"Rapportutfall {args.week}: {len(data['reports'])} rapporter, {with_cons} jämförda med förväntan, "
+    print(f"Rapportutfall {args.scope}: {len(data['reports'])} rapporter, {with_cons} jämförda med förväntan, "
           f"saknade omgångar: {data['missing_batches'] or 'inga'} -> {out}")
+    if args.backup:
+        from backup_week import commit_files
+
+        ok, msg = commit_files(RAW_DIR, [(out, out.relative_to(DATA_DIR).as_posix())], f"Rapportutfall {args.scope}")
+        print(f"Säkerhetskopia: {msg}")
+        if not ok:
+            return 1
     return 0
 
 

@@ -9,8 +9,10 @@ import { expectedText, kpiValue, surpriseText, yoyText, type ReportResult } from
 
 interface Props {
   results: { reports: ReportResult[]; missingBatches: number[] };
+  /** "week": veckans flik; "morning": överst i morgonrapporten. */
+  context?: "week" | "morning";
 }
-const { results } = Astro.props;
+const { results, context = "week" } = Astro.props;
 const withKpis = results.reports.filter((r) => r.kpis.length > 0);
 const without = results.reports.filter((r) => r.kpis.length === 0);
 const day = (iso: string) => shortDate(new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" }));
@@ -18,16 +20,25 @@ const periodLabel = { kvartal: "", delår: " (året hittills)", helår: " (helå
 ---
 
 <div class="results">
-  <p class="lead">
-    {results.reports.length} bolag i bevakningslistan rapporterade under veckan. Nyckeltalen är hämtade ur bolagens egna
-    rapporter och jämförs med samma kvartal i fjol. Där Yahoo hade en förväntan sparad före rapporten visas också utfallet
-    mot förväntan för resultat per aktie och omsättning.
-  </p>
+  {
+    context === "week" ? (
+      <p class="lead">
+        {results.reports.length} bolag i bevakningslistan rapporterade under veckan. Nyckeltalen är hämtade ur bolagens
+        egna rapporter och jämförs med samma kvartal i fjol. Där Yahoo hade en förväntan sparad före rapporten visas också
+        utfallet mot förväntan för resultat per aktie och omsättning.
+      </p>
+    ) : (
+      <p class="lead">
+        Rapporter sedan förra morgonrapporten, med nyckeltal ur bolagens egna rapporter jämförda med samma kvartal i fjol
+        och, där det finns, med Yahoos förväntan från dagen före.
+      </p>
+    )
+  }
   {
     results.missingBatches.length > 0 && (
       <p class="warn-box">
         Alla rapporter kom inte med: omgång {results.missingBatches.join(", ")} saknas eller klarade inte valideringen.
-        Se logs/weekly/.
+        Se {context === "week" ? "logs/weekly/" : "logs/morning/"}.
       </p>
     )
   }

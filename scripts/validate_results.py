@@ -141,12 +141,13 @@ def _kpi_kinds(instruments: dict[str, Instrument]) -> dict[str, dict[str, str]]:
     return {t: {k["id"]: k["kind"] for k in kpis_for(i, sector_kpis)} for t, i in instruments.items()}
 
 
-def _check_report(r: dict, listed: dict, kinds: dict[str, str], raw_dir: Path, week: str, where: str,
-                  res: Result) -> None:
+def _check_report(r: dict, listed: dict, kinds: dict[str, str], where: str, res: Result) -> None:
+    from report_list import report_path
+
     if r["raw_file"] != listed["raw_file"]:
         res.errors.append(f"{where}: raw_file {r['raw_file']!r} är inte rapporten {listed['raw_file']!r}")
         return
-    path = raw_dir / week / r["raw_file"]
+    path = report_path(listed)
     if not path.is_file():
         res.errors.append(f"{where}: rapporttexten {path} finns inte")
         return
@@ -165,19 +166,31 @@ def _check_report(r: dict, listed: dict, kinds: dict[str, str], raw_dir: Path, w
         res.errors.append(f"{where}: inga nyckeltal och ingen förklaring (note)")
 
 
-def validate_batch(data: dict, week: str, batch: int, instruments: dict[str, Instrument],
-                   raw_dir: Path = RAW_DIR) -> Result:
-    """En omgångsfil från /rapportutfall: data/results/<vecka>/omgang-<N>.json."""
-    from report_list import list_reports
+def _listing(scope: str, instruments: dict[str, Instrument], dirs: dict) -> list[dict]:
+    from report_list import list_scope
 
+    return list_scope(scope, instruments, load_sector_kpis(), **dirs)
+
+
+def _dirs(raw_dir: Path, morning_raw: Path | None, results_dir: Path | None) -> dict:
+    return {"raw_dir": raw_dir, "morning_raw": morning_raw, "results_dir": results_dir}
+
+
+def validate_batch(data: dict, week: str, batch: int, instruments: dict[str, Instrument],
+                   raw_dir: Path = RAW_DIR, morning_raw: Path | None = None,
+                   results_dir: Path | None = None) -> Result:
+    """En omgångsfil från /rapportutfall: data/results/<vecka>/omgang-<N>.json eller
+    data/results/morning/<datum>/omgang-<N>.json (week är då datumet)."""
+    from report_list import MORNING_RAW, RESULTS_DIR
+
+    dirs = _dirs(raw_dir, morning_raw or MORNING_RAW, results_dir or RESULTS_DIR)
     res = Result()
     res.errors += _schema_errors(_schema_validator("results-batch.schema.json"), data)
     if res.errors:
         return res
     if data["week"] != week or data["batch"] != batch:
         res.errors.append(f"week/batch ({data['week']}, {data['batch']}) stämmer inte med filen ({week}, {batch})")
-    listed = {r["ticker"]: r for r in list_reports(raw_dir, week, instruments, load_sector_kpis())
-              if r["batch"] == batch}
+    listed = {r["ticker"]: r for r in _listing(week, instruments, dirs) if r["batch"] == batch}
     got = [r["ticker"] for r in data["reports"]]
     for t in sorted(set(listed) - set(got)):
         res.errors.append(f"{t}: rapporten saknas i omgången")
@@ -188,33 +201,51 @@ def validate_batch(data: dict, week: str, batch: int, instruments: dict[str, Ins
     kinds = _kpi_kinds(instruments)
     for r in data["reports"]:
         if r["ticker"] in listed:
-            _check_report(r, listed[r["ticker"]], kinds[r["ticker"]], raw_dir, week, r["ticker"], res)
+            _check_report(r, listed[r["ticker"]], kinds[r["ticker"]], r["ticker"], res)
     return res
 
 
-def validate_results(data: dict, week: str, instruments: dict[str, Instrument], raw_dir: Path = RAW_DIR) -> Result:
-    """Den sammanslagna filen från scripts/results.py: data/results/<vecka>.json."""
-    from report_list import list_reports
+def scope_period(scope: str) -> dict:
+    """{start, end} för en vecka eller en dag."""
+    if re.fullmatch(r"\d{4}-W\d{2}", scope):
+        start, end = iso_week_period(scope)
+        return {"start": start.isoformat(), "end": end.isoformat()}
+    return {"start": scope, "end": scope}
 
+
+def validate_results(data: dict, week: str, instruments: dict[str, Instrument], raw_dir: Path = RAW_DIR,
+                     morning_raw: Path | None = None, results_dir: Path | None = None) -> Result:
+    """Den sammanslagna filen från scripts/results.py: data/results/<vecka>.json eller
+    data/results/morning/<datum>.json. Varje rapport valideras mot listan för sitt eget
+    läge (scope): veckans fil innehåller också morgonkörningarnas rapporter."""
+    from report_list import MORNING_RAW, RESULTS_DIR
+
+    dirs = _dirs(raw_dir, morning_raw or MORNING_RAW, results_dir or RESULTS_DIR)
     res = Result()
     res.errors += _schema_errors(_schema_validator("results.schema.json"), data)
     if res.errors:
         return res
-    start, end = iso_week_period(week)
-    if data["week"] != week or data["period"] != {"start": start.isoformat(), "end": end.isoformat()}:
+    if data["week"] != week or data["period"] != scope_period(week):
         res.errors.append("week/period stämmer inte med filnamnet")
     _check_datetime(data["generated_at"], "generated_at", res)
-    listed = {r["ticker"]: r for r in list_reports(raw_dir, week, instruments, load_sector_kpis())}
+    listings: dict[str, dict[str, dict]] = {}
     kinds = _kpi_kinds(instruments)
     for r in data["reports"]:
-        where = r["ticker"]
+        where = f"{r['ticker']} ({r['scope']})"
+        if r["scope"] != week and not (re.fullmatch(r"\d{4}-W\d{2}", week) and scope_period(week)["start"]
+                                       <= r["scope"] <= scope_period(week)["end"]):
+            res.errors.append(f"{where}: läget {r['scope']} hör inte till {week}")
+            continue
+        if r["scope"] not in listings:
+            listings[r["scope"]] = {x["ticker"]: x for x in _listing(r["scope"], instruments, dirs)}
+        listed = listings[r["scope"]]
         if r["ticker"] not in listed:
-            res.errors.append(f"{where}: inte en rapport i veckan enligt report_list.py")
+            res.errors.append(f"{where}: inte en rapport i {r['scope']} enligt report_list.py")
             continue
         inst = instruments[r["ticker"]]
         if r["name"] != inst.namn or r["url"] != listed[r["ticker"]]["url"]:
             res.errors.append(f"{where}: namn eller url stämmer inte med listan")
-        _check_report(r, listed[r["ticker"]], kinds[r["ticker"]], raw_dir, week, where, res)
+        _check_report(r, listed[r["ticker"]], kinds[r["ticker"]], where, res)
         for k in r["kpis"]:
             _check_yoy(k, kinds[r["ticker"]].get(k["id"]), f"{where} {k['id']}", res)
         _check_comparison(r, where, res)

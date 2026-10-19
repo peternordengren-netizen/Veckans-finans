@@ -199,9 +199,10 @@ export function weekAfter(sunday: string): string {
 const CONSENSUS_DIR = IS_MOCK ? join(DATA, "mock", "consensus") : join(DATA, "consensus");
 const RESULTS_DIR = IS_MOCK ? join(DATA, "mock", "results") : join(DATA, "results");
 
-/** Veckans rapportutfall (scripts/results.py) – valfri fil; saknas den visas ingen flik. */
-export function loadResults(week: string): { reports: ReportResult[]; missingBatches: number[] } | null {
-  const path = join(RESULTS_DIR, `${week}.json`);
+/** Rapportutfall (scripts/results.py) för en vecka eller, med ett datum, en morgonkörning
+ * (data/results/morning/<datum>.json). Valfri fil; saknas den visas ingenting. */
+export function loadResults(scope: string): { reports: ReportResult[]; missingBatches: number[] } | null {
+  const path = DATE_RE.test(scope) ? join(RESULTS_DIR, "morning", `${scope}.json`) : join(RESULTS_DIR, `${scope}.json`);
   if (!existsSync(path)) return null;
   try {
     const raw = readJson<{ reports: ReportResult[]; missing_batches: number[] }>(path);

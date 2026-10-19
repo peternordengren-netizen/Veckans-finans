@@ -184,7 +184,10 @@ säkerhetskopieras med `--backup`). Filen innehåller:
   året och valuta
 - nästa rapportdatum, senaste kvartal och redovisningsvaluta
 
-Morgonkörningen sparar en ny fil varje handelsdag. Det behövs eftersom Yahoos prognos för innevarande kvartal byter
+Morgonkörningen sparar en ny fil varje handelsdag. Bolag vars siffror redan var kända när bilden togs märks med
+`after_report`, och visas som "konsensus efter rapport" och används aldrig. Det gäller rapporter samma dag före bilden,
+och preliminära siffror de senaste 45 dagarna som ännu inte följts av rapporten. En befintlig bild märks om utan ny
+hämtning med `consensus.py --markera <datum>`. Det behövs eftersom Yahoos prognos för innevarande kvartal byter
 till nästa kvartal när bolaget rapporterat, så förväntan måste sparas före rapporten. "Kommande vecka" visar den senaste
 filen med varningar:
 - vid färre än 3 analytiker för vinst per aktie
@@ -212,8 +215,16 @@ fliken **Rapporterade bolag**.
    - att enheten passar nyckeltalet
    - att perioden stämmer: närmaste periodangivelse före värdet, även inne i citatet, avgör om det är kvartal,
      året hittills eller helår
-4. `results.py <vecka>` slår ihop omgångarna och räknar förändringen mot föregående år. Den jämför resultat per aktie
-   och omsättning för kvartalet med Yahoos konsensus från dagen före rapporten, om valutan stämmer och prognosen
+**Morgonkörningen** gör samma sak varje handelsdag för rapporter sedan förra morgonen (läge `<datum>`):
+- tidsfönstret sparas i `data/results/morning/<datum>/window.json`
+- rapporterna läses ur både `data/raw/` och `data/morning/raw/`
+- utfallen visas överst i morgonrapporten
+- om Claude-steget fallerar byggs morgonrapporten ändå
+
+Måndagens körning (läge `<vecka>`) tar bara de bolag som morgnarna missat och slår sedan ihop allt i veckans fil.
+
+4. `results.py <vecka|datum>` slår ihop omgångarna och räknar förändringen mot föregående år. Den jämför resultat per aktie
+   och omsättning för kvartalet med Yahoos konsensus från dagen före rapporten (aldrig samma dag eller efter), om valutan stämmer och prognosen
    gäller samma rapport. Inom ±2 % räknas som "i linje". Filen säkerhetskopieras med `backup_week.py`.
 
 Provkörning W42 (11 rapporter, en omgång): 1,4 minuter, motsvarande 0,29 USD till API-pris med Sonnet.

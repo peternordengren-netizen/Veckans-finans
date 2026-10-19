@@ -11,7 +11,7 @@ import ResultsPanel from "./ResultsPanel.astro";
 import CompanyCard from "./CompanyCard.astro";
 import MorningReportView from "./MorningReport.astro";
 import { weekdayDate } from "../lib/calendar";
-import { formatDate, listMorningDates, weekLabel, type MorningReport, type WeekView } from "../lib/data";
+import { formatDate, listMorningDates, loadResults, weekLabel, type MorningReport, type WeekView } from "../lib/data";
 import { shortDate } from "../lib/format";
 import { describePolicyRate, formatRate } from "../lib/policyRate";
 
@@ -61,7 +61,12 @@ const morningTime = morning
             <p class="morning-stale" data-morning-date={morning.date} hidden>
               Dagens morgonrapport finns inte ännu, så det här är den senaste. På handelsdagar kommer den kl. 08:10.
             </p>
-            <MorningReportView report={morning} level={3} after={{ href: "#vecka", label: `${weekLabel(view.week)} ↓` }} />
+            <MorningReportView
+              report={morning}
+              level={3}
+              results={loadResults(morning.date)}
+              after={{ href: "#vecka", label: `${weekLabel(view.week)} ↓` }}
+            />
           </div>
         </section>
       )

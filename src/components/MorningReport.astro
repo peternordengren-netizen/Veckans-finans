@@ -8,6 +8,8 @@ import { statusText, weekdayDate } from "../lib/calendar";
 import type { MorningReport } from "../lib/data";
 import { shortDate } from "../lib/format";
 import { ratio, sek, signedPct } from "../lib/signals";
+import type { ReportResult } from "../lib/results";
+import ResultsPanel from "./ResultsPanel.astro";
 
 interface Props {
   report: MorningReport;
@@ -15,8 +17,10 @@ interface Props {
   level?: 2 | 3;
   /** Extra länk sist i innehållsraden, t.ex. ner till veckan på startsidan. */
   after?: { href: string; label: string };
+  /** Rapportutfall sedan förra morgonen (data/results/morning/<datum>.json), visas överst. */
+  results?: { reports: ReportResult[]; missingBatches: number[] } | null;
 }
-const { report, level = 2, after } = Astro.props;
+const { report, level = 2, after, results = null } = Astro.props;
 const H = level === 2 ? "h2" : "h3";
 const Sub = level === 2 ? "h3" : "h4";
 const time = (iso: string) =>
@@ -31,6 +35,7 @@ const meetings = report.reports_today.filter((e) => e.kind === "stämma");
 
 <div class:list={["morning", `level-${level}`]}>
   <nav class="toc" aria-label="Morgonrapportens innehåll">
+    {results && <a href="#utfall">Utfall <span class="n">{results.reports.length}</span></a>}
     <a href="#rapporter">Rapporter i dag <span class="n">{reports.length}</span></a>
     <a href="#nyheter">Nyheter <span class="n">{newsCount}</span></a>
     <a href="#insyn">Insyn <span class="n">{report.insider.companies.length}</span></a>
@@ -38,6 +43,15 @@ const meetings = report.reports_today.filter((e) => e.kind === "stämma");
     <a href="#kurser">Kurser i går <span class="n">{report.price.companies.length}</span></a>
     {after && <a class="after" href={after.href}>{after.label}</a>}
   </nav>
+
+  {
+    results && (
+      <section id="utfall" class="block">
+        <H>Utfall i rapporterna</H>
+        <ResultsPanel results={results} context="morning" />
+      </section>
+    )
+  }
 
   <section id="rapporter" class="block">
     <H>Rapporter i dag</H>

@@ -19,6 +19,8 @@ export interface Consensus {
   next_report_date: string | null;
   financial_currency: string | null;
   analyst_opinions: number | null;
+  /** Bolaget hade redan rapporterat när bilden togs – siffrorna visas inte (saknas i äldre filer). */
+  after_report?: boolean;
 }
 
 /** Under så många analytiker för vinst per aktie är konsensus tunn. */
@@ -57,6 +59,7 @@ export function estimateText(e: Estimate, format: (v: number, c: string | null) 
  * - fastighetsbolag: vinst per aktie styrs av värdeförändringar
  */
 export function warnings(c: Consensus, sector: string | null | undefined): string[] {
+  if (c.after_report) return ["konsensus efter rapport – visas inte"];
   const out: string[] = [];
   const n = c.eps?.analysts ?? 0;
   if (c.eps === null) out.push("ingen prognos för vinst per aktie");

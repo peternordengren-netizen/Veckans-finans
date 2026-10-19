@@ -1,12 +1,16 @@
-﻿# Rapportutfall för en vecka: /rapportutfall med Claude Code (Sonnet) i omgångar om 20, sedan
-# scripts/results.py (sammanslagning, jämförelse med föregående år och förväntan) och säkerhetskopia.
+﻿# Rapportutfall: /rapportutfall med Claude Code (Sonnet) i omgångar om 20, sedan scripts/results.py
+# (sammanslagning, jämförelse med föregående år och förväntan) och säkerhetskopia.
 #
-# Anropas av scripts/run_weekly.ps1 efter veckosammanfattningen, men går att köra för sig:
-#   powershell -NoProfile -File scripts\run_results.ps1 -Week 2026-W43
+# Två lägen (se scripts/report_list.py):
+#   -Week 2026-W43   måndagens uppsamling (anropas av run_weekly.ps1): det som morgnarna missat
+#   -Week 2026-10-20 morgonkörningen (anropas av run_morning.ps1): rapporter sedan förra morgonen;
+#                    tidsfönstret skapas och sparas först
 # - En omgång vars fil redan finns och klarar valideringen körs inte om (går att återuppta).
 # - Claude körs i läget dontAsk med samma sorts begränsade lista som veckokörningen: läsa,
 #   skriva bara i data/results/, och bara report_list.py och validate.py.
-# - Loggar i logs/weekly/<vecka>-rapportutfall.log och -rapportutfall-<N>.json/.err.
+# - Loggar i logs/weekly/ (vecka) eller logs/morning/ (dag): <läge>-rapportutfall.log och
+#   -rapportutfall-<N>.json/.err.
+# Exit-kod 0 även om Claude-steget fallerar; anroparen bygger sidan ändå.
 
 param(
     [Parameter(Mandatory = $true)][string]$Week
@@ -14,12 +18,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-$LogDir = Join-Path $Root "logs\weekly"
-New-Item -ItemType Directory -Force $LogDir | Out-Null
 Set-Location $Root
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $env:PYTHONIOENCODING = "utf-8"
-if ($Week -notmatch '^\d{4}-W\d{2}$') { throw "Ogiltig vecka: '$Week'" }
+$IsDay = $Week -match '^\d{4}-\d{2}-\d{2}$'
+if (-not $IsDay -and $Week -notmatch '^\d{4}-W\d{2}$') { throw "Ogiltig vecka eller dag: '$Week'" }
+$LogDir = Join-Path $Root $(if ($IsDay) { "logs\morning" } else { "logs\weekly" })
+New-Item -ItemType Directory -Force $LogDir | Out-Null
+$BatchDir = if ($IsDay) { "data\results\morning\$Week" } else { "data\results\$Week" }
 
 $RunLog = Join-Path $LogDir "$Week-rapportutfall.log"
 function Log([string]$Text) {
@@ -29,13 +35,16 @@ function Log([string]$Text) {
 }
 
 $Claude = Join-Path $env:USERPROFILE ".local\bin\claude.exe"
-if (-not (Test-Path $Claude)) { Log "Hittar inte Claude Code-CLI:n ($Claude) - avbryter."; exit 1 }
+if (-not (Test-Path $Claude)) { Log "Hittar inte Claude Code-CLI:n ($Claude) - avbryter."; exit 0 }
 foreach ($name in @(Get-ChildItem env: | Where-Object { $_.Name -match '^(CLAUDE|ANTHROPIC)' } | ForEach-Object Name)) {
     [Environment]::SetEnvironmentVariable($name, $null, "Process")
 }
 
-$Batches = [int](& .venv\Scripts\python.exe scripts\report_list.py $Week --antal-omgangar)
+$listArgs = @("scripts\report_list.py", $Week, "--antal-omgangar")
+if ($IsDay) { $listArgs += "--skapa-fonster" }
+$Batches = [int](& .venv\Scripts\python.exe @listArgs)
 Log "Rapportutfall ${Week}: $Batches omgångar"
+if ($Batches -eq 0) { Log "Inga rapporter att ta fram."; exit 0 }
 
 $Allowed = @(
     "Read", "Glob", "Grep",
@@ -47,7 +56,7 @@ $Disallowed = @("PowerShell", "WebFetch", "WebSearch")
 function Quote([string]$s) { '"' + ($s -replace '"', '\"') + '"' }
 
 for ($n = 1; $n -le $Batches; $n++) {
-    $BatchFile = "data\results\$Week\omgang-$n.json"
+    $BatchFile = "$BatchDir\omgang-$n.json"
     if (Test-Path $BatchFile) {
         & cmd.exe /c ".venv\Scripts\python.exe scripts\validate.py $BatchFile > nul 2>&1"
         if ($LASTEXITCODE -eq 0) { Log "omgång ${n}: finns redan och är godkänd - hoppar över"; continue }
@@ -59,22 +68,24 @@ for ($n = 1; $n -le $Batches; $n++) {
     $JsonOut = Join-Path $LogDir "$Week-rapportutfall-$n.json"
     $ErrOut = Join-Path $LogDir "$Week-rapportutfall-$n.err"
     Log "omgång ${n}: startar Claude Code (Sonnet)"
-    $proc = Start-Process -FilePath $Claude -ArgumentList $ArgList -NoNewWindow -PassThru -Wait `
-        -RedirectStandardOutput $JsonOut -RedirectStandardError $ErrOut
     try {
+        $proc = Start-Process -FilePath $Claude -ArgumentList $ArgList -NoNewWindow -PassThru -Wait `
+            -RedirectStandardOutput $JsonOut -RedirectStandardError $ErrOut
         $r = Get-Content $JsonOut -Raw -Encoding UTF8 | ConvertFrom-Json
-        $denied = @($r.permission_denials).Count
         Log ("omgång ${n}: exit $($proc.ExitCode), turer $($r.num_turns), " +
-            "$([math]::Round($r.duration_ms / 60000, 1)) min, nekade anrop $denied")
+            "$([math]::Round($r.duration_ms / 60000, 1)) min, nekade anrop $(@($r.permission_denials).Count)")
     } catch {
-        Log "omgång ${n}: exit $($proc.ExitCode), kunde inte läsa svaret ($JsonOut)"
+        Log "omgång ${n}: Claude-steget fallerade: $_"
     }
 }
 
-& cmd.exe /c ".venv\Scripts\python.exe scripts\results.py $Week 2>&1" | ForEach-Object { Log "  $_" }
+$mergeArgs = @("scripts\results.py", $Week)
+if ($IsDay) { $mergeArgs += "--backup" }
+& cmd.exe /c (".venv\Scripts\python.exe " + ($mergeArgs -join " ") + " 2>&1") | ForEach-Object { Log "  $_" }
 $code = $LASTEXITCODE
 Log "results.py: exit $code"
-if ($code -eq 0) {
+if ($code -eq 0 -and -not $IsDay) {
     & cmd.exe /c ".venv\Scripts\python.exe scripts\backup_week.py $Week 2>&1" | Select-Object -Last 1 | ForEach-Object { Log "  $_" }
 }
 Log "Klart"
+exit 0

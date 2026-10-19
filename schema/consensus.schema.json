@@ -33,7 +33,7 @@
         "type": "object",
         "additionalProperties": false,
         "required": ["ticker", "name", "yahoo_ticker", "eps", "revenue", "next_report_date", "most_recent_quarter",
-          "financial_currency", "analyst_opinions"],
+          "financial_currency", "analyst_opinions", "after_report"],
         "properties": {
           "ticker": { "type": "string" },
           "name": { "type": "string" },
@@ -43,7 +43,8 @@
           "next_report_date": { "type": ["string", "null"], "format": "date" },
           "most_recent_quarter": { "type": ["string", "null"], "format": "date" },
           "financial_currency": { "type": ["string", "null"] },
-          "analyst_opinions": { "type": ["integer", "null"], "minimum": 0 }
+          "analyst_opinions": { "type": ["integer", "null"], "minimum": 0 },
+          "after_report": { "type": "boolean", "description": "Bolaget hade redan rapporterat samma dag när bilden togs – används inte." }
         }
       }
     },

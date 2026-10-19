@@ -3,7 +3,7 @@
 import Base from "../layouts/Base.astro";
 import MorningReportView from "./MorningReport.astro";
 import { weekdayDate } from "../lib/calendar";
-import { formatDate, type MorningReport } from "../lib/data";
+import { formatDate, loadResults, type MorningReport } from "../lib/data";
 
 interface Props {
   report: MorningReport;
@@ -44,7 +44,7 @@ const time = (iso: string) =>
     </header>
 
     <div class="wrap">
-      <MorningReportView report={report} />
+      <MorningReportView report={report} results={loadResults(report.date)} />
     </div>
   </main>
 </Base>

@@ -40,3 +40,8 @@ test("varningar: få analytiker, annan valuta, fastigheter", () => {
     "vinst per aktie styrs av värdeförändringar – se förvaltningsresultatet",
   ]);
 });
+
+test("konsensus efter rapport visas inte", () => {
+  assert.deepEqual(warnings({ ...base, after_report: true }, "fastigheter"), ["konsensus efter rapport – visas inte"]);
+  assert.deepEqual(warnings({ ...base, after_report: false }, "industri"), []);
+});

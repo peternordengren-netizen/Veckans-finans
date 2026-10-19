@@ -1,10 +1,14 @@
 ---
-description: Ta fram rapporterade nyckeltal ur veckans rapporter (en omgång om 20) till data/results/<vecka>/omgang-<N>.json
-argument-hint: "<ISO-vecka> <omgång>, t.ex. 2026-W43 1"
+description: Ta fram rapporterade nyckeltal ur rapporter (en omgång om 20) för en vecka eller en morgon
+argument-hint: "<ISO-vecka eller datum> <omgång>, t.ex. 2026-W43 1 eller 2026-10-20 1"
 ---
 
-Du ska ta fram rapporterade nyckeltal ur bolagens egna rapporter för Veckans finans. Argument: `$ARGUMENTS`
-(vecka och omgång, t.ex. `2026-W43 1`).
+Du ska ta fram rapporterade nyckeltal ur bolagens egna rapporter för Veckans finans. Argument: `$ARGUMENTS`:
+läge och omgång. Läget är antingen en vecka (`2026-W43 1`, måndagens uppsamling) eller ett datum (`2026-10-20 1`,
+morgonkörningen med rapporter sedan föregående morgon).
+
+Utfil: `data/results/<vecka>/omgang-<omgång>.json` för en vecka, `data/results/morning/<datum>/omgang-<omgång>.json`
+för ett datum. I filen är `"week"` läget, alltså veckan eller datumet.
 
 ## Schemalagd körning
 
@@ -13,17 +17,16 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
 
 ## Arbetsgång
 
-1. Kör `.venv/Scripts/python scripts/report_list.py <vecka> --omgang <omgång>`. Varje rad är en rapport:
-   `nr | omgång | ticker | bolag | sektor | nyckeltal | publicerad | text | raw_file | rubrik`. Det är exakt de
-   rapporter du ska ta med – alla, och inga andra.
+1. Kör `.venv/Scripts/python scripts/report_list.py <läge> --omgang <omgång>`. Varje rad är en rapport:
+   `nr | omgång | ticker | bolag | sektor | nyckeltal | publicerad | text | raw_file | sökväg | rubrik`. Det är exakt
+   de rapporter du ska ta med – alla, och inga andra.
 2. Läs nyckeltalens namn och typer i `data/sectors.json` (`kpis`). Utöver sektorns nyckeltal finns för alla bolag
    `nettoomsattning` (belopp) och `resultat-per-aktie` (per aktie).
-3. För varje rapport: läs `data/raw/<vecka>/<raw_file>` med Read, **högst de första 400 raderna** (rapportens
+3. För varje rapport: läs filen i kolumnen `sökväg` med Read, **högst de första 400 raderna** (rapportens
    sammanfattning och nyckeltalstabell står först). Läs inga andra filer.
 4. Ta för varje nyckeltal i radens lista fram **kvartalets** värde och föregående års värde för samma kvartal, om
    rapporten anger dem. Ta inte med ett nyckeltal som inte står i texten. Gissa aldrig och räkna aldrig om.
-5. Skriv `data/results/<vecka>/omgang-<omgång>.json` med Write och validera med
-   `.venv/Scripts/python scripts/validate.py data/results/<vecka>/omgang-<omgång>.json`.
+5. Skriv utfilen med Write och validera med `.venv/Scripts/python scripts/validate.py <utfil>`.
    Rätta felen mot källtexten och kör igen, **högst tre valideringskörningar**. Om något fortfarande underkänns:
    stanna, ta inte bort uppgifter för att klara valideringen, och lista felen ordagrant i ditt svar.
 
@@ -72,7 +75,8 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
    `period` är rapportens kvartal, t.ex. `Q3 2026`.
 5. **Inga nyckeltal:** om rapporten saknar alla nyckeltalen (t.ex. investmentbolag som inte redovisar räntenetto,
    eller ett utdrag utan siffror) anger du `"kpis": []` och en kort förklaring i `note`.
-6. Skriv bara i `data/results/`. Ändra aldrig källtexten, listan eller valideringen.
+6. Skriv bara i `data/results/`. Ändra aldrig källtexten, listan, fönstret (`window.json`) eller valideringen.
+7. `raw_file` i utfilen är kolumnen `raw_file` (utan mappen före), inte `sökväg`.
 
 ## Svar
 

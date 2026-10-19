@@ -72,12 +72,12 @@ const generated = new Date(calendar.generatedAt).toLocaleString("sv-SE", {
               </span>
               {e.consensus && (
                 <div class="consensus">
-                  {e.consensus.eps && (
+                  {e.consensus.eps && !e.consensus.after_report && (
                     <span>
                       <span class="label">Vinst/aktie</span> {estimateText(e.consensus.eps, perShare)}
                     </span>
                   )}
-                  {e.consensus.revenue && (
+                  {e.consensus.revenue && !e.consensus.after_report && (
                     <span>
                       <span class="label">Omsättning</span> {estimateText(e.consensus.revenue, amount)}
                     </span>

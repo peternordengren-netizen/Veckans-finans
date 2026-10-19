@@ -15,8 +15,8 @@ from validate import Instrument, validate_consensus  # noqa: E402
 
 NOW = datetime(2026, 10, 19, 8, 10, tzinfo=ZoneInfo("Europe/Stockholm"))
 INSTRUMENTS = {
-    "ALFA": Instrument("Alfaverken", (), "ALFA", "ALFA.ST", "Stockholm"),
-    "BETA": Instrument("Betabolaget", (), "BETA", "BETA.ST", "Stockholm"),
+    "ALFA": Instrument("Alfaverken", (), "ALFA", "ALFA.ST", "Stockholm", mfn_slug="alfaverken"),
+    "BETA": Instrument("Betabolaget", (), "BETA", "BETA.ST", "Stockholm", mfn_slug="betabolaget"),
     "GAMA": Instrument("Gammagruppen", (), "GAMA", "GAMA.ST", "Stockholm"),
     "DELT": Instrument("Deltafastigheter", (), "DELT", "DELT.ST", "Stockholm"),
 }
@@ -66,3 +66,52 @@ def test_estimate_ur_yfinance_tabell():
     nan = df.copy()
     nan.loc["0q", "avg"] = float("nan")
     assert _estimate(nan, "yearAgoEps") is None
+
+
+def test_bolag_som_rapporterat_fore_bilden_markeras(tmp_path):
+    import json as _json
+
+    from consensus import mark_after_report
+
+    raw = tmp_path / "raw"
+    (raw / "2026-W43").mkdir(parents=True)
+    item = lambda n, pub, company: {"id": str(n), "source": "mfn", "source_name": "MFN", "url": f"https://x/{n}",  # noqa: E731
+                                    "published": pub, "title": "Delårsrapport Q3 2026", "company": company,
+                                    "path": f"mfn/{n}.txt"}
+    (raw / "2026-W43" / "index.json").write_text(_json.dumps({"items": [
+        item(1, "2026-10-20T07:00:00+02:00", "alfaverken"),    # i dag före bilden -> markeras
+        item(2, "2026-10-20T12:00:00+02:00", "deltafastigheter"),  # i dag efter bilden -> inte
+        item(3, "2026-10-19T07:00:00+02:00", "betabolaget"),   # i går -> inte (bilden tas dagen efter)
+    ]}), encoding="utf-8")
+    now = datetime(2026, 10, 20, 8, 15, tzinfo=ZoneInfo("Europe/Stockholm"))
+    data = build(date(2026, 10, 20), now, INSTRUMENTS, lambda t: fake(t) if t != "BETA.ST" else fake("ALFA.ST"))
+    marked = mark_after_report(data, INSTRUMENTS, {"raw_dir": raw, "morning_raw": None})
+    flags = {c["ticker"]: c["after_report"] for c in data["companies"]}
+    assert marked == 1 and flags == {"ALFA": True, "BETA": False, "DELT": False}
+    assert validate_consensus(data, INSTRUMENTS).errors == []
+
+
+def test_preliminara_siffror_raknas_tills_rapporten_kommit(tmp_path):
+    import json as _json
+
+    from consensus import mark_after_report
+
+    raw = tmp_path / "raw"
+    for wk in ("2026-W42", "2026-W43"):
+        (raw / wk).mkdir(parents=True)
+    item = lambda n, pub, company, title: {"id": str(n), "source": "mfn", "source_name": "MFN",  # noqa: E731
+                                           "url": f"https://x/{n}", "published": pub, "title": title,
+                                           "company": company, "path": f"mfn/{n}.txt"}
+    (raw / "2026-W42" / "index.json").write_text(_json.dumps({"items": [
+        # Alfaverken: preliminära siffror, rapporten har inte kommit -> markeras.
+        item(1, "2026-10-14T07:00:00+02:00", "alfaverken", "Alfaverken offentliggör preliminära siffror för Q3"),
+        # Betabolaget: preliminära siffror och sedan rapporten -> inte markerat (gäller nästa kvartal).
+        item(2, "2026-10-13T07:00:00+02:00", "betabolaget", "Betabolaget: preliminärt resultat för tredje kvartalet"),
+        item(3, "2026-10-16T07:00:00+02:00", "betabolaget", "Betabolaget: Delårsrapport Q3 2026"),
+    ]}), encoding="utf-8")
+    (raw / "2026-W43" / "index.json").write_text(_json.dumps({"items": []}), encoding="utf-8")
+    now = datetime(2026, 10, 20, 8, 15, tzinfo=ZoneInfo("Europe/Stockholm"))
+    data = build(date(2026, 10, 20), now, INSTRUMENTS, lambda t: fake(t) if t != "BETA.ST" else fake("ALFA.ST"))
+    mark_after_report(data, INSTRUMENTS, {"raw_dir": raw, "morning_raw": None})
+    flags = {c["ticker"]: c["after_report"] for c in data["companies"]}
+    assert flags == {"ALFA": True, "BETA": False, "DELT": False}

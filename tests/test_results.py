@@ -205,3 +205,91 @@ def test_period_inne_i_citatet():
     r = Result()
     check_kpi(kpi("resultat-per-aktie", 12.93, "SEK", 7.45, None, "kvartal", quote), "per_aktie", text, "t", r)
     assert any("delårsangivelse" in e for e in r.errors)
+
+
+def _alfa_snapshot(d, nxt="2026-10-22", after=False):
+    est = {"avg": 2.4, "low": None, "high": None, "analysts": 4, "year_ago": None, "currency": "SEK"}
+    return {"date": d, "companies": [{"ticker": "ALFA", "eps": est, "revenue": None, "next_report_date": nxt,
+                                      "after_report": after}]}
+
+
+def test_konsensus_samma_dag_eller_efter_rapport_anvands_aldrig(tmp_path):
+    report = {"ticker": "ALFA", "kpis": [GOOD_KPIS[3]]}
+    cons = tmp_path / "consensus"
+    cons.mkdir()
+    published = date(2026, 10, 22)
+    # Bara en bild samma dag som rapporten: ingen jämförelse.
+    (cons / "2026-10-22.json").write_text(json.dumps(_alfa_snapshot("2026-10-22")), encoding="utf-8")
+    assert results.vs_consensus(report, published, cons) is None
+    # Bild dagen före, men bolaget hade redan rapporterat när den togs: ingen jämförelse.
+    (cons / "2026-10-21.json").write_text(json.dumps(_alfa_snapshot("2026-10-21", after=True)), encoding="utf-8")
+    assert results.vs_consensus(report, published, cons) is None
+    # Bild dagen före utan after_report: jämförs.
+    (cons / "2026-10-21.json").write_text(json.dumps(_alfa_snapshot("2026-10-21")), encoding="utf-8")
+    assert results.vs_consensus(report, published, cons)["consensus_date"] == "2026-10-21"
+
+
+def _morning_setup(tmp_path):
+    """Actions- och morgonrådata med samma rapport i båda, och ett fönster för 22 okt."""
+    from report_list import create_window
+
+    raw = make_raw(tmp_path)
+    morning_raw = tmp_path / "morning-raw"
+    (morning_raw / WEEK / "mfn").mkdir(parents=True)
+    (morning_raw / WEEK / "mfn" / "alfa.txt").write_text(ALFA_TEXT, encoding="utf-8")
+    item = {"id": "alfa-1", "source": "mfn", "source_name": "MFN", "url": "https://mfn.example/alfa",
+            "published": "2026-10-22T07:00:00+02:00", "title": "Alfaverken delårsrapport januari-september 2026",
+            "company": "alfaverken", "path": "mfn/alfa.txt", "text_kind": "fulltext"}
+    (morning_raw / WEEK / "index.json").write_text(json.dumps({"items": [item]}), encoding="utf-8")
+    results_dir = tmp_path / "results"
+    tz = ZoneInfo("Europe/Stockholm")
+    create_window("2026-10-22", datetime(2026, 10, 22, 8, 10, tzinfo=tz), results_dir)
+    return raw, morning_raw, results_dir
+
+
+def test_dagslage_fonster_och_dubbletter(tmp_path):
+    from report_list import list_scope, load_window
+
+    raw, morning_raw, results_dir = _morning_setup(tmp_path)
+    since, until = load_window("2026-10-22", results_dir)
+    assert since.isoformat() == "2026-10-21T08:10:00+02:00"  # förra handelsdagen 08:10
+    listed = list_scope("2026-10-22", INSTRUMENTS, load_sector_kpis(), raw, morning_raw, results_dir)
+    # Alfaverken 07:00 (finns i båda rådatamapparna, räknas en gång); Betabolaget 23 okt ligger efter fönstret.
+    assert [r["ticker"] for r in listed] == ["ALFA"]
+    ok = {"week": "2026-10-22", "batch": 1, "reports": [alfa()]}
+    assert validate_batch(ok, "2026-10-22", 1, INSTRUMENTS, raw, morning_raw, results_dir).errors == []
+
+
+def test_nasta_fonster_borjar_dar_forra_slutade(tmp_path):
+    from report_list import create_window
+
+    tz = ZoneInfo("Europe/Stockholm")
+    d = tmp_path / "results"
+    create_window("2026-10-22", datetime(2026, 10, 22, 9, 30, tzinfo=tz), d)
+    since, _ = create_window("2026-10-23", datetime(2026, 10, 23, 8, 10, tzinfo=tz), d)
+    assert since.isoformat() == "2026-10-22T09:30:00+02:00"
+    # Ett befintligt fönster ändras aldrig.
+    again = create_window("2026-10-23", datetime(2026, 10, 23, 15, 0, tzinfo=tz), d)
+    assert again[1].isoformat() == "2026-10-23T08:10:00+02:00"
+
+
+def test_veckan_hoppar_over_morgonens_bolag_och_tar_med_dem(tmp_path):
+    from report_list import list_scope
+
+    raw, morning_raw, results_dir = _morning_setup(tmp_path)
+    (results_dir / "morning" / "2026-10-22").mkdir(parents=True, exist_ok=True)
+    (results_dir / "morning" / "2026-10-22" / "omgang-1.json").write_text(
+        json.dumps({"week": "2026-10-22", "batch": 1, "reports": [alfa()]}), encoding="utf-8")
+    tz = ZoneInfo("Europe/Stockholm")
+    day, _ = results.build("2026-10-22", INSTRUMENTS, datetime(2026, 10, 22, 8, 15, tzinfo=tz), raw, results_dir,
+                           tmp_path / "consensus", morning_raw)
+    assert [r["scope"] for r in day["reports"]] == ["2026-10-22"]
+    (results_dir / "morning" / "2026-10-22.json").write_text(json.dumps(day), encoding="utf-8")
+    week_list = list_scope(WEEK, INSTRUMENTS, load_sector_kpis(), raw, morning_raw, results_dir)
+    assert [r["ticker"] for r in week_list] == ["BETA"]  # Alfaverken klarades redan på morgonen
+    (results_dir / WEEK).mkdir()
+    (results_dir / WEEK / "omgang-1.json").write_text(json.dumps(batch([beta()])), encoding="utf-8")
+    week, problems = results.build(WEEK, INSTRUMENTS, NOW, raw, results_dir, tmp_path / "consensus", morning_raw)
+    assert problems == []
+    assert [(r["ticker"], r["scope"]) for r in week["reports"]] == [("ALFA", "2026-10-22"), ("BETA", WEEK)]
+    assert validate_results(week, WEEK, INSTRUMENTS, raw, morning_raw, results_dir).errors == []
