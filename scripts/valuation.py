@@ -14,6 +14,9 @@ Källor (Yahoo via yfinance):
 Status per bolag (P/E visas bara vid "ok"):
 - "kontrollera bolagshändelse": en enskild dag i år över ±BIG_MOVE_PCT % som inte förklaras av
   en verifierad post i data/corporate_actions.json – då visas varken kurs i år eller P/E
+- "känd bolagshändelse": som ovan, men dagen är utredd och händelsen känd fast den inte går att
+  justera (investigated med label i corporate_actions.json); etiketten visas, t.ex.
+  "noterad i Stockholm 9 jan", och varken kurs i år eller P/E
 - "fastighetsbolag" (sektor fastigheter): vinsten styrs av värdeförändringar
 - "investmentbolag" (kolumnen typ i instruments.csv): substansvärdet är rätt mått
 - "annan valuta": vinsten redovisas i annan valuta än kursen (valutaeffekt)
@@ -94,6 +97,17 @@ def load_actions(path: Path = CORPORATE_ACTIONS) -> dict[str, list[dict]]:
     return out
 
 
+def load_known(path: Path = CORPORATE_ACTIONS) -> dict[str, list[dict]]:
+    """Utredda händelser som är kända men inte går att justera: {ticker: [{label, yahoo_dates}]}."""
+    if not path.exists():
+        return {}
+    out: dict[str, list[dict]] = {}
+    for e in json.loads(path.read_text(encoding="utf-8")).get("investigated", []):
+        if e.get("label") and e.get("yahoo_dates"):
+            out.setdefault(e["ticker"], []).append({"label": e["label"], "yahoo_dates": e["yahoo_dates"]})
+    return out
+
+
 def big_moves(bars: list[Bar], start: date, end: date) -> list[dict]:
     """Dagar i år med kursrörelse över ±big_move_pct % (stängning mot föregående stängning)."""
     out = []
@@ -133,7 +147,8 @@ def verdict(pe_change: float | None) -> str | None:
 
 
 def company(inst: Instrument, bars: list[Bar], eps: list[tuple[date, float]], actions: list[dict],
-            year_start: date, asof: date, index_ytd: float | None, fin_ccy: str | None) -> dict:
+            year_start: date, asof: date, index_ytd: float | None, fin_ccy: str | None,
+            known: list[dict] | None = None) -> dict:
     """Värden och status för ett bolag."""
     moves = big_moves(bars, year_start, asof)
     explained = {a["ex_date"] for a in actions}
@@ -148,13 +163,18 @@ def company(inst: Instrument, bars: list[Bar], eps: list[tuple[date, float]], ac
         "eps_ttm_start": e0, "eps_ttm_now": e1, "eps_reports_start": d0, "eps_reports_now": d1,
         "eps_change_pct": None, "pe_start": None, "pe_now": None, "pe_change_pct": None, "pe_over_max": False,
         "verdict": None, "big_moves": moves, "adjusted_ex_dates": sorted(explained & {m["date"] for m in moves}),
-        "status": "ok",
+        "status": "ok", "event_label": None,
     }
     if p0 is None or p1 is None:
         c["status"] = "kurs saknas"
         return c
     if unexplained:
-        c["status"] = "kontrollera bolagshändelse"
+        known_dates = {d: k["label"] for k in (known or []) for d in k["yahoo_dates"]}
+        if all(m["date"] in known_dates for m in unexplained):
+            c["status"] = "känd bolagshändelse"
+            c["event_label"] = "; ".join(dict.fromkeys(known_dates[m["date"]] for m in unexplained))
+        else:
+            c["status"] = "kontrollera bolagshändelse"
         return c
     c["ytd_pct"] = round((p1 / p0 - 1) * 100, 2)
     if index_ytd is not None:
@@ -186,11 +206,13 @@ def company(inst: Instrument, bars: list[Bar], eps: list[tuple[date, float]], ac
 
 
 def build(week: str, instruments: dict[str, Instrument], fetch_bars: BarFetcher, fetch_eps: EpsFetcher,
-          currencies: dict[str, str | None], now: datetime, actions: dict[str, list[dict]] | None = None) -> dict:
+          currencies: dict[str, str | None], now: datetime, actions: dict[str, list[dict]] | None = None,
+          known: dict[str, list[dict]] | None = None) -> dict:
     _, end = iso_week_period(week)
     asof = min(end, now.date())
     year_start = date(asof.year, 1, 1)
     actions = load_actions() if actions is None else actions
+    known = load_known() if known is None else known
     bars = fetch_bars([*[i.yahoo_ticker for i in instruments.values()], INDEX_TICKER],
                       year_start - timedelta(days=20), asof)
     idx = [(b.day, b.close) for b in bars.get(INDEX_TICKER, [])]
@@ -204,7 +226,7 @@ def build(week: str, instruments: dict[str, Instrument], fetch_bars: BarFetcher,
             errors.append(f"{inst.yahoo_ticker}: {type(exc).__name__}")
             eps = []
         companies.append(company(inst, bars.get(inst.yahoo_ticker, []), eps, actions.get(inst.ticker, []),
-                                 year_start, asof, index_ytd, currencies.get(inst.ticker)))
+                                 year_start, asof, index_ytd, currencies.get(inst.ticker), known.get(inst.ticker)))
     return {
         "schema_version": 1, "week": week, "as_of": asof.isoformat(), "year_start": year_start.isoformat(),
         "generated_at": now.isoformat(timespec="seconds"), "thresholds": THRESHOLDS,

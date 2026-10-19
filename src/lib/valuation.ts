@@ -6,6 +6,7 @@
 export type ValuationStatus =
   | "ok"
   | "kontrollera bolagshändelse"
+  | "känd bolagshändelse"
   | "fastighetsbolag"
   | "investmentbolag"
   | "annan valuta"
@@ -30,6 +31,8 @@ export interface ValuationRow {
   verdict: "kursen före vinsten" | "vinsten före kursen" | "i takt" | null;
   big_moves: { date: string; pct: number }[];
   status: ValuationStatus;
+  /** Känd bolagshändelse som inte går att justera, t.ex. "noterad i Stockholm 9 jan" (saknas i äldre filer). */
+  event_label?: string | null;
 }
 
 const nf = (digits: number) =>
@@ -60,6 +63,7 @@ export function pePair(r: Pick<ValuationRow, "pe_start" | "pe_now" | "pe_over_ma
 export const STATUS_TEXT: Record<ValuationStatus, string> = {
   ok: "",
   "kontrollera bolagshändelse": "kontrollera bolagshändelse",
+  "känd bolagshändelse": "känd bolagshändelse",
   fastighetsbolag: "fastighetsbolag – se förvaltningsresultatet",
   investmentbolag: "investmentbolag – substansvärdet är måttet",
   "annan valuta": "redovisar i annan valuta",
@@ -69,7 +73,8 @@ export const STATUS_TEXT: Record<ValuationStatus, string> = {
 };
 
 /** Tolkning eller status: det som visas i sista kolumnen. */
-export function interpretation(r: Pick<ValuationRow, "status" | "verdict" | "pe_over_max">): string {
+export function interpretation(r: Pick<ValuationRow, "status" | "verdict" | "pe_over_max" | "event_label">): string {
+  if (r.status === "känd bolagshändelse" && r.event_label) return r.event_label;
   if (r.status !== "ok") return STATUS_TEXT[r.status];
   if (r.pe_over_max) return "P/E över 100 – ingen tolkning";
   return r.verdict ?? "";

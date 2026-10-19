@@ -257,7 +257,8 @@ men flaggas inte heller.
 - **Nelly:** Q1-rapporten 28 april. Verklig rörelse.
 - **Net Insight:** vinstvarning 6 juli kl. 19:10. Verklig rörelse.
 
-**Ej verifierade** (`investigated`):
+**Kända men inte justerbara** (`investigated`). En post med `label` och `yahoo_dates` visar etiketten i stället för
+"kontrollera bolagshändelse", men varken kurs i år eller P/E:
 - **Electrolux:** företrädesemission, ex-dag 28 maj, men Yahoos fall ligger 19 maj.
 - **Volati:** avknoppning av Salix, ex-dag 10 juni, men Yahoos fall ligger 8 juni.
 - **Intrum:** företrädesemission. Fallet ligger 1 juni, före stämmans beslut.

@@ -42,7 +42,8 @@
         "additionalProperties": false,
         "required": ["ticker", "name", "sector", "type", "financial_currency", "price_start", "price_now", "ytd_pct",
           "rel_index_pp", "eps_ttm_start", "eps_ttm_now", "eps_reports_start", "eps_reports_now", "eps_change_pct",
-          "pe_start", "pe_now", "pe_change_pct", "pe_over_max", "verdict", "big_moves", "adjusted_ex_dates", "status"],
+          "pe_start", "pe_now", "pe_change_pct", "pe_over_max", "verdict", "big_moves", "adjusted_ex_dates", "status",
+          "event_label"],
         "properties": {
           "ticker": { "type": "string" },
           "name": { "type": "string" },
@@ -73,8 +74,9 @@
             }
           },
           "adjusted_ex_dates": { "type": "array", "items": { "type": "string", "format": "date" } },
+          "event_label": { "type": ["string", "null"], "description": "Etikett för en känd bolagshändelse som inte går att justera." },
           "status": {
-            "enum": ["ok", "kontrollera bolagshändelse", "fastighetsbolag", "investmentbolag", "annan valuta",
+            "enum": ["ok", "kontrollera bolagshändelse", "känd bolagshändelse", "fastighetsbolag", "investmentbolag", "annan valuta",
               "otillräcklig vinsthistorik", "förlust", "kurs saknas"]
           }
         }

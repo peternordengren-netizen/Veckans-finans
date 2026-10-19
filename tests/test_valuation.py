@@ -122,3 +122,24 @@ def test_validering_raknar_om():
     errors = validate_valuation(data, WEEK, INSTRUMENTS).errors
     assert any("tolkningen" in e for e in errors)
     assert any("Gammagruppen" in e and "trots status" in e for e in errors)
+
+
+def test_kand_handelse_som_inte_gar_att_justera(tmp_path):
+    known = {"GAMA": [{"label": "noterad i Stockholm 8 jun", "yahoo_dates": ["2026-06-08"]}]}
+    data = build(WEEK, INSTRUMENTS, fetch_bars, lambda t: EPS[t], {}, NOW, actions={}, known=known)
+    g = {x["ticker"]: x for x in data["companies"]}["GAMA"]
+    assert (g["status"], g["event_label"], g["ytd_pct"], g["pe_now"]) == (
+        "känd bolagshändelse", "noterad i Stockholm 8 jun", None, None)
+    # Valideringen läser etiketten ur corporate_actions.json.
+    p = tmp_path / "ca.json"
+    p.write_text(json.dumps({"actions": [], "investigated": [
+        {"ticker": "GAMA", "label": "noterad i Stockholm 8 jun", "yahoo_dates": ["2026-06-08"]}]}), encoding="utf-8")
+    assert validate_valuation(data, WEEK, INSTRUMENTS, p).errors == []
+    # Utan den utredda posten ska statusen vara "kontrollera bolagshändelse".
+    p.write_text(json.dumps({"actions": [], "investigated": []}), encoding="utf-8")
+    assert any("väntat 'kontrollera bolagshändelse'" in e for e in validate_valuation(data, WEEK, INSTRUMENTS, p).errors)
+    # En känd händelse som bara täcker en av två stora dagar räcker inte.
+    known2 = {"GAMA": [{"label": "x", "yahoo_dates": ["2026-01-01"]}]}
+    g2 = {x["ticker"]: x for x in build(WEEK, INSTRUMENTS, fetch_bars, lambda t: EPS[t], {}, NOW, actions={},
+                                         known=known2)["companies"]}["GAMA"]
+    assert g2["status"] == "kontrollera bolagshändelse" and g2["event_label"] is None

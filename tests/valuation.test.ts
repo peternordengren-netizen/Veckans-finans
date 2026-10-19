@@ -29,3 +29,11 @@ test("tolkning eller status", () => {
   assert.equal(interpretation({ status: "fastighetsbolag", verdict: null, pe_over_max: false }),
     "fastighetsbolag – se förvaltningsresultatet");
 });
+
+test("känd bolagshändelse visar etiketten", () => {
+  assert.equal(
+    interpretation({ status: "känd bolagshändelse", verdict: null, pe_over_max: false, event_label: "noterad i Stockholm 9 jan" }),
+    "noterad i Stockholm 9 jan",
+  );
+  assert.equal(interpretation({ status: "känd bolagshändelse", verdict: null, pe_over_max: false }), "känd bolagshändelse");
+});

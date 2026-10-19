@@ -858,9 +858,14 @@ def validate_valuation(data: dict, expected_week: str | None, instruments: dict[
     _check_datetime(data["generated_at"], "generated_at", res)
     th = data["thresholds"]
     verified: dict[str, set[str]] = {}
+    known: dict[str, dict[str, str]] = {}  # ticker -> {yahoo-datum: etikett}
     if actions_path.exists():
-        for a in json.loads(actions_path.read_text(encoding="utf-8")).get("actions", []):
+        ca = json.loads(actions_path.read_text(encoding="utf-8"))
+        for a in ca.get("actions", []):
             verified.setdefault(a["ticker"], set()).add(a["ex_date"])
+        for e in ca.get("investigated", []):
+            if e.get("label"):
+                known.setdefault(e["ticker"], {}).update({d: e["label"] for d in e.get("yahoo_dates", [])})
     idx = data["index"]["ytd_pct"]
     close = lambda a, b, tol=0.051: a is not None and b is not None and abs(a - b) <= tol  # noqa: E731
     for c in data["companies"]:
@@ -875,10 +880,17 @@ def validate_valuation(data: dict, expected_week: str | None, instruments: dict[
         if any(abs(m["pct"]) <= th["big_move_pct"] for m in c["big_moves"]):
             res.errors.append(f"{w}: big_moves innehåller en rörelse under gränsen")
         st = c["status"]
-        if (st == "kontrollera bolagshändelse") != (bool(unexplained) and c["price_start"] is not None
-                                                    and c["price_now"] is not None):
-            res.errors.append(f"{w}: status {st!r} stämmer inte med de stora kursrörelserna")
-        if st in ("kontrollera bolagshändelse", "kurs saknas"):
+        has_prices = c["price_start"] is not None and c["price_now"] is not None
+        all_known = bool(unexplained) and all(m["date"] in known.get(c["ticker"], {}) for m in unexplained)
+        expected_st = (None if not (unexplained and has_prices) else
+                       "känd bolagshändelse" if all_known else "kontrollera bolagshändelse")
+        if (st in ("kontrollera bolagshändelse", "känd bolagshändelse") or expected_st) and st != expected_st:
+            res.errors.append(f"{w}: status {st!r} stämmer inte med de stora kursrörelserna (väntat {expected_st!r})")
+        expected_label = ("; ".join(dict.fromkeys(known[c["ticker"]][m["date"]] for m in unexplained))
+                          if expected_st == "känd bolagshändelse" else None)
+        if c["event_label"] != expected_label:
+            res.errors.append(f"{w}: etiketten {c['event_label']!r} ≠ {expected_label!r}")
+        if st in ("kontrollera bolagshändelse", "känd bolagshändelse", "kurs saknas"):
             if any(c[k] is not None for k in ("ytd_pct", "pe_start", "pe_now", "pe_change_pct", "verdict")):
                 res.errors.append(f"{w}: kurs i år eller P/E visas trots status {st!r}")
             continue
