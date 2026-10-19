@@ -10,6 +10,7 @@ data/signals/
 data/morning/
 data/consensus/
 data/results/
+data/valuation/
 
 # Python
 .venv/

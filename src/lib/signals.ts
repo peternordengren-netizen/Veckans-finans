@@ -3,7 +3,15 @@
  * Ren modul (testas med node --test).
  */
 
-export type Signal = "insyn" | "blankning" | "avviker" | "stor-rörelse" | "omsättning" | "52v-högsta" | "52v-lägsta";
+export type Signal =
+  | "insyn"
+  | "blankning"
+  | "avviker"
+  | "stor-rörelse"
+  | "omsättning"
+  | "pe-upp"
+  | "52v-högsta"
+  | "52v-lägsta";
 
 export const SIGNAL_LABELS: Record<Signal, string> = {
   insyn: "Insyn",
@@ -11,6 +19,7 @@ export const SIGNAL_LABELS: Record<Signal, string> = {
   avviker: "Avviker mot index",
   "stor-rörelse": "Stor rörelse mot index",
   omsättning: "Hög omsättning",
+  "pe-upp": "P/E +30 % i år",
   "52v-högsta": "Nära 52 v högsta",
   "52v-lägsta": "Nära 52 v lägsta",
 };

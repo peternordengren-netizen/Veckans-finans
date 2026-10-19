@@ -13,6 +13,8 @@ Signaler (trösklarna i THRESHOLDS, sparas i filen så att valideringen kan räk
   short_aggregate_pp procentenheter
 - "avviker": nyhetens ton och kursen mot index går åt olika håll (samma regel som
   sidans "avviker mot index", src/lib/tone.ts)
+- "pe-upp": P/E har stigit minst pe_up_pct % i år (ur data/valuation/<vecka>.json, scripts/valuation.py;
+  bara bolag där P/E räknas där)
 - "stor-rörelse": veckans kurs skiljer sig mer än big_move_pp procentenheter från index,
   åt något håll (bara aktier i SEK, där jämförelsen mot index finns)
 - "omsättning": veckans snittomsättning (antal aktier per dag) minst volume_ratio gånger
@@ -49,7 +51,8 @@ from prices import INDEX_NAME, INDEX_TICKER  # noqa: E402
 from validate import DATA_DIR, Instrument, iso_week_period, load_instruments, validate_signals  # noqa: E402
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
-THRESHOLDS = {"volume_ratio": 2.0, "near_52w_pct": 2.0, "short_aggregate_pp": 0.5, "big_move_pp": 5.0}
+THRESHOLDS = {"volume_ratio": 2.0, "near_52w_pct": 2.0, "short_aggregate_pp": 0.5, "big_move_pp": 5.0,
+              "pe_up_pct": 30.0}
 VOLUME_BASE_DAYS = 20
 HISTORY_DAYS = 400  # 52 veckor plus marginal för omsättningssnittet före veckan
 SEK_SUFFIX = ".ST"
@@ -166,6 +169,8 @@ def signals_for(c: dict, thresholds: dict) -> list[str]:
         out.append("stor-rörelse")
     if c["volume_ratio"] is not None and c["volume_ratio"] >= thresholds["volume_ratio"]:
         out.append("omsättning")
+    if c.get("pe_change_pct") is not None and c["pe_change_pct"] >= thresholds["pe_up_pct"]:
+        out.append("pe-upp")
     if c["from_high_pct"] is not None and c["from_high_pct"] >= -thresholds["near_52w_pct"]:
         out.append("52v-högsta")
     if c["from_low_pct"] is not None and c["from_low_pct"] <= thresholds["near_52w_pct"]:
@@ -174,7 +179,7 @@ def signals_for(c: dict, thresholds: dict) -> list[str]:
 
 
 def build(week: str, instruments: dict[str, Instrument], week_data: dict | None, analysis: dict | None,
-          fetch: BarFetcher, today: date, now: datetime) -> dict:
+          fetch: BarFetcher, today: date, now: datetime, valuation: dict | None = None) -> dict:
     start, end = iso_week_period(week)
     end = min(end, today)
     tickers = [i.yahoo_ticker for i in instruments.values()]
@@ -190,6 +195,7 @@ def build(week: str, instruments: dict[str, Instrument], week_data: dict | None,
     if ((analysis or {}).get("short_aggregate") or {}).get("available"):
         aggregate = {c["ticker"]: c["change_pp"] for c in analysis["short_aggregate"]["changes"]}
 
+    pe_change = {c["ticker"]: c["pe_change_pct"] for c in (valuation or {}).get("companies", [])}
     companies, errors = [], []
     for inst in instruments.values():
         stats = price_stats(bars.get(inst.yahoo_ticker, []), start, end)
@@ -220,6 +226,7 @@ def build(week: str, instruments: dict[str, Instrument], week_data: dict | None,
             "insider_sellers": len(ins["sellers"]) if ins else 0,
             "short_positions_pp": positions.get(inst.ticker),
             "short_aggregate_pp": aggregate.get(inst.ticker),
+            "pe_change_pct": pe_change.get(inst.ticker),
         }
         c["signals"] = signals_for(c, THRESHOLDS)
         companies.append(c)
@@ -256,7 +263,8 @@ def main(argv: list[str] | None = None, fetch: BarFetcher | None = None, now: da
     now = now or datetime.now(STOCKHOLM)
     instruments = load_instruments()
     data = build(args.week, instruments, _read(DATA_DIR / "weeks" / f"{args.week}.json"),
-                 _read(DATA_DIR / "analysis" / f"{args.week}.json"), fetch or yahoo_bars, now.date(), now)
+                 _read(DATA_DIR / "analysis" / f"{args.week}.json"), fetch or yahoo_bars, now.date(), now,
+                 _read(DATA_DIR / "valuation" / f"{args.week}.json"))
     with_prices = sum(c["change_pct"] is not None for c in data["companies"])
     if with_prices == 0:
         print("Ingen kursdata kunde hämtas – ingen signalfil skrivs.", file=sys.stderr)
@@ -272,7 +280,7 @@ def main(argv: list[str] | None = None, fetch: BarFetcher | None = None, now: da
     tmp.replace(out)
     flagged = [c for c in data["companies"] if c["signals"]]
     counts = {s: sum(s in c["signals"] for c in data["companies"])
-              for s in ("insyn", "blankning", "avviker", "stor-rörelse", "omsättning", "52v-högsta", "52v-lägsta")}
+              for s in ("insyn", "blankning", "avviker", "stor-rörelse", "omsättning", "pe-upp", "52v-högsta", "52v-lägsta")}
     print(f"Signaler {args.week}: {with_prices} bolag med kurs, {len(flagged)} med signal "
           f"({', '.join(f'{k} {v}' for k, v in counts.items())}), {len(data['errors'])} utan kurs -> {out}")
     return 0

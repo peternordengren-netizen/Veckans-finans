@@ -1,0 +1,325 @@
+---
+/**
+ * Kurs mot vinst i år: kursutveckling (även mot index), vinst per aktie rullande 12 månader och
+ * P/E vid årets början och nu, med tolkning. Bolag där P/E inte är meningsfullt visas med skälet.
+ */
+import type { ValuationView } from "../lib/data";
+import { formatDate } from "../lib/data";
+import { signedPct } from "../lib/signals";
+import { epsChange, epsPair, interpretation, pePair } from "../lib/valuation";
+
+interface Props {
+  valuation: ValuationView;
+}
+const { valuation } = Astro.props;
+const t = valuation.thresholds;
+const v = (x: number | null) => (x === null ? "" : String(x));
+// Förvalt: störst P/E-förändring först, bolag utan P/E sist.
+const rows = [...valuation.rows].sort(
+  (a, b) => (b.pe_change_pct ?? -Infinity) - (a.pe_change_pct ?? -Infinity) || a.name.localeCompare(b.name, "sv"),
+);
+const withPe = rows.filter((r) => r.status === "ok").length;
+const checks = rows.filter((r) => r.status === "kontrollera bolagshändelse");
+const verdictClass = { "kursen före vinsten": "up", "vinsten före kursen": "down", "i takt": "even" } as const;
+---
+
+<div class="valuation" data-valuation>
+  <p class="lead">
+    Kursutveckling i år jämfört med vinsten per aktie de senaste tolv månaderna, från {formatDate(valuation.yearStart)}
+    till {formatDate(valuation.asOf)}. Har P/E stigit har kursen dragit ifrån vinsten. Har P/E sjunkit har vinsten stigit
+    mer än kursen. OMX Stockholm PI: {signedPct(valuation.indexYtd)} i år.
+  </p>
+  <details class="legend">
+    <summary>Så räknas det</summary>
+    <ul>
+      <li>
+        <strong>Vinst 12 mån:</strong> summan av bolagets fyra senaste kvartalsrapporter enligt Yahoo. Den kan vara
+        justerad vinst och skilja sig från bolagets redovisade resultat, men samma definition används vid båda
+        tidpunkterna.
+      </li>
+      <li>
+        <strong>Tolkning:</strong> P/E upp mer än {t.verdict_pct} % = kursen före vinsten, ned mer än {t.verdict_pct} % =
+        vinsten före kursen, annars i takt.
+      </li>
+      <li>
+        <strong>Ingen P/E:</strong> för fastighetsbolag, investmentbolag, bolag med förlust, bolag som redovisar i annan
+        valuta och när vinsthistoriken är för kort. P/E över {t.pe_max} visas som "över {t.pe_max}", och vinstförändringar
+        över ±{t.eps_change_max_pct} % visas inte som procent.
+      </li>
+      <li>
+        <strong>Kontrollera bolagshändelse:</strong> en enskild dag i år rörde sig kursen mer än ±{t.big_move_pct} %, till
+        exempel vid en nyemission eller avknoppning. Tills händelsen är verifierad mot bolagets pressmeddelande och
+        kursserien visas varken kurs i år eller P/E.
+      </li>
+    </ul>
+    <p>Det här är ingen värdering eller rekommendation, bara en jämförelse av kurs och vinst.</p>
+  </details>
+
+  <div class="controls">
+    <label>
+      <input type="checkbox" data-only-pe />
+      Bara bolag med P/E
+    </label>
+    <span class="shown" data-shown aria-live="polite">{withPe} av {rows.length} bolag har P/E</span>
+  </div>
+
+  <div class="table-outer" data-table-outer>
+    <div class="table-wrap" data-table-wrap>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col" data-type="text" aria-sort="none"><button type="button">Bolag</button></th>
+            <th scope="col" data-type="num" aria-sort="none"><button type="button">Kurs i år</button></th>
+            <th scope="col" data-type="num" aria-sort="none"><button type="button">Mot index</button></th>
+            <th scope="col" data-type="num" aria-sort="none"><button type="button">Vinst 12 mån</button></th>
+            <th scope="col" data-type="num" aria-sort="none"><button type="button">Vinst­förändring</button></th>
+            <th scope="col" data-type="num" aria-sort="none"><button type="button">P/E i jan → nu</button></th>
+            <th scope="col" data-type="num" aria-sort="descending"><button type="button">P/E-förändring</button></th>
+            <th scope="col" data-type="text" aria-sort="none"><button type="button">Tolkning</button></th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            rows.map((r) => (
+              <tr data-pe={r.status === "ok" ? "1" : "0"}>
+                <th scope="row" data-v={r.name}>
+                  <span class="name">{r.name}</span> <span class="ticker">{r.ticker}</span>
+                </th>
+                <td class="num" data-v={v(r.ytd_pct)}>{signedPct(r.ytd_pct)}</td>
+                <td class:list={["num", (r.rel_index_pp ?? 0) > 0 ? "pos" : (r.rel_index_pp ?? 0) < 0 ? "neg" : ""]} data-v={v(r.rel_index_pp)}>
+                  {signedPct(r.rel_index_pp)}
+                </td>
+                <td class="num" data-v={v(r.eps_ttm_now)}>{epsPair(r)}</td>
+                <td class="num" data-v={v(r.eps_change_pct)}>{epsChange(r)}</td>
+                <td class="num" data-v={v(r.pe_now)}>{pePair(r, t.pe_max)}</td>
+                <td class="num" data-v={v(r.pe_change_pct)}>{signedPct(r.pe_change_pct, 0)}</td>
+                <td data-v={interpretation(r)}>
+                  <span class:list={["verdict", r.verdict && !r.pe_over_max ? verdictClass[r.verdict] : r.status === "kontrollera bolagshändelse" ? "check" : "muted"]}>
+                    {interpretation(r)}
+                  </span>
+                </td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {
+    checks.length > 0 && (
+      <p class="note">
+        Kontrollera bolagshändelse:{" "}
+        {checks.map((r, i) => (
+          <>
+            {i > 0 && ", "}
+            {r.name} ({r.big_moves.map((m) => `${formatDate(m.date)} ${signedPct(m.pct)}`).join("; ")})
+          </>
+        ))}
+        .
+      </p>
+    )
+  }
+</div>
+
+<script>
+  import { setupFullWidth, setupSortable } from "../lib/tableClient";
+
+  for (const root of document.querySelectorAll<HTMLElement>("[data-valuation]")) {
+    const rows = Array.from(root.querySelectorAll<HTMLTableRowElement>("tbody tr"));
+    const checkbox = root.querySelector<HTMLInputElement>("[data-only-pe]")!;
+    const shown = root.querySelector<HTMLElement>("[data-shown]")!;
+    const withPe = rows.filter((r) => r.dataset.pe === "1").length;
+    const applyFilter = () => {
+      for (const r of rows) r.hidden = checkbox.checked && r.dataset.pe !== "1";
+      shown.textContent = checkbox.checked
+        ? `Visar ${withPe} bolag med P/E av ${rows.length}`
+        : `Visar alla ${rows.length} bolag, varav ${withPe} med P/E`;
+    };
+    checkbox.addEventListener("change", applyFilter);
+    applyFilter();
+    setupFullWidth(root);
+    setupSortable(root);
+  }
+</script>
+
+<style>
+  .lead {
+    margin: 0 0 8px;
+    max-width: 70ch;
+  }
+  .legend {
+    margin: 0 0 12px;
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+  .legend summary {
+    cursor: pointer;
+    color: var(--accent);
+  }
+  .legend ul {
+    margin: 6px 0;
+    padding-left: 18px;
+  }
+  .legend p {
+    margin: 0;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 0.9375rem;
+  }
+  .controls label {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    cursor: pointer;
+  }
+  .shown {
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+  /* Full fönsterbredd och skuggor vid kanten, som i signaltabellen (src/lib/tableClient.ts). */
+  .table-outer {
+    --full: calc(100vw - var(--sbw, 0px) - 32px);
+    position: relative;
+    isolation: isolate;
+    width: var(--full);
+    margin-left: calc((100% - var(--full)) / 2);
+  }
+  .table-outer::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    bottom: 1px;
+    width: 32px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    background: linear-gradient(to left, var(--scroll-shadow), transparent);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 3;
+  }
+  .table-outer.more-right::after {
+    opacity: 1;
+  }
+  .table-outer.more-left :is(tbody th, thead th:first-child) {
+    box-shadow: 8px 0 8px -6px var(--scroll-shadow);
+  }
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+  }
+  th,
+  td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    vertical-align: top;
+  }
+  tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--surface-2);
+    padding: 0;
+  }
+  thead th:first-child {
+    left: 0;
+    z-index: 2;
+  }
+  thead button {
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    background: none;
+    border: 0;
+    padding: 8px 10px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    white-space: normal;
+    min-width: 4.5rem;
+  }
+  thead th[aria-sort="ascending"] button::after {
+    content: " ▲";
+  }
+  thead th[aria-sort="descending"] button::after {
+    content: " ▼";
+  }
+  tbody th {
+    font-weight: normal;
+    position: sticky;
+    left: 0;
+    background: var(--surface);
+    white-space: normal;
+    min-width: 9rem;
+    max-width: 13rem;
+  }
+  .name {
+    font-weight: 600;
+  }
+  .ticker {
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+  .num {
+    text-align: right;
+  }
+  .pos {
+    color: var(--pos);
+  }
+  .neg {
+    color: var(--neg);
+  }
+  .verdict {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .verdict.up {
+    background: var(--banner-bg);
+    color: var(--banner-fg);
+  }
+  .verdict.down {
+    background: var(--pos-bg);
+    color: var(--pos);
+  }
+  .verdict.even {
+    background: var(--direct-bg);
+    color: var(--direct-fg);
+  }
+  .verdict.check {
+    background: var(--neg-bg);
+    color: var(--neg);
+  }
+  .verdict.muted {
+    font-weight: normal;
+    color: var(--muted);
+    padding: 0;
+  }
+  tr[hidden] {
+    display: none;
+  }
+  .note {
+    margin: 8px 0 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+</style>

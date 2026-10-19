@@ -196,6 +196,7 @@ class Result:
     warnings: list[str] = field(default_factory=list)
 
 
+INSTRUMENT_TYPES = {"investmentbolag"}
 MFN_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 ISIN_RE = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
 
@@ -210,6 +211,7 @@ class Instrument:
     mfn_slug: str | None = None  # bolagets slug i MFN:s URL:er (mfn.se/a/<slug>/…), valfri
     sektor: str | None = None  # id ur data/sectors.json, valfri
     isin: tuple[str, ...] = ()  # alla bolagets aktieslag, valfri (används för FI-registren)
+    typ: str | None = None  # bolagstyp, valfri: "investmentbolag" (P/E visas inte i "Kurs mot vinst")
 
 
 def load_instruments(
@@ -235,6 +237,9 @@ def load_instruments(
             slug = (row.get("mfn_slug") or "").strip() or None
             sektor = (row.get("sektor") or "").strip() or None
             isins = tuple(i.strip() for i in (row.get("isin") or "").split("|") if i.strip())
+            typ = (row.get("typ") or "").strip() or None
+            if typ is not None and typ not in INSTRUMENT_TYPES:
+                raise ValueError(f"{path.name} rad {line}: okänd typ {typ!r} (tillåtna: {sorted(INSTRUMENT_TYPES)})")
             for isin in isins:
                 if not ISIN_RE.match(isin):
                     raise ValueError(f"{path.name} rad {line}: ogiltig ISIN {isin!r}")
@@ -250,6 +255,7 @@ def load_instruments(
                 mfn_slug=slug,
                 sektor=sektor,
                 isin=isins,
+                typ=typ,
             )
             if inst.ticker in instruments:
                 raise ValueError(f"{path.name} rad {line}: dubblett av ticker {inst.ticker!r}")
@@ -838,6 +844,78 @@ def validate_signals(data: dict, expected_week: str | None, instruments: dict[st
     return res
 
 
+def validate_valuation(data: dict, expected_week: str | None, instruments: dict[str, Instrument],
+                       actions_path: Path = DATA_DIR / "corporate_actions.json") -> Result:
+    """Kurs mot vinst (scripts/valuation.py): schema, bolagen finns i listan, och kurs i år, P/E,
+    förändringar, tolkning och status räknas om ur värdena i filen. Justerade ex-dagar måste
+    finnas som verifierade poster i data/corporate_actions.json."""
+    res = Result()
+    res.errors += _schema_errors(_schema_validator("valuation.schema.json"), data)
+    if res.errors:
+        return res
+    if expected_week is not None and data["week"] != expected_week:
+        res.errors.append(f"week {data['week']!r} stämmer inte med filnamnet {expected_week!r}")
+    _check_datetime(data["generated_at"], "generated_at", res)
+    th = data["thresholds"]
+    verified: dict[str, set[str]] = {}
+    if actions_path.exists():
+        for a in json.loads(actions_path.read_text(encoding="utf-8")).get("actions", []):
+            verified.setdefault(a["ticker"], set()).add(a["ex_date"])
+    idx = data["index"]["ytd_pct"]
+    close = lambda a, b, tol=0.051: a is not None and b is not None and abs(a - b) <= tol  # noqa: E731
+    for c in data["companies"]:
+        w = f"{c['name']} ({c['ticker']})"
+        inst = instruments.get(c["ticker"])
+        if inst is None or inst.namn != c["name"]:
+            res.errors.append(f"{w}: finns inte i instruments.csv med samma namn")
+            continue
+        if not set(c["adjusted_ex_dates"]) <= verified.get(c["ticker"], set()):
+            res.errors.append(f"{w}: justering utan verifierad bolagshändelse i corporate_actions.json")
+        unexplained = [m for m in c["big_moves"] if m["date"] not in c["adjusted_ex_dates"]]
+        if any(abs(m["pct"]) <= th["big_move_pct"] for m in c["big_moves"]):
+            res.errors.append(f"{w}: big_moves innehåller en rörelse under gränsen")
+        st = c["status"]
+        if (st == "kontrollera bolagshändelse") != (bool(unexplained) and c["price_start"] is not None
+                                                    and c["price_now"] is not None):
+            res.errors.append(f"{w}: status {st!r} stämmer inte med de stora kursrörelserna")
+        if st in ("kontrollera bolagshändelse", "kurs saknas"):
+            if any(c[k] is not None for k in ("ytd_pct", "pe_start", "pe_now", "pe_change_pct", "verdict")):
+                res.errors.append(f"{w}: kurs i år eller P/E visas trots status {st!r}")
+            continue
+        ytd = (c["price_now"] / c["price_start"] - 1) * 100
+        if not close(c["ytd_pct"], ytd, 0.006):
+            res.errors.append(f"{w}: kurs i år {c['ytd_pct']} ≠ {ytd:.2f}")
+        if idx is not None and not close(c["rel_index_pp"], c["ytd_pct"] - idx, 0.011):
+            res.errors.append(f"{w}: mot index stämmer inte")
+        if st == "fastighetsbolag" and inst.sektor != "fastigheter" or st == "investmentbolag" and inst.typ != "investmentbolag":
+            res.errors.append(f"{w}: status {st!r} stämmer inte med sektor/typ")
+        e0, e1 = c["eps_ttm_start"], c["eps_ttm_now"]
+        if st == "ok":
+            if not (e0 and e1 and e0 > 0 and e1 > 0) or c["pe_start"] is None or c["pe_now"] is None:
+                res.errors.append(f"{w}: status ok utan positiv vinst och P/E")
+                continue
+            if not close(c["pe_start"], c["price_start"] / e0) or not close(c["pe_now"], c["price_now"] / e1):
+                res.errors.append(f"{w}: P/E stämmer inte med kurs och vinst")
+            over = c["pe_start"] > th["pe_max"] or c["pe_now"] > th["pe_max"]
+            if c["pe_over_max"] != over:
+                res.errors.append(f"{w}: pe_over_max stämmer inte")
+            if not over:
+                if not close(c["pe_change_pct"], (c["pe_now"] / c["pe_start"] - 1) * 100, 0.051):
+                    res.errors.append(f"{w}: P/E-förändringen stämmer inte")
+                pc = c["pe_change_pct"]
+                expected = ("kursen före vinsten" if pc > th["verdict_pct"] else
+                            "vinsten före kursen" if pc < -th["verdict_pct"] else "i takt")
+                if c["verdict"] != expected:
+                    res.errors.append(f"{w}: tolkningen {c['verdict']!r} ≠ {expected!r}")
+        elif any(c[k] is not None for k in ("pe_start", "pe_now", "pe_change_pct", "verdict")):
+            res.errors.append(f"{w}: P/E visas trots status {st!r}")
+        if c["eps_change_pct"] is not None and not (e0 and e1 and e0 > 0 and e1 > 0
+                                                    and abs(e1 / e0 - 1) * 100 <= th["eps_change_max_pct"]
+                                                    and close(c["eps_change_pct"], (e1 / e0 - 1) * 100, 0.06)):
+            res.errors.append(f"{w}: vinstförändringen stämmer inte")
+    return res
+
+
 def validate_consensus(data: dict, instruments: dict[str, Instrument]) -> Result:
     """Konsensusfilen (scripts/consensus.py): schema, bolagen finns i listan och snittet
     ligger mellan lägsta och högsta prognos."""
@@ -919,6 +997,7 @@ def _default_targets() -> list[Path]:
         [*DATA_DIR.glob("weeks/*.json"), *DATA_DIR.glob("prices/*.json"), *DATA_DIR.glob("analysis/*.json"),
          *DATA_DIR.glob("calendar/*.json"), *DATA_DIR.glob("signals/*.json"), *DATA_DIR.glob("morning/*.json"),
          *DATA_DIR.glob("consensus/*.json"), *DATA_DIR.glob("results/*.json"),
+         *DATA_DIR.glob("valuation/*.json"),
          *DATA_DIR.glob("results/*/omgang-*.json"),
          *DATA_DIR.glob("mock/weeks/*.json"), *DATA_DIR.glob("mock/prices/*.json"),
          *DATA_DIR.glob("mock/analysis/*.json"), *DATA_DIR.glob("mock/calendar/*.json"),
@@ -947,6 +1026,8 @@ def main(argv: list[str]) -> int:
             res = validate_prices(data, path.stem)
         elif path.parent.name == "analysis":
             res = validate_analysis(data, path.stem)
+        elif path.parent.name == "valuation":
+            res = validate_valuation(data, path.stem, mock_instruments if in_mock_dir else instruments)
         elif path.parent.name == "consensus":
             res = validate_consensus(data, mock_instruments if in_mock_dir else instruments)
         elif path.parent.name == "morning":

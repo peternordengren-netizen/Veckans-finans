@@ -25,12 +25,13 @@
     "thresholds": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["volume_ratio", "near_52w_pct", "short_aggregate_pp", "big_move_pp"],
+      "required": ["volume_ratio", "near_52w_pct", "short_aggregate_pp", "big_move_pp", "pe_up_pct"],
       "properties": {
         "volume_ratio": { "type": "number", "exclusiveMinimum": 0 },
         "near_52w_pct": { "type": "number", "minimum": 0 },
         "short_aggregate_pp": { "type": "number", "minimum": 0 },
-        "big_move_pp": { "type": "number", "minimum": 0 }
+        "big_move_pp": { "type": "number", "minimum": 0 },
+        "pe_up_pct": { "type": "number", "minimum": 0 }
       }
     },
     "index": {
@@ -50,7 +51,7 @@
         "additionalProperties": false,
         "required": ["ticker", "name", "yahoo_ticker", "sector", "change_pct", "relative_pp", "close", "volume_ratio",
           "high_52w", "low_52w", "from_high_pct", "from_low_pct", "tone", "news", "insider_net_sek", "insider_buyers",
-          "insider_sellers", "short_positions_pp", "short_aggregate_pp", "signals"],
+          "insider_sellers", "short_positions_pp", "short_aggregate_pp", "pe_change_pct", "signals"],
         "properties": {
           "ticker": { "type": "string", "minLength": 1 },
           "name": { "type": "string", "minLength": 1 },
@@ -71,10 +72,11 @@
           "insider_sellers": { "type": "integer", "minimum": 0 },
           "short_positions_pp": { "$ref": "#/$defs/num" },
           "short_aggregate_pp": { "$ref": "#/$defs/num" },
+          "pe_change_pct": { "$ref": "#/$defs/num", "description": "P/E-förändring i år ur Kurs mot vinst (null om P/E inte räknas)." },
           "signals": {
             "type": "array",
             "uniqueItems": true,
-            "items": { "enum": ["insyn", "blankning", "avviker", "stor-rörelse", "omsättning", "52v-högsta", "52v-lägsta"] }
+            "items": { "enum": ["insyn", "blankning", "avviker", "stor-rörelse", "omsättning", "pe-upp", "52v-högsta", "52v-lägsta"] }
           }
         }
       }

@@ -144,3 +144,19 @@ def test_validering_underkanner_okant_bolag_och_fel_index():
 def test_trosklarna_sparas_i_filen():
     data = build(WEEK, INSTRUMENTS, None, None, fake_fetch, date(2026, 10, 19), NOW)
     assert data["thresholds"] == THRESHOLDS
+
+
+def test_pe_upp_fran_kurs_mot_vinst():
+    from signals import signals_for
+
+    base = {"insider_net_sek": None, "short_positions_pp": None, "short_aggregate_pp": None, "tone": None,
+            "volume_ratio": None, "from_high_pct": None, "from_low_pct": None, "relative_pp": None}
+    assert signals_for({**base, "pe_change_pct": 30.0}, THRESHOLDS) == ["pe-upp"]
+    assert signals_for({**base, "pe_change_pct": 29.9}, THRESHOLDS) == []
+    assert signals_for({**base, "pe_change_pct": None}, THRESHOLDS) == []
+    valuation = {"companies": [{"ticker": "GAMA", "pe_change_pct": 45.0}, {"ticker": "ALFA", "pe_change_pct": -5.0}]}
+    data = build(WEEK, INSTRUMENTS, None, None, fake_fetch, date(2026, 10, 19), NOW, valuation)
+    c = by_ticker(data)
+    assert "pe-upp" in c["GAMA"]["signals"] and "pe-upp" not in c["ALFA"]["signals"]
+    assert c["BETA"]["pe_change_pct"] is None
+    assert validate_signals(data, WEEK, INSTRUMENTS).errors == []

@@ -10,7 +10,8 @@
     "volume_ratio": 2.0,
     "near_52w_pct": 2.0,
     "short_aggregate_pp": 0.5,
-    "big_move_pp": 5.0
+    "big_move_pp": 5.0,
+    "pe_up_pct": 30.0
   },
   "index": {
     "ticker": "^OMXSPI",
@@ -38,6 +39,7 @@
       "insider_sellers": 0,
       "short_positions_pp": 1.25,
       "short_aggregate_pp": 1.35,
+      "pe_change_pct": null,
       "signals": [
         "insyn",
         "blankning",
@@ -65,6 +67,7 @@
       "insider_sellers": 1,
       "short_positions_pp": -0.8,
       "short_aggregate_pp": -0.75,
+      "pe_change_pct": null,
       "signals": [
         "insyn",
         "blankning",
@@ -91,6 +94,7 @@
       "insider_sellers": 0,
       "short_positions_pp": null,
       "short_aggregate_pp": null,
+      "pe_change_pct": null,
       "signals": [
         "52v-högsta"
       ]
@@ -115,6 +119,7 @@
       "insider_sellers": 0,
       "short_positions_pp": null,
       "short_aggregate_pp": null,
+      "pe_change_pct": null,
       "signals": [
         "omsättning",
         "52v-högsta"
@@ -140,6 +145,7 @@
       "insider_sellers": 0,
       "short_positions_pp": 0.3,
       "short_aggregate_pp": null,
+      "pe_change_pct": null,
       "signals": [
         "blankning",
         "52v-lägsta"
@@ -165,6 +171,7 @@
       "insider_sellers": 0,
       "short_positions_pp": null,
       "short_aggregate_pp": null,
+      "pe_change_pct": null,
       "signals": [
         "52v-högsta",
         "52v-lägsta"

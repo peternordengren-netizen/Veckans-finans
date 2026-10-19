@@ -109,6 +109,7 @@ import type { CalendarEvent } from "./calendar";
 import type { SignalRow } from "./signals";
 import type { Consensus } from "./consensus";
 import type { ReportResult } from "./results";
+import type { ValuationRow } from "./valuation";
 import { isoWeek } from "./weekCheck";
 
 export interface Sentiment {
@@ -157,6 +158,8 @@ export interface WeekView {
   calendar: CalendarView | null;
   /** Signalöversikten per bolag, om den finns. */
   signals: SignalsView | null;
+  /** Kurs mot vinst i år, om den finns. */
+  valuation: ValuationView | null;
   /** Rapportutfall för bolag som rapporterat under veckan, om de finns. */
   results: { reports: ReportResult[]; missingBatches: number[] } | null;
   sectors: SectorView[];
@@ -164,7 +167,7 @@ export interface WeekView {
 
 export interface SignalsView {
   generatedAt: string;
-  thresholds: { volume_ratio: number; near_52w_pct: number; short_aggregate_pp: number; big_move_pp: number };
+  thresholds: { volume_ratio: number; near_52w_pct: number; short_aggregate_pp: number; big_move_pp: number; pe_up_pct: number };
   rows: SignalRow[];
 }
 
@@ -198,6 +201,30 @@ export function weekAfter(sunday: string): string {
 
 const CONSENSUS_DIR = IS_MOCK ? join(DATA, "mock", "consensus") : join(DATA, "consensus");
 const RESULTS_DIR = IS_MOCK ? join(DATA, "mock", "results") : join(DATA, "results");
+const VALUATION_DIR = IS_MOCK ? join(DATA, "mock", "valuation") : join(DATA, "valuation");
+
+export interface ValuationView {
+  asOf: string;
+  yearStart: string;
+  indexYtd: number | null;
+  thresholds: { verdict_pct: number; pe_max: number; big_move_pct: number; eps_change_max_pct: number };
+  rows: ValuationRow[];
+}
+
+/** Kurs mot vinst (scripts/valuation.py) – valfri fil; saknas den visas ingen flik. */
+export function loadValuation(week: string): ValuationView | null {
+  const path = join(VALUATION_DIR, `${week}.json`);
+  if (!existsSync(path)) return null;
+  try {
+    const raw = readJson<{ as_of: string; year_start: string; index: { ytd_pct: number | null };
+      thresholds: ValuationView["thresholds"]; companies: ValuationRow[] }>(path);
+    return { asOf: raw.as_of, yearStart: raw.year_start, indexYtd: raw.index.ytd_pct, thresholds: raw.thresholds,
+      rows: raw.companies };
+  } catch (err) {
+    console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan Kurs mot vinst:`, err);
+    return null;
+  }
+}
 
 /** Rapportutfall (scripts/results.py) för en vecka eller, med ett datum, en morgonkörning
  * (data/results/morning/<datum>.json). Valfri fil; saknas den visas ingenting. */
@@ -460,6 +487,7 @@ export function loadWeek(week: string): WeekView {
     calendar: loadCalendar(weekAfter(raw.period.end)),
     signals: loadSignals(week),
     results: loadResults(week),
+    valuation: loadValuation(week),
     sectors: sectorViews,
   };
 }

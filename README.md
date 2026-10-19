@@ -229,6 +229,34 @@ Måndagens körning (läge `<vecka>`) tar bara de bolag som morgnarna missat och
 
 Provkörning W42 (11 rapporter, en omgång): 1,4 minuter, motsvarande 0,29 USD till API-pris med Sonnet.
 
+### Kurs mot vinst (`scripts/valuation.py`)
+
+`valuation.py <vecka>` skriver `data/valuation/<vecka>.json`. Veckans sida visar den under fliken **Kurs mot vinst**,
+från årets början till veckans slut:
+- kurs i år, och mot OMX Stockholm PI
+- vinst per aktie rullande 12 månader vid årets början och nu
+- P/E vid båda tidpunkterna och förändringen
+- en tolkning: P/E upp mer än 10 % = "kursen före vinsten", ned mer än 10 % = "vinsten före kursen", annars "i takt"
+
+Underlaget:
+- **Vinsten** är summan av de fyra senaste rapporterna i Yahoos `earnings_dates`. De måste hänga ihop, med 45–135
+  dagar mellan, och den senaste får vara högst 135 dagar gammal. Det kan vara justerad vinst, men samma definition
+  används vid båda tidpunkterna.
+- **P/E visas inte för:** fastighetsbolag, investmentbolag (kolumnen `typ` i `instruments.csv`), bolag med förlust,
+  bolag som redovisar i annan valuta och bolag med för kort vinsthistorik. P/E över 100 visas som "över 100".
+
+**Bolagshändelser:** en enskild dag i år med kursrörelse över ±40 % kräver en verifierad post i
+`data/corporate_actions.json`. En post förklarar rörelsen bara om den ligger exakt på bolagets ex-dag; då justeras
+kurserna före med faktorn. Tills dess visas varken kurs i år eller P/E, bara "kontrollera bolagshändelse".
+
+Utredda fall finns under `investigated`:
+- **Electrolux:** företrädesemission, ex-dag 28 maj, men Yahoos fall ligger 19 maj.
+- **Volati:** avknoppning av Salix, ex-dag 10 juni, men Yahoos fall ligger 8 juni.
+
+I båda fallen stämmer datumen inte med bolagens pressmeddelanden, så ingen justering görs.
+
+Veckokörningen kör `valuation.py` före `signals.py`, eftersom signalen "P/E +30 % i år" bygger på den.
+
 ### Signaler (`scripts/signals.py`)
 
 `signals.py <vecka>` skriver `data/signals/<vecka>.json` (git-ignorerad) för alla bolag i `instruments.csv`.
@@ -243,6 +271,7 @@ säkerhetskopierar den med `backup_week.py`. Om du kör `/sammanfatta-veckan` ma
 | Blankning | ändrad position över 0,5 %, eller sammanlagd blankning ändrad minst 0,5 procentenheter |
 | Avviker mot index | nyhetens ton och kursen mot index går åt olika håll (samma regel som på aktiekorten) |
 | Stor rörelse mot index | veckans kurs skiljer sig mer än ±5 % från index (bara aktier i kronor) |
+| P/E +30 % i år | P/E har stigit minst 30 % sedan årets början (ur Kurs mot vinst) |
 | Hög omsättning | veckans snittomsättning minst 2 gånger snittet för de 20 handelsdagarna före |
 | Nära 52 v högsta/lägsta | fredagens stängning högst 2 % från 52-veckorshögsta respektive -lägsta |
 

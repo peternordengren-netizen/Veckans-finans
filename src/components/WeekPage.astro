@@ -8,6 +8,7 @@ import AnalysisPanel from "./AnalysisPanel.astro";
 import CalendarPanel from "./CalendarPanel.astro";
 import SignalsPanel from "./SignalsPanel.astro";
 import ResultsPanel from "./ResultsPanel.astro";
+import ValuationPanel from "./ValuationPanel.astro";
 import CompanyCard from "./CompanyCard.astro";
 import MorningReportView from "./MorningReport.astro";
 import { weekdayDate } from "../lib/calendar";
@@ -186,6 +187,21 @@ const morningTime = morning
           )
         }
         {
+          view.valuation && (
+            <button
+              type="button"
+              role="tab"
+              id="tab-kurs-mot-vinst"
+              aria-controls="sektor-kurs-mot-vinst"
+              aria-selected="false"
+              tabindex={-1}
+              data-sector="kurs-mot-vinst"
+            >
+              Kurs mot vinst
+            </button>
+          )
+        }
+        {
           view.calendar && (
             <button
               type="button"
@@ -302,6 +318,15 @@ const morningTime = morning
           <section class="sector" id="sektor-signaler" role="tabpanel" aria-labelledby="tab-signaler" tabindex="0">
             <h2>Signaler</h2>
             <SignalsPanel signals={view.signals} />
+          </section>
+        )
+      }
+
+      {
+        view.valuation && (
+          <section class="sector" id="sektor-kurs-mot-vinst" role="tabpanel" aria-labelledby="tab-kurs-mot-vinst" tabindex="0">
+            <h2>Kurs mot vinst</h2>
+            <ValuationPanel valuation={view.valuation} />
           </section>
         )
       }

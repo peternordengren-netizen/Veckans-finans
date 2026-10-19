@@ -132,6 +132,10 @@ try {
 # Signalöversikten (fliken "Signaler") bygger på veckofilen och analysfilen, och
 # säkerhetskopieras sedan till det privata repot tillsammans med dem.
 if (Test-Path $WeekFile) {
+    # Kurs mot vinst först: signalen "P/E +30 % i år" bygger på den.
+    & cmd.exe /c ".venv\Scripts\python.exe scripts\valuation.py $Week 2>&1" |
+        Where-Object { $_ -match "^(Kurs mot vinst|Ingen|Filen)" } | ForEach-Object { Log "kurs mot vinst: $_" }
+    Log "valuation.py ${Week}: exit $LASTEXITCODE"
     & cmd.exe /c ".venv\Scripts\python.exe scripts\signals.py $Week 2>&1" | ForEach-Object { Log "signaler: $_" }
     Log "signals.py ${Week}: exit $LASTEXITCODE"
     if (-not $DryRun) {

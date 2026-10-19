@@ -1,0 +1,24 @@
+{
+  "description": "Verifierade bolagshändelser (nyemission, avknoppning, sammanläggning …) som förklarar en enskild kursdag över ±40 % i Yahoos serie. En post gäller bara om den stora kursrörelsen ligger exakt på ex_date i kursserien; då multipliceras kurserna före ex_date med factor. Saknas en verifierad post visas varken kurs i år eller P/E, bara 'kontrollera bolagshändelse'. Poster läggs bara in efter kontroll mot bolagets eget pressmeddelande (source_url) och kursserien.",
+  "actions": [],
+  "investigated": [
+    {
+      "ticker": "ELUX B",
+      "event": "Företrädesemission, 2 teckningsrätter per aktie, teckningskurs 16,75 kr",
+      "ex_date_per_company": "2026-05-28",
+      "source_url": "https://mfn.se/all/a/electrolux/electrolux-group-offentliggor-villkoren-for-den-fullt-garanterade-foretradesemissionen-om-9-062-miljoner-kronor-362a0ebc",
+      "yahoo_big_move": "2026-05-19: 50,26 -> 27,26 kr (-45,8 %), före villkoren (21 maj); 28 maj: 28,33 -> 28,36 kr",
+      "conclusion": "Ej verifierad: rörelsen i Yahoos serie ligger inte på ex-dagen. Ingen justering.",
+      "checked": "2026-10-19"
+    },
+    {
+      "ticker": "VOLO",
+      "event": "Utdelning (avknoppning) av Salix Group, 1 Salix-aktie per stamaktie",
+      "ex_date_per_company": "2026-06-10",
+      "source_url": "https://www.inderes.se/releases/forsta-handelsdagen-i-volati-utan-ratt-till-utdelning-av-aktier-i-salix-group",
+      "yahoo_big_move": "2026-06-08: 84,90 -> 32,07 kr (-62,2 %); 10 juni: 32,90 -> 36,45 kr (+10,8 %)",
+      "conclusion": "Ej verifierad: rörelsen i Yahoos serie ligger inte på ex-dagen. Ingen justering.",
+      "checked": "2026-10-19"
+    }
+  ]
+}
