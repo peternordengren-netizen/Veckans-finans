@@ -139,6 +139,13 @@ if (Test-Path $WeekFile) {
     }
 }
 
+# Rapportutfall (fliken "Rapporterade bolag"): /rapportutfall med Sonnet i omgångar, egna
+# begränsade behörigheter, se scripts/run_results.ps1. Inte vid -DryRun.
+if ((Test-Path $WeekFile) -and -not $DryRun) {
+    & powershell.exe -NoProfile -File (Join-Path $PSScriptRoot "run_results.ps1") -Week $Week |
+        ForEach-Object { Log "rapportutfall: $_" }
+}
+
 # Rapportkalendern för veckan efter (visas på veckans sida under "Kommande vecka").
 # Deterministiskt skript utanför Claude; fel här stoppar inte bygget.
 $NextWeek = & $Python -c "import sys; from datetime import date, timedelta; y, w = sys.argv[1].split('-W'); n = date.fromisocalendar(int(y), int(w), 1) + timedelta(weeks=1); c = n.isocalendar(); print(f'{c[0]}-W{c[1]:02d}')" $Week

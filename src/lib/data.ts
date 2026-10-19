@@ -108,6 +108,7 @@ export type { Tone } from "./tone";
 import type { CalendarEvent } from "./calendar";
 import type { SignalRow } from "./signals";
 import type { Consensus } from "./consensus";
+import type { ReportResult } from "./results";
 import { isoWeek } from "./weekCheck";
 
 export interface Sentiment {
@@ -156,6 +157,8 @@ export interface WeekView {
   calendar: CalendarView | null;
   /** Signalöversikten per bolag, om den finns. */
   signals: SignalsView | null;
+  /** Rapportutfall för bolag som rapporterat under veckan, om de finns. */
+  results: { reports: ReportResult[]; missingBatches: number[] } | null;
   sectors: SectorView[];
 }
 
@@ -194,6 +197,20 @@ export function weekAfter(sunday: string): string {
 }
 
 const CONSENSUS_DIR = IS_MOCK ? join(DATA, "mock", "consensus") : join(DATA, "consensus");
+const RESULTS_DIR = IS_MOCK ? join(DATA, "mock", "results") : join(DATA, "results");
+
+/** Veckans rapportutfall (scripts/results.py) – valfri fil; saknas den visas ingen flik. */
+export function loadResults(week: string): { reports: ReportResult[]; missingBatches: number[] } | null {
+  const path = join(RESULTS_DIR, `${week}.json`);
+  if (!existsSync(path)) return null;
+  try {
+    const raw = readJson<{ reports: ReportResult[]; missing_batches: number[] }>(path);
+    return { reports: raw.reports, missingBatches: raw.missing_batches };
+  } catch (err) {
+    console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan rapportutfall:`, err);
+    return null;
+  }
+}
 
 /** Senaste konsensusfilen (scripts/consensus.py): datum och konsensus per ticker, eller null. */
 export function loadLatestConsensus(): { date: string; byTicker: Map<string, Consensus> } | null {
@@ -441,6 +458,7 @@ export function loadWeek(week: string): WeekView {
     analysis: loadAnalysis(week),
     calendar: loadCalendar(weekAfter(raw.period.end)),
     signals: loadSignals(week),
+    results: loadResults(week),
     sectors: sectorViews,
   };
 }

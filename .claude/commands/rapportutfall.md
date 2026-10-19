@@ -1,0 +1,80 @@
+---
+description: Ta fram rapporterade nyckeltal ur veckans rapporter (en omgång om 20) till data/results/<vecka>/omgang-<N>.json
+argument-hint: "<ISO-vecka> <omgång>, t.ex. 2026-W43 1"
+---
+
+Du ska ta fram rapporterade nyckeltal ur bolagens egna rapporter för Veckans finans. Argument: `$ARGUMENTS`
+(vecka och omgång, t.ex. `2026-W43 1`).
+
+## Schemalagd körning
+
+Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Bara de verktyg och kommandon som står här
+är tillåtna; allt annat nekas automatiskt. Försök aldrig ta dig runt ett nekande. Ditt sista svar sparas som rapport.
+
+## Arbetsgång
+
+1. Kör `.venv/Scripts/python scripts/report_list.py <vecka> --omgang <omgång>`. Varje rad är en rapport:
+   `nr | omgång | ticker | bolag | sektor | nyckeltal | publicerad | text | raw_file | rubrik`. Det är exakt de
+   rapporter du ska ta med – alla, och inga andra.
+2. Läs nyckeltalens namn och typer i `data/sectors.json` (`kpis`). Utöver sektorns nyckeltal finns för alla bolag
+   `nettoomsattning` (belopp) och `resultat-per-aktie` (per aktie).
+3. För varje rapport: läs `data/raw/<vecka>/<raw_file>` med Read, **högst de första 400 raderna** (rapportens
+   sammanfattning och nyckeltalstabell står först). Läs inga andra filer.
+4. Ta för varje nyckeltal i radens lista fram **kvartalets** värde och föregående års värde för samma kvartal, om
+   rapporten anger dem. Ta inte med ett nyckeltal som inte står i texten. Gissa aldrig och räkna aldrig om.
+5. Skriv `data/results/<vecka>/omgang-<omgång>.json` med Write och validera med
+   `.venv/Scripts/python scripts/validate.py data/results/<vecka>/omgang-<omgång>.json`.
+   Rätta felen mot källtexten och kör igen, **högst tre valideringskörningar**. Om något fortfarande underkänns:
+   stanna, ta inte bort uppgifter för att klara valideringen, och lista felen ordagrant i ditt svar.
+
+## Filformat
+
+```json
+{
+  "week": "2026-W43",
+  "batch": 1,
+  "reports": [
+    {
+      "ticker": "AVARDA",
+      "raw_file": "mfn/3ff7c4b4-1410-5745-a8ab-6020e823dd3c.txt",
+      "period": "Q3 2026",
+      "note": null,
+      "kpis": [
+        {
+          "id": "resultat-per-aktie",
+          "value": 3.51,
+          "unit": "SEK",
+          "previous_value": null,
+          "change_pct": 30,
+          "period_kind": "kvartal",
+          "quote": "Resultat per aktie ökade med 30 % till 3,51 SEK"
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Regler
+
+1. **Citat:** `quote` är ett ordagrant utdrag ur rapporttexten, högst 25 ord, kopierat tecken för tecken. Det ska
+   innehålla årets värde och föregående års värde (oftast inom parentes: "1 234 MSEK (1 100)") och/eller den angivna
+   förändringen i procent. Minst ett av `previous_value` och `change_pct` ska anges, och båda ska stå i citatet.
+2. **Värden:** `value` och `previous_value` är talen som de står i citatet, med punkt som decimaltecken
+   (`3,51` → `3.51`, `1 234` → `1234`). Negativa värden (förlust) med minustecken. `change_pct` bara om rapporten
+   själv anger förändringen i procent; för procenttal (marginaler, belåningsgrad) är `change_pct` alltid `null`.
+3. **Enhet** (`unit`), som i citatet: belopp `SEK`, `TSEK`, `MSEK` eller `MDSEK` (mkr = MSEK, mdkr/Mdr kr = MDSEK),
+   motsvarande för `EUR`, `USD`, `DKK`, `NOK`; per aktie `SEK`/`EUR`/…; procenttal `procent`; volym `ton`, `kton`,
+   `st`, `MWh`, `GWh`, `boe` …; pris t.ex. `SEK/ton`.
+4. **Period:** `period_kind` är `kvartal` för det senaste kvartalet (t.ex. juli–september), `delår` för året hittills
+   (t.ex. januari–september) och `helår` för hela året. **Ta kvartalets värde.** Rapporter visar ofta båda; citatet
+   ska stå under kvartalets rubrik. Valideringen kontrollerar närmaste periodangivelse före citatet i texten.
+   `period` är rapportens kvartal, t.ex. `Q3 2026`.
+5. **Inga nyckeltal:** om rapporten saknar alla nyckeltalen (t.ex. investmentbolag som inte redovisar räntenetto,
+   eller ett utdrag utan siffror) anger du `"kpis": []` och en kort förklaring i `note`.
+6. Skriv bara i `data/results/`. Ändra aldrig källtexten, listan eller valideringen.
+
+## Svar
+
+Kort: antal rapporter, antal nyckeltal per rapport, rapporter utan nyckeltal (med förklaring), valideringens
+resultat (OK efter hur många körningar, eller EJ GODKÄND med felen).

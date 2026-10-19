@@ -10,7 +10,7 @@
     { "id": "belaningsgrad", "name": "Belåningsgrad", "kind": "procent" }
   ] },
   { "id": "industri", "name": "Industri", "kpis": [
-    { "id": "orderingang", "name": "Orderingång (organisk förändring)", "kind": "belopp" },
+    { "id": "orderingang", "name": "Orderingång", "kind": "belopp" },
     { "id": "rorelsemarginal", "name": "Rörelsemarginal", "kind": "procent" }
   ] },
   { "id": "halsovard", "name": "Hälsovård", "kpis": [
@@ -22,7 +22,7 @@
     { "id": "ebita-marginal", "name": "Rörelsemarginal (EBITA)", "kind": "procent" }
   ] },
   { "id": "telekom", "name": "Telekom", "kpis": [
-    { "id": "tjansteintakter", "name": "Tjänsteintäkter (organisk tillväxt)", "kind": "belopp" },
+    { "id": "tjansteintakter", "name": "Tjänsteintäkter", "kind": "belopp" },
     { "id": "ebitda", "name": "EBITDA", "kind": "belopp" }
   ] },
   { "id": "energi-ravaror", "name": "Energi & råvaror", "kpis": [

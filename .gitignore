@@ -9,6 +9,7 @@ data/calendar/
 data/signals/
 data/morning/
 data/consensus/
+data/results/
 
 # Python
 .venv/

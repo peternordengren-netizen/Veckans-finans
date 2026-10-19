@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "results-batch.schema.json",
+  "title": "En omgång rapportutfall från /rapportutfall (data/results/<vecka>/omgang-<N>.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["week", "batch", "reports"],
+  "$defs": {
+    "kpi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "value", "unit", "previous_value", "change_pct", "period_kind", "quote"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "value": { "type": "number" },
+        "unit": { "type": "string", "minLength": 1 },
+        "previous_value": { "type": ["number", "null"] },
+        "change_pct": { "type": ["number", "null"] },
+        "period_kind": { "enum": ["kvartal", "delår", "helår"] },
+        "quote": { "type": "string", "minLength": 1 }
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ticker", "raw_file", "period", "kpis", "note"],
+      "properties": {
+        "ticker": { "type": "string", "minLength": 1 },
+        "raw_file": { "type": "string", "minLength": 1 },
+        "period": { "type": "string", "minLength": 1, "description": "Rapportens kvartal, t.ex. 'Q3 2026'." },
+        "kpis": { "type": "array", "items": { "$ref": "#/$defs/kpi" } },
+        "note": { "type": ["string", "null"], "description": "Varför nyckeltal saknas, t.ex. investmentbolag." }
+      }
+    }
+  },
+  "properties": {
+    "week": { "type": "string", "pattern": "^\\d{4}-W\\d{2}$" },
+    "batch": { "type": "integer", "minimum": 1 },
+    "reports": { "type": "array", "items": { "$ref": "#/$defs/report" } }
+  }
+}

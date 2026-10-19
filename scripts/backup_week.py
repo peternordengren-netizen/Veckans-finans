@@ -33,7 +33,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import validate  # noqa: E402
 
 WEEK_RE = re.compile(r"^\d{4}-W\d{2}$")
-KINDS = ("weeks", "prices", "analysis", "signals")
+KINDS = ("weeks", "prices", "analysis", "signals", "results")
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess:

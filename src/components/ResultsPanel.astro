@@ -1,0 +1,238 @@
+---
+/**
+ * Rapporterade bolag: nyckeltal ur bolagens egna rapporter jämfört med samma kvartal i fjol och
+ * med Yahoos förväntan sparad före rapporten (scripts/results.py). Citaten visas inte men har
+ * validerats mot rapporttexten.
+ */
+import { shortDate } from "../lib/format";
+import { expectedText, kpiValue, surpriseText, yoyText, type ReportResult } from "../lib/results";
+
+interface Props {
+  results: { reports: ReportResult[]; missingBatches: number[] };
+}
+const { results } = Astro.props;
+const withKpis = results.reports.filter((r) => r.kpis.length > 0);
+const without = results.reports.filter((r) => r.kpis.length === 0);
+const day = (iso: string) => shortDate(new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" }));
+const periodLabel = { kvartal: "", delår: " (året hittills)", helår: " (helår)" };
+---
+
+<div class="results">
+  <p class="lead">
+    {results.reports.length} bolag i bevakningslistan rapporterade under veckan. Nyckeltalen är hämtade ur bolagens egna
+    rapporter och jämförs med samma kvartal i fjol. Där Yahoo hade en förväntan sparad före rapporten visas också utfallet
+    mot förväntan för resultat per aktie och omsättning.
+  </p>
+  {
+    results.missingBatches.length > 0 && (
+      <p class="warn-box">
+        Alla rapporter kom inte med: omgång {results.missingBatches.join(", ")} saknas eller klarade inte valideringen.
+        Se logs/weekly/.
+      </p>
+    )
+  }
+
+  {
+    withKpis.map((r) => (
+      <article class="report">
+        <header>
+          <h3>
+            {r.name} <span class="muted">{r.ticker}</span>
+          </h3>
+          <p class="meta">
+            {r.period} · {day(r.published)} ·{" "}
+            <a href={r.url} rel="noopener noreferrer" target="_blank">
+              rapporten<span class="sr-only"> (öppnas i ny flik)</span>
+              <span aria-hidden="true"> ↗</span>
+            </a>
+          </p>
+        </header>
+        <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Nyckeltal</th>
+              <th scope="col" class="num">Utfall</th>
+              <th scope="col" class="num">I fjol</th>
+              <th scope="col" class="num">Förändring</th>
+            </tr>
+          </thead>
+          <tbody>
+            {r.kpis.map((k) => (
+              <tr>
+                <th scope="row">
+                  {k.name}
+                  {periodLabel[k.period_kind]}
+                </th>
+                <td class="num">{kpiValue(k.value, k.unit)}</td>
+                <td class="num">{k.previous_value === null ? "–" : kpiValue(k.previous_value, k.unit)}</td>
+                <td class:list={["num", (k.yoy_pct ?? 0) > 0 ? "pos" : (k.yoy_pct ?? 0) < 0 ? "neg" : ""]}>{yoyText(k)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </div>
+        {r.vs_consensus && (
+          <ul class="vs">
+            {r.vs_consensus.eps && (
+              <li>
+                <span>Resultat per aktie mot förväntan {expectedText(r.vs_consensus.eps, true)}
+                  {r.vs_consensus.eps.analysts !== null && ` (${r.vs_consensus.eps.analysts} analytiker)`}</span>
+                <span class:list={["verdict", r.vs_consensus.eps.verdict.replace(" ", "-")]}>{surpriseText(r.vs_consensus.eps)}</span>
+              </li>
+            )}
+            {r.vs_consensus.revenue && (
+              <li>
+                <span>Omsättning mot förväntan {expectedText(r.vs_consensus.revenue, false)}
+                  {r.vs_consensus.revenue.analysts !== null && ` (${r.vs_consensus.revenue.analysts} analytiker)`}</span>
+                <span class:list={["verdict", r.vs_consensus.revenue.verdict.replace(" ", "-")]}>{surpriseText(r.vs_consensus.revenue)}</span>
+              </li>
+            )}
+          </ul>
+        )}
+        {r.note && <p class="note">{r.note}</p>}
+      </article>
+    ))
+  }
+
+  {
+    without.length > 0 && (
+      <details class="without">
+        <summary>Rapporter utan jämförbara nyckeltal ({without.length})</summary>
+        <ul>
+          {without.map((r) => (
+            <li>
+              <strong>{r.name}</strong>: {r.note}{" "}
+              <a href={r.url} rel="noopener noreferrer" target="_blank">rapporten<span aria-hidden="true"> ↗</span></a>
+            </li>
+          ))}
+        </ul>
+      </details>
+    )
+  }
+  <p class="note">
+    Förväntan är analytikernas snitt enligt Yahoo, sparat dagen före rapporten. Inom ±2 % räknas som i linje. Yahoos
+    vinst per aktie kan vara justerad och skilja sig från bolagets redovisade resultat per aktie.
+  </p>
+</div>
+
+<style>
+  .lead {
+    margin: 0 0 12px;
+    max-width: 70ch;
+  }
+  .warn-box {
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    background: var(--banner-bg);
+    color: var(--banner-fg);
+    border: 1px solid var(--banner-border);
+  }
+  .report {
+    background: var(--surface-2);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 12px;
+  }
+  .report h3 {
+    margin: 0;
+    font-size: 1.0625rem;
+  }
+  .meta {
+    margin: 2px 0 8px;
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+  .muted {
+    color: var(--muted);
+    font-weight: normal;
+    font-size: 0.8125rem;
+  }
+  .table-wrap {
+    overflow-x: auto;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+  }
+  th,
+  td {
+    padding: 4px 8px 4px 0;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  thead th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  tbody th {
+    font-weight: normal;
+  }
+  .num {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .pos {
+    color: var(--pos);
+  }
+  .neg {
+    color: var(--neg);
+  }
+  .vs {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 4px;
+    font-size: 0.875rem;
+  }
+  .vs li {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 2px 12px;
+  }
+  .verdict {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0 7px;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .verdict.över {
+    color: var(--pos);
+  }
+  .verdict.under {
+    color: var(--neg);
+  }
+  .note {
+    margin: 8px 0 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+  .without {
+    margin: 8px 0;
+    font-size: 0.875rem;
+  }
+  .without summary {
+    cursor: pointer;
+    color: var(--accent);
+  }
+  .without ul {
+    margin: 6px 0;
+    padding-left: 18px;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+</style>

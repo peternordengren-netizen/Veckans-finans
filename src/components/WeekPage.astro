@@ -7,6 +7,7 @@ import Base from "../layouts/Base.astro";
 import AnalysisPanel from "./AnalysisPanel.astro";
 import CalendarPanel from "./CalendarPanel.astro";
 import SignalsPanel from "./SignalsPanel.astro";
+import ResultsPanel from "./ResultsPanel.astro";
 import CompanyCard from "./CompanyCard.astro";
 import MorningReportView from "./MorningReport.astro";
 import { weekdayDate } from "../lib/calendar";
@@ -148,6 +149,22 @@ const morningTime = morning
           ))
         }
         {
+          view.results && (
+            <button
+              type="button"
+              role="tab"
+              id="tab-rapporterade"
+              aria-controls="sektor-rapporterade"
+              aria-selected="false"
+              tabindex={-1}
+              data-sector="rapporterade"
+            >
+              Rapporterade bolag
+              <span class="count">{view.results.reports.length}</span>
+            </button>
+          )
+        }
+        {
           view.signals && (
             <button
               type="button"
@@ -264,6 +281,15 @@ const morningTime = morning
             ))}
           </section>
         ))
+      }
+
+      {
+        view.results && (
+          <section class="sector" id="sektor-rapporterade" role="tabpanel" aria-labelledby="tab-rapporterade" tabindex="0">
+            <h2>Rapporterade bolag</h2>
+            <ResultsPanel results={view.results} />
+          </section>
+        )
       }
 
       {

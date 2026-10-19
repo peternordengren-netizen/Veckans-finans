@@ -918,7 +918,8 @@ def _default_targets() -> list[Path]:
     return sorted(
         [*DATA_DIR.glob("weeks/*.json"), *DATA_DIR.glob("prices/*.json"), *DATA_DIR.glob("analysis/*.json"),
          *DATA_DIR.glob("calendar/*.json"), *DATA_DIR.glob("signals/*.json"), *DATA_DIR.glob("morning/*.json"),
-         *DATA_DIR.glob("consensus/*.json"),
+         *DATA_DIR.glob("consensus/*.json"), *DATA_DIR.glob("results/*.json"),
+         *DATA_DIR.glob("results/*/omgang-*.json"),
          *DATA_DIR.glob("mock/weeks/*.json"), *DATA_DIR.glob("mock/prices/*.json"),
          *DATA_DIR.glob("mock/analysis/*.json"), *DATA_DIR.glob("mock/calendar/*.json"),
          *DATA_DIR.glob("mock/signals/*.json"), *DATA_DIR.glob("mock/morning/*.json")]
@@ -934,7 +935,15 @@ def main(argv: list[str]) -> int:
     for path in targets:
         data = json.loads(path.read_text(encoding="utf-8"))
         in_mock_dir = MOCK_DIR in path.resolve().parents
-        if path.parent.name == "prices":
+        if path.parent.parent.name == "results" and re.fullmatch(r"omgang-\d+", path.stem):
+            from validate_results import validate_batch
+
+            res = validate_batch(data, path.parent.name, int(path.stem.split("-")[1]), instruments)
+        elif path.parent.name == "results":
+            from validate_results import validate_results
+
+            res = validate_results(data, path.stem, instruments)
+        elif path.parent.name == "prices":
             res = validate_prices(data, path.stem)
         elif path.parent.name == "analysis":
             res = validate_analysis(data, path.stem)

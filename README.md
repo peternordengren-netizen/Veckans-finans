@@ -194,6 +194,30 @@ filen med varningar:
 Sektorernas nyckeltal att bevaka finns under `kpis` i `data/sectors.json` och läses med
 `validate.load_sector_kpis()`.
 
+### Rapportutfall (`/rapportutfall`, `scripts/results.py`)
+
+Veckokörningen tar fram nyckeltal ur veckans rapporter med `scripts/run_results.ps1`. Veckans sida visar dem under
+fliken **Rapporterade bolag**.
+
+1. `report_list.py <vecka>` listar veckans rapporter för bolag i listan, en per bolag. Inbjudningar och datumbesked
+   ("…publicerar rapport den 21 oktober") räknas inte. Rapporterna delas in i omgångar om 20, med sektorns nyckeltal
+   plus nettoomsättning och resultat per aktie.
+2. `/rapportutfall <vecka> <omgång>` körs med Claude Code (`--model sonnet`) i läget `dontAsk`. Det får bara läsa,
+   skriva i `data/results/` och köra `report_list.py` och `validate.py`. Resultatet hamnar i
+   `data/results/<vecka>/omgang-<N>.json`. En godkänd omgång körs inte om.
+3. Valideringen (`scripts/validate_results.py`) kontrollerar:
+   - att citatet finns ordagrant i rapporten och har högst 25 ord
+   - att årets och föregående års tal, och en eventuell procentsats, står i citatet
+   - att procentsatsen stämmer med värdena
+   - att enheten passar nyckeltalet
+   - att perioden stämmer: närmaste periodangivelse före värdet, även inne i citatet, avgör om det är kvartal,
+     året hittills eller helår
+4. `results.py <vecka>` slår ihop omgångarna och räknar förändringen mot föregående år. Den jämför resultat per aktie
+   och omsättning för kvartalet med Yahoos konsensus från dagen före rapporten, om valutan stämmer och prognosen
+   gäller samma rapport. Inom ±2 % räknas som "i linje". Filen säkerhetskopieras med `backup_week.py`.
+
+Provkörning W42 (11 rapporter, en omgång): 1,4 minuter, motsvarande 0,29 USD till API-pris med Sonnet.
+
 ### Signaler (`scripts/signals.py`)
 
 `signals.py <vecka>` skriver `data/signals/<vecka>.json` (git-ignorerad) för alla bolag i `instruments.csv`.

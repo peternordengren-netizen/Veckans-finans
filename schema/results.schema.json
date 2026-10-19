@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "results.schema.json",
+  "title": "Veckans rapportutfall (scripts/results.py, data/results/<vecka>.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "week", "period", "generated_at", "reports", "missing_batches"],
+  "$defs": {
+    "comparison": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["actual", "expected", "analysts", "currency", "surprise_pct", "verdict"],
+      "properties": {
+        "actual": { "type": "number" },
+        "expected": { "type": "number" },
+        "analysts": { "type": ["integer", "null"] },
+        "currency": { "type": "string" },
+        "surprise_pct": { "type": "number" },
+        "verdict": { "enum": ["över", "i linje", "under"] }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "week": { "type": "string", "pattern": "^\\d{4}-W\\d{2}$" },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": { "start": { "type": "string" }, "end": { "type": "string" } }
+    },
+    "generated_at": { "type": "string" },
+    "mock": { "const": true },
+    "missing_batches": { "type": "array", "items": { "type": "integer" } },
+    "reports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ticker", "name", "sector", "published", "url", "source_name", "raw_file", "period", "note",
+          "kpis", "vs_consensus"],
+        "properties": {
+          "ticker": { "type": "string" },
+          "name": { "type": "string" },
+          "sector": { "type": ["string", "null"] },
+          "published": { "type": "string" },
+          "url": { "type": "string" },
+          "source_name": { "type": "string" },
+          "raw_file": { "type": "string" },
+          "period": { "type": "string" },
+          "note": { "type": ["string", "null"] },
+          "kpis": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "name", "value", "unit", "previous_value", "change_pct", "yoy_pct", "period_kind", "quote"],
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "value": { "type": "number" },
+                "unit": { "type": "string" },
+                "previous_value": { "type": ["number", "null"] },
+                "change_pct": { "type": ["number", "null"], "description": "Rapportens egen procentsats (står i citatet)." },
+                "yoy_pct": { "type": ["number", "null"], "description": "Förändring mot föregående år: change_pct, annars uträknad." },
+                "period_kind": { "enum": ["kvartal", "delår", "helår"] },
+                "quote": { "type": "string" }
+              }
+            }
+          },
+          "vs_consensus": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["consensus_date", "eps", "revenue"],
+            "properties": {
+              "consensus_date": { "type": "string" },
+              "eps": { "$ref": "#/$defs/comparison" },
+              "revenue": { "$ref": "#/$defs/comparison" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
