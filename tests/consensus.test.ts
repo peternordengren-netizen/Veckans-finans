@@ -2,7 +2,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { amount, estimateText, perShare, warnings, type Consensus } from "../src/lib/consensus.ts";
+import { amount, estimateText, expectedChange, perShare, warnings, type Consensus } from "../src/lib/consensus.ts";
+
+const MINUS = "\u2212";
 
 const base: Consensus = {
   ticker: "ALFA",
@@ -21,8 +23,13 @@ test("belopp och vinst per aktie", () => {
   assert.equal(amount(1_234_000_000, "EUR"), "1,2 mdr EUR");
 });
 
-test("prognostext med antal analytiker och föregående år", () => {
-  assert.equal(estimateText(base.eps!, perShare), "5,43 kr (4 analytiker, i fjol 5,53 kr)");
+test("prognostext med förväntad förändring mot fjol och antal analytiker", () => {
+  assert.equal(estimateText(base.eps!, perShare), `5,43 kr (${MINUS}2 % mot fjol, 4 analytiker)`);
+  assert.equal(estimateText({ ...base.eps!, avg: 2.37, year_ago: 1.9 }, perShare), "2,37 kr (+25 % mot fjol, 4 analytiker)");
+  assert.equal(estimateText(base.revenue!, amount), "18,6 mdr kr (+8 % mot fjol, 11 analytiker)");
+  // Från förlust till vinst: ingen procentsats, fjolårets värde i stället.
+  assert.equal(estimateText({ ...base.eps!, avg: 0.4, year_ago: -0.2, analysts: 2 }, perShare),
+    `0,40 kr (i fjol ${MINUS}0,20 kr, 2 analytiker)`);
   assert.equal(
     estimateText({ ...base.revenue!, analysts: null, year_ago: null }, amount),
     "18,6 mdr kr",
@@ -44,4 +51,28 @@ test("varningar: få analytiker, annan valuta, fastigheter", () => {
 test("konsensus efter rapport visas inte", () => {
   assert.deepEqual(warnings({ ...base, after_report: true }, "fastigheter"), ["konsensus efter rapport – visas inte"]);
   assert.deepEqual(warnings({ ...base, after_report: false }, "industri"), []);
+});
+
+test("förväntad förändring", () => {
+  assert.equal(Math.round(expectedChange({ ...base.eps!, avg: 2.37, year_ago: 1.9 })! * 10) / 10, 24.7);
+  assert.equal(expectedChange({ ...base.eps!, year_ago: null }), null);
+  assert.equal(expectedChange({ ...base.eps!, year_ago: 0 }), null);
+  assert.equal(expectedChange({ ...base.eps!, avg: -0.5, year_ago: 0.4 }), null);
+  // Två förluster: mindre förlust än i fjol är en positiv förändring.
+  assert.equal(expectedChange({ ...base.eps!, avg: -0.5, year_ago: -1 }), 50);
+});
+
+test("stor förändring, få analytiker: över ±50 % och färre än 3 analytiker", () => {
+  const big = { ...base.eps!, avg: 3.2, year_ago: 2.0 }; // +60 %
+  assert.deepEqual(warnings({ ...base, eps: { ...big, analysts: 2 } }, "industri"), [
+    "bara 2 analytiker för vinst per aktie",
+    "stor förändring, få analytiker",
+  ]);
+  assert.deepEqual(warnings({ ...base, eps: { ...big, analysts: 3 } }, "industri"), []); // tillräckligt många
+  assert.deepEqual(warnings({ ...base, eps: { ...big, avg: 3.0, analysts: 1 } }, "industri"), [
+    "bara 1 analytiker för vinst per aktie",
+  ]); // exakt +50 %: ingen varning
+  // Omsättningen räknas också.
+  const rev = { ...base.revenue!, avg: 2e9, year_ago: 1e9, analysts: 2 }; // +100 %
+  assert.deepEqual(warnings({ ...base, revenue: rev }, "industri"), ["stor förändring, få analytiker"]);
 });

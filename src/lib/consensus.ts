@@ -44,12 +44,40 @@ export function amount(value: number, currency: string | null): string {
   return `${nf(0, 0).format(value)} ${unit(currency)}`;
 }
 
-/** "5,43 kr (4 analytiker, i fjol 5,53 kr)". */
+/** Över så stor förväntad förändring (±procent) och med färre än MIN_ANALYSTS analytiker varnas det. */
+export const BIG_CHANGE_PCT = 50;
+
+/**
+ * Förväntad förändring mot samma kvartal i fjol i procent, eller null om den saknar mening:
+ * fjolåret saknas, är noll eller har annat tecken än förväntan (t.ex. från förlust till vinst).
+ */
+export function expectedChange(e: Estimate): number | null {
+  const ya = e.year_ago;
+  if (ya === null || ya === 0 || Math.sign(ya) !== Math.sign(e.avg)) return null;
+  return ((e.avg - ya) / Math.abs(ya)) * 100;
+}
+
+const signedPct = (v: number) =>
+  `${new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0, signDisplay: "exceptZero" }).format(v)} %`;
+
+/**
+ * "2,37 kr (+25 % mot fjol, 4 analytiker)". Går förändringen inte att uttrycka i procent
+ * (tecknet byts, fjolåret är noll) visas fjolårets värde: "0,40 kr (i fjol −0,20 kr, 2 analytiker)".
+ */
 export function estimateText(e: Estimate, format: (v: number, c: string | null) => string): string {
   const parts = [];
+  const change = expectedChange(e);
+  if (change !== null) parts.push(`${signedPct(change)} mot fjol`);
+  else if (e.year_ago !== null) parts.push(`i fjol ${format(e.year_ago, e.currency)}`);
   if (e.analysts !== null) parts.push(`${e.analysts} analytiker`);
-  if (e.year_ago !== null) parts.push(`i fjol ${format(e.year_ago, e.currency)}`);
   return parts.length ? `${format(e.avg, e.currency)} (${parts.join(", ")})` : format(e.avg, e.currency);
+}
+
+/** Stor förväntad förändring (över ±BIG_CHANGE_PCT %) från färre än MIN_ANALYSTS analytiker. */
+export function bigChangeFewAnalysts(e: Estimate | null): boolean {
+  if (e === null) return false;
+  const change = expectedChange(e);
+  return change !== null && Math.abs(change) > BIG_CHANGE_PCT && (e.analysts ?? 0) < MIN_ANALYSTS;
 }
 
 /**
@@ -57,6 +85,7 @@ export function estimateText(e: Estimate, format: (v: number, c: string | null) 
  * - färre än MIN_ANALYSTS analytiker för vinst per aktie (eller ingen prognos alls)
  * - bolaget redovisar i annan valuta än kronor
  * - fastighetsbolag: vinst per aktie styrs av värdeförändringar
+ * - förväntad förändring över ±50 % mot fjol från färre än 3 analytiker (vinst eller omsättning)
  */
 export function warnings(c: Consensus, sector: string | null | undefined): string[] {
   if (c.after_report) return ["konsensus efter rapport – visas inte"];
@@ -64,6 +93,7 @@ export function warnings(c: Consensus, sector: string | null | undefined): strin
   const n = c.eps?.analysts ?? 0;
   if (c.eps === null) out.push("ingen prognos för vinst per aktie");
   else if (n < MIN_ANALYSTS) out.push(`bara ${n} analytiker för vinst per aktie`);
+  if (bigChangeFewAnalysts(c.eps) || bigChangeFewAnalysts(c.revenue)) out.push("stor förändring, få analytiker");
   const ccy = c.financial_currency ?? c.eps?.currency ?? c.revenue?.currency ?? null;
   if (ccy && ccy !== "SEK") out.push(`redovisar i ${ccy}`);
   if (sector === "fastigheter") out.push("vinst per aktie styrs av värdeförändringar – se förvaltningsresultatet");
