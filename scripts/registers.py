@@ -211,9 +211,15 @@ def aggregate_changes(snaps: list[dict], start: date, end: date, instruments: di
 
 
 def insyn_summary(raw_dir: Path, week: str, start: date, end: date, isin_to_ticker: dict[str, str],
-                  instruments: dict[str, Instrument], under_offer: set[str] = frozenset()) -> dict:
-    files = {p.stem.removeprefix("insyn-"): _load(p) for p in (raw_dir / week / "fi").glob("insyn-*.json")}
-    days = [(start + timedelta(days=i)).isoformat() for i in range(7)]
+                  instruments: dict[str, Instrument], under_offer: set[str] = frozenset(),
+                  days: list[str] | None = None, files: dict[str, dict] | None = None) -> dict:
+    """Insyn per bolag för veckans publiceringsdagar. days/files används av morgonrapporten
+    (scripts/morning.py) för valfria dagar och redan inlästa filer; standard är veckans sju
+    dagar ur <raw_dir>/<vecka>/fi/."""
+    if files is None:
+        files = {p.stem.removeprefix("insyn-"): _load(p) for p in (raw_dir / week / "fi").glob("insyn-*.json")}
+    if days is None:
+        days = [(start + timedelta(days=i)).isoformat() for i in range(7)]
     excluded = {"other_nature": 0, "not_share": 0, "share_program": 0, "not_current": 0, "non_sek": 0,
                 "below_threshold": 0, "not_in_list": 0}
     per: dict[str, dict] = {}

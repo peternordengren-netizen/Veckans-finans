@@ -1,0 +1,467 @@
+---
+/**
+ * Morgonrapporten för en handelsdag: dagens rapporter, nattens pressmeddelanden, insyn,
+ * blankning och gårdagens kurssignaler. Allt är framräknat utan Claude (scripts/morning.py).
+ */
+import Base from "../layouts/Base.astro";
+import { statusText } from "../lib/calendar";
+import { formatDate, type MorningReport } from "../lib/data";
+import { shortDate } from "../lib/format";
+import { ratio, sek, signedPct } from "../lib/signals";
+import { weekdayDate } from "../lib/calendar";
+
+interface Props {
+  report: MorningReport;
+  dates: string[];
+}
+const { report, dates } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const time = (iso: string) =>
+  new Date(iso).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" });
+const dayTime = (iso: string) =>
+  `${shortDate(new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" }))} ${time(iso)}`;
+const signalLabel = { omsättning: "Hög omsättning", "52v-högsta": "Nära 52 v högsta", "52v-lägsta": "Nära 52 v lägsta" };
+const newsCount = report.news.reduce((n, c) => n + c.items.length, 0);
+const reports = report.reports_today.filter((e) => e.kind === "rapport");
+const meetings = report.reports_today.filter((e) => e.kind === "stämma");
+---
+
+<Base title={`Morgonrapport ${formatDate(report.date)} – Veckans finans`}>
+  <main>
+    <header class="page-head">
+      <div class="wrap">
+        <p class="brand"><a href={`${base}/`}>Veckans finans</a></p>
+        <div class="title-row">
+          <div>
+            <h1>Morgonrapport</h1>
+            <p class="period">{weekdayDate(report.date)} · sammanställd kl. {time(report.generated_at)}</p>
+          </div>
+          {
+            dates.length > 1 && (
+              <nav class="day-nav" aria-label="Välj dag">
+                <label for="day-select">Dag</label>
+                <select id="day-select" data-day-select>
+                  {dates.map((d) => (
+                    <option value={`${base}/morgon/${d}/`} selected={d === report.date}>
+                      {weekdayDate(d)}
+                    </option>
+                  ))}
+                </select>
+              </nav>
+            )
+          }
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <nav class="toc" aria-label="Innehåll">
+        <a href="#rapporter">Rapporter i dag <span class="n">{reports.length}</span></a>
+        <a href="#nyheter">Nyheter <span class="n">{newsCount}</span></a>
+        <a href="#insyn">Insyn <span class="n">{report.insider.companies.length}</span></a>
+        <a href="#blankning">Blankning <span class="n">{report.short.positions.length + report.short.aggregate.length}</span></a>
+        <a href="#kurser">Kurser i går <span class="n">{report.price.companies.length}</span></a>
+      </nav>
+
+      <section id="rapporter" class="block">
+        <h2>Rapporter i dag</h2>
+        {reports.length === 0 && meetings.length === 0 && <p class="empty">Inga rapporter eller stämmor i dag enligt kalendern.</p>}
+        {
+          report.reports_today.length > 0 && (
+            <ul class="rows">
+              {report.reports_today.map((e) => (
+                <li>
+                  <span>
+                    <strong>{e.name}</strong> <span class="muted">{e.ticker}</span>
+                    {e.kind === "stämma" && <span class="kind">Stämma</span>}
+                  </span>
+                  <span class:list={["status", e.status]}>{statusText(e)}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </section>
+
+      <section id="nyheter" class="block">
+        <h2>Pressmeddelanden sedan {dayTime(report.news_since)}</h2>
+        <p class="note">Bolag i bevakningslistan, utan rutinmeddelanden. Bolag som rapporterar i dag står först.</p>
+        {report.news.length === 0 && <p class="empty">Inga pressmeddelanden.</p>}
+        {
+          report.news.map((c) => (
+            <div class="company">
+              <h3>
+                {c.name} <span class="muted">{c.ticker}</span>
+                {c.report_today && <span class="kind">Rapport i dag</span>}
+              </h3>
+              <ul>
+                {c.items.map((it) => (
+                  <li>
+                    <time datetime={it.published}>{dayTime(it.published)}</time>{" "}
+                    <a href={it.url} rel="noopener noreferrer" target="_blank">
+                      {it.title}
+                      <span class="sr-only"> ({it.source}, öppnas i ny flik)</span>
+                      <span aria-hidden="true"> ↗</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        }
+      </section>
+
+      <section id="insyn" class="block">
+        <h2>Insyn</h2>
+        <p class="note">
+          Publicerat {report.insider.days.map(shortDate).join(", ")}: köp och försäljningar för mer än{" "}
+          {sek(report.insider.threshold_sek).replace("+", "")}.
+          {report.insider.days_missing.length > 0 && ` Saknas: ${report.insider.days_missing.map(shortDate).join(", ")}.`}
+        </p>
+        {report.insider.companies.length === 0 && <p class="empty">Inga insynsaffärer över tröskeln.</p>}
+        {
+          report.insider.companies.length > 0 && (
+            <ul class="rows">
+              {report.insider.companies.map((c) => (
+                <li>
+                  <span>
+                    <strong>{c.name}</strong> <span class="muted">{c.ticker}</span>
+                    {(c.cluster_buy || c.cluster_sell) && <span class="kind">Flera insynspersoner</span>}
+                  </span>
+                  <span class="num">
+                    netto {sek(c.net_value_sek)}
+                    <span class="muted">
+                      {" "}
+                      ({c.buyers.length} köpare, {c.sellers.length} säljare)
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </section>
+
+      <section id="blankning" class="block">
+        <h2>Blankning</h2>
+        {!report.short.available && <p class="empty">{report.short.note}</p>}
+        {
+          report.short.available && (
+            <>
+              <p class="note">
+                Ändringar i Finansinspektionens register mellan {shortDate(report.short.from_as_of!)} och{" "}
+                {shortDate(report.short.to_as_of!)}.
+              </p>
+              <h3 class="sub">Enskilda positioner över 0,5 %</h3>
+              {report.short.positions.length === 0 && <p class="empty">Inga ändringar.</p>}
+              <ul class="rows">
+                {report.short.positions.map((p) => (
+                  <li>
+                    <span>
+                      <strong>{p.name}</strong> <span class="muted">{p.holder}</span>
+                    </span>
+                    <span class="num">
+                      {p.start_pct ? `${p.start_pct.toLocaleString("sv-SE")} %` : "under 0,5 %"} →{" "}
+                      {p.end_pct ? `${p.end_pct.toLocaleString("sv-SE")} %` : "under 0,5 %"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <h3 class="sub">Sammanlagd blankning, ändrad minst 0,2 procentenheter</h3>
+              {report.short.aggregate.length === 0 && <p class="empty">Inga ändringar.</p>}
+              <ul class="rows">
+                {report.short.aggregate.map((c) => (
+                  <li>
+                    <span>
+                      <strong>{c.name}</strong> <span class="muted">{c.ticker}</span>
+                    </span>
+                    <span class="num">
+                      {c.start_pct.toLocaleString("sv-SE")} % → {c.end_pct.toLocaleString("sv-SE")} % av aktierna
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )
+        }
+      </section>
+
+      <section id="kurser" class="block">
+        <h2>Kurser {report.price.day ? weekdayDate(report.price.day).toLowerCase() : "i går"}</h2>
+        <p class="note">
+          Bolag med minst {ratio(report.price.thresholds.volume_ratio)} snittomsättningen (20 dagar) eller högst{" "}
+          {report.price.thresholds.near_52w_pct.toLocaleString("sv-SE")} % från 52-veckorshögsta/-lägsta.
+          {report.price.index_change_pct !== null && ` OMX Stockholm PI: ${signedPct(report.price.index_change_pct, 2)}.`}
+        </p>
+        {report.price.companies.length === 0 && <p class="empty">Inga kurssignaler.</p>}
+        {
+          report.price.companies.length > 0 && (
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Bolag</th>
+                    <th scope="col">Signal</th>
+                    <th scope="col" class="num">Dag</th>
+                    <th scope="col" class="num">Mot index</th>
+                    <th scope="col" class="num">Omsättning</th>
+                    <th scope="col" class="num">Från högsta</th>
+                    <th scope="col" class="num">Från lägsta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.price.companies.map((c) => (
+                    <tr>
+                      <th scope="row">
+                        <strong>{c.name}</strong> <span class="muted">{c.ticker}</span>
+                      </th>
+                      <td>{c.signals.map((s) => signalLabel[s]).join(", ")}</td>
+                      <td class="num">{signedPct(c.change_pct)}</td>
+                      <td class="num">{signedPct(c.relative_pp)}</td>
+                      <td class="num">{ratio(c.volume_ratio)}</td>
+                      <td class="num">{signedPct(c.from_high_pct)}</td>
+                      <td class="num">{signedPct(c.from_low_pct)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        }
+      </section>
+
+      {
+        report.errors.length > 0 && (
+          <details class="errors">
+            <summary>Fel vid hämtningen ({report.errors.length})</summary>
+            <ul>
+              {report.errors.map((e) => (
+                <li>{e}</li>
+              ))}
+            </ul>
+          </details>
+        )
+      }
+    </div>
+  </main>
+</Base>
+
+<script>
+  document.querySelector<HTMLSelectElement>("[data-day-select]")?.addEventListener("change", (e) => {
+    location.href = (e.target as HTMLSelectElement).value;
+  });
+</script>
+
+<style>
+  .page-head {
+    padding: 24px 0 16px;
+  }
+  .brand {
+    margin: 0 0 4px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .brand a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+  .title-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 12px;
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(1.75rem, 5vw, 2.25rem);
+    line-height: 1.15;
+  }
+  .period {
+    margin: 4px 0 0;
+    color: var(--muted);
+  }
+  .day-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+  .day-nav select {
+    font: inherit;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 8px;
+  }
+  .toc {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 4px 0 10px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .toc a {
+    flex-shrink: 0;
+    color: var(--text);
+    text-decoration: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 0.9375rem;
+  }
+  .n {
+    font-size: 0.75rem;
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+  }
+  .block {
+    padding: 16px 0 8px;
+    scroll-margin-top: 8px;
+  }
+  .block h2 {
+    margin: 0 0 6px;
+    font-size: 1.375rem;
+  }
+  .sub {
+    margin: 12px 0 4px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .note,
+  .empty,
+  .muted {
+    color: var(--muted);
+  }
+  .note {
+    margin: 0 0 10px;
+    font-size: 0.875rem;
+    max-width: 70ch;
+  }
+  .empty {
+    margin: 0 0 8px;
+  }
+  .rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background: var(--surface-2);
+    border-radius: var(--radius);
+  }
+  .rows li {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 2px 12px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--border);
+  }
+  .rows li:first-child {
+    border-top: 0;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  .kind {
+    margin-left: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 4px;
+    background: var(--indirect-bg);
+    color: var(--indirect-fg);
+  }
+  .status {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .status.bekräftat {
+    color: var(--pos);
+  }
+  .status.avvikelse {
+    color: var(--banner-fg);
+    background: var(--banner-bg);
+    border-color: var(--banner-border);
+  }
+  .company {
+    background: var(--surface-2);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    margin-bottom: 10px;
+  }
+  .company h3 {
+    margin: 0 0 4px;
+    font-size: 1rem;
+  }
+  .company ul {
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+    display: grid;
+    gap: 4px;
+    font-size: 0.9375rem;
+  }
+  .company time {
+    color: var(--muted);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+    margin-right: 4px;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+  }
+  th,
+  td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  thead th {
+    background: var(--surface-2);
+  }
+  tbody th {
+    font-weight: normal;
+  }
+  th.num,
+  td.num {
+    text-align: right;
+  }
+  .errors {
+    margin-top: 16px;
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+</style>

@@ -81,6 +81,21 @@ def test_klassning_av_rubriker():
     assert classify("Alfaverken förvärvar bolag") is None
 
 
+def test_avsandarens_slug_avgor_inte_rubriken():
+    from report_calendar import match_company, name_patterns, slugify
+
+    patterns = name_patterns(INSTRUMENTS)
+    # "Alfaverken Media" är ett annat bolag (inte i listan) trots namnet i rubriken.
+    other = {"source": "mfn", "company": "alfaverken-media", "title": "Alfaverken Media lämnar preliminära siffror"}
+    assert match_company(other, INSTRUMENTS, patterns) is None
+    own = {"source": "cision", "company": "betabolaget-ab", "title": "Inbjudan till rapport"}
+    assert match_company(own, INSTRUMENTS, patterns) == "BETA"
+    no_slug = {"source": "mfn", "company": None, "title": "Gammagruppens delårsrapport"}
+    assert match_company(no_slug, INSTRUMENTS, patterns) == "GAMA"
+    assert slugify("Bergman & Beving") == "bergman-beving"
+    assert slugify("Fjällhem Fastigheter") == "fjallhem-fastigheter"
+
+
 def _events(data):
     return {(e["ticker"], e["kind"]): e for e in data["events"]}
 
@@ -91,16 +106,16 @@ def test_status_per_rapport(tmp_path):
         ("2026-W41", "mfn", "alfaverken", "2026-10-08T08:00:00+02:00", "Inbjudan till presentation av Q3-rapport",
          "Rapporten publiceras den 22 oktober 2026."),
         # Betabolaget: MFN 23 okt (namn i rubriken), Yahoo 21 okt -> avvikelse.
-        ("2026-W42", "cision", "beta-ab", "2026-10-13T08:00:00+02:00",
+        ("2026-W42", "cision", "betabolaget-ab", "2026-10-13T08:00:00+02:00",
          "Betabolaget: Inbjudan till presentation av delårsrapport", "Delårsrapporten publiceras den 23 oktober 2026."),
         # Gammagruppen: bara MFN.
         ("2026-W42", "mfn", "gammagruppen", "2026-10-14T08:00:00+02:00",
          "Inbjudan till Gammagruppens rapport för tredje kvartalet", "Rapporten kommer den 20 oktober 2026."),
         # Deltafastigheter: MFN-datum som redan passerats räknas inte -> bara Yahoo.
-        ("2026-W41", "mfn", "delta", "2026-10-05T08:00:00+02:00",
+        ("2026-W41", "mfn", "deltafastigheter", "2026-10-05T08:00:00+02:00",
          "Deltafastigheter: Inbjudan till presentation av delårsrapport", "Rapporten publiceras den 9 oktober 2026."),
         # Epsilonindustri: stämma.
-        ("2026-W42", "mfn", "epsilon", "2026-10-12T08:00:00+02:00", "Kallelse till extra bolagsstämma i Epsilonindustri",
+        ("2026-W42", "mfn", "epsilonindustri", "2026-10-12T08:00:00+02:00", "Kallelse till extra bolagsstämma i Epsilonindustri",
          "Aktieägarna kallas till extra bolagsstämma den 24 oktober 2026."),
     ])
     yahoo = {"ALFA.ST": [date(2026, 10, 22)], "BETA.ST": [date(2026, 10, 21)], "DELT.ST": [date(2026, 10, 24)]}

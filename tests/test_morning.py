@@ -1,0 +1,148 @@
+"""Tester för scripts/morning.py och validate_morning (påhittade bolag och rådata)."""
+
+import json
+import sys
+from datetime import date, datetime, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from morning import (  # noqa: E402
+    build, insider_since, is_business_day, overnight_news, previous_business_day, short_since,
+)
+from signals import Bar  # noqa: E402
+from validate import Instrument, validate_morning  # noqa: E402
+
+TZ = ZoneInfo("Europe/Stockholm")
+MONDAY = date(2026, 10, 19)
+NOW = datetime(2026, 10, 19, 8, 10, tzinfo=TZ)
+
+INSTRUMENTS = {
+    "ALFA": Instrument("Alfaverken", (), "ALFA", "ALFA.ST", "Stockholm", mfn_slug="alfaverken", isin=("SE0000000011",)),
+    "BETA": Instrument("Betabolaget", (), "BETA", "BETA.ST", "Stockholm", isin=("SE0000000029",)),
+}
+
+
+def write_json(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+def news_item(n, published, title, company="alfaverken", source="mfn", routine=False):
+    return {"id": str(n), "source": source, "source_name": source.upper(), "url": f"https://mfn.example/{n}",
+            "published": published, "title": title, "company": company, "routine": routine, "path": f"{source}/{n}.txt"}
+
+
+def test_handelsdagar():
+    assert previous_business_day(MONDAY) == date(2026, 10, 16)
+    assert previous_business_day(date(2026, 12, 28)) == date(2026, 12, 23)  # jul
+    assert not is_business_day(date(2026, 10, 18)) and not is_business_day(date(2026, 12, 24))
+
+
+def test_nattens_nyheter_fonster_rutin_och_dubbletter(tmp_path):
+    actions, local = tmp_path / "raw", tmp_path / "morning-raw"
+    write_json(actions / "2026-W42" / "index.json", {"items": [
+        news_item(1, "2026-10-16T17:00:00+02:00", "Före stängning"),  # före fönstret
+        news_item(2, "2026-10-16T18:00:00+02:00", "Alfaverken vinner order"),
+        news_item(3, "2026-10-17T09:00:00+02:00", "Kallelse till stämma", routine=True),
+    ]})
+    write_json(local / "2026-W43" / "index.json", {"items": [
+        news_item(4, "2026-10-19T07:00:00+02:00", "Alfaverken delårsrapport"),
+        news_item(2, "2026-10-16T18:00:00+02:00", "Alfaverken vinner order"),  # samma URL som i Actions-datan
+        news_item(5, "2026-10-19T07:30:00+02:00", "Betabolaget förvärvar", company="betabolaget"),
+    ]})
+    since = datetime(2026, 10, 16, 17, 30, tzinfo=TZ)
+    news = overnight_news([actions, local], INSTRUMENTS, since, NOW, reporting_today={"BETA"})
+    assert [c["ticker"] for c in news] == ["BETA", "ALFA"]  # rapport i dag först
+    assert news[0]["report_today"] is True
+    assert [i["title"] for i in news[1]["items"]] == ["Alfaverken vinner order", "Alfaverken delårsrapport"]
+
+
+def _insyn_row(isin, nature, volume, price, published):
+    return {"nature": nature, "instrument_type": "Aktie", "share_program": False, "status": "Aktuell",
+            "currency": "SEK", "isin": isin, "volume": volume, "price": price, "person": "P", "position": "VD",
+            "closely_associated": "Nej", "transaction_date": published, "published_date": published,
+            "venue": "NASDAQ STOCKHOLM AB"}
+
+
+def test_insyn_sedan_forra_handelsdagen(tmp_path):
+    raw = tmp_path / "raw"
+    write_json(raw / "2026-W42" / "fi" / "insyn-2026-10-16.json",
+               {"rows": [_insyn_row("SE0000000011", "Förvärv", 10_000, 50.0, "2026-10-16")]})
+    write_json(raw / "2026-W42" / "fi" / "insyn-2026-10-15.json",  # före fönstret
+               {"rows": [_insyn_row("SE0000000029", "Förvärv", 10_000, 50.0, "2026-10-15")]})
+    days = ["2026-10-16", "2026-10-17", "2026-10-18"]
+    ins = insider_since([raw], days, INSTRUMENTS)
+    assert [c["ticker"] for c in ins["companies"]] == ["ALFA"]
+    assert ins["companies"][0]["net_value_sek"] == 500_000
+    assert ins["days_missing"] == ["2026-10-17", "2026-10-18"]
+
+
+def _snap(as_of, current, aggregate):
+    return {"as_of": as_of, "current": current, "aggregate": aggregate}
+
+
+def test_blankning_mellan_ogonblicksbilder(tmp_path):
+    raw = tmp_path / "raw"
+    pos = lambda holder, isin, pct: {"holder": holder, "issuer": "x", "isin": isin, "pct": pct, "date": "2026-10-15"}  # noqa: E731
+    write_json(raw / "2026-W42" / "fi" / "blankning-2026-10-15.json", _snap(
+        "2026-10-15", [pos("Fond A", "SE0000000011", 0.6)],
+        [{"issuer": "Alfaverken AB", "pct": 1.0}, {"issuer": "Betabolaget AB", "pct": 0.5}]))
+    write_json(raw / "2026-W42" / "fi" / "blankning-2026-10-18.json", _snap(
+        "2026-10-18", [pos("Fond B", "SE0000000029", 0.7)],
+        [{"issuer": "Alfaverken AB", "pct": 1.1}, {"issuer": "Betabolaget AB", "pct": 1.0}]))
+    s = short_since([raw], date(2026, 10, 15), date(2026, 10, 18), INSTRUMENTS)
+    assert s["available"] and (s["from_as_of"], s["to_as_of"]) == ("2026-10-15", "2026-10-18")
+    assert {(p["ticker"], p["holder"], p["change_pp"]) for p in s["positions"]} == {
+        ("ALFA", "Fond A", -0.6), ("BETA", "Fond B", 0.7)}
+    # Alfaverken +0,1 under tröskeln 0,2; Betabolaget +0,5.
+    assert [(a["ticker"], a["change_pp"]) for a in s["aggregate"]] == [("BETA", 0.5)]
+    same = short_since([raw], date(2026, 10, 18), date(2026, 10, 18), INSTRUMENTS)
+    assert same["available"] is False
+
+
+def _bars(last_volume, closes):
+    start = date(2026, 9, 1)
+    days = [start + timedelta(days=i) for i in range(60) if (start + timedelta(days=i)).weekday() < 5]
+    days = [d for d in days if d <= date(2026, 10, 16)][-len(closes):]
+    return [Bar(d, c, c, c, c, last_volume if i == len(days) - 1 else 1000.0) for i, (d, c) in enumerate(zip(days, closes))]
+
+
+def test_hela_rapporten_validerar(tmp_path):
+    raw = tmp_path / "raw"
+    write_json(raw / "2026-W43" / "index.json", {"items": [news_item(1, "2026-10-19T07:00:00+02:00", "Alfaverken Q3")]})
+
+    def fetch(_tickers, _start, _end):
+        return {
+            "^OMXSPI": _bars(1000.0, [100.0] * 29 + [101.0]),
+            "ALFA.ST": _bars(3000.0, [100.0] * 29 + [110.0]),  # +10 %, 3× omsättning, 52v-högsta
+            "BETA.ST": _bars(1000.0, [100.0] * 15 + [120.0] * 14 + [110.0]),  # mitt i intervallet
+        }
+
+    calendar = {"events": [{"date": "2026-10-19", "kind": "rapport", "ticker": "ALFA", "name": "Alfaverken",
+                            "status": "yahoo", "yahoo_date": "2026-10-19", "mfn_date": None, "mfn_url": None}]}
+    data = build(MONDAY, NOW, INSTRUMENTS, [raw], calendar, fetch)
+    data["errors"] = []
+    assert data["news_since"] == "2026-10-16T17:30:00+02:00"
+    assert data["insider"]["days"] == ["2026-10-16", "2026-10-17", "2026-10-18"]
+    assert data["price"]["day"] == "2026-10-16"
+    [alfa] = data["price"]["companies"]
+    assert (alfa["ticker"], alfa["signals"], alfa["relative_pp"]) == ("ALFA", ["omsättning", "52v-högsta"], 9.0)
+    assert data["news"][0]["report_today"] is True
+    assert validate_morning(data, INSTRUMENTS).errors == []
+
+    data["price"]["companies"][0]["signals"] = ["omsättning"]
+    data["news"][0]["items"][0]["published"] = "2026-10-15T09:00:00+02:00"
+    errors = validate_morning(data, INSTRUMENTS).errors
+    assert any("signalerna" in e for e in errors) and any("utanför" in e for e in errors)
+
+
+def test_ingen_handelsdag_ger_ingen_fil(tmp_path, monkeypatch, capsys):
+    import morning
+
+    monkeypatch.setattr(morning, "MORNING_DIR", tmp_path)
+    assert morning.main(["--date", "2026-10-18", "--no-fetch"]) == 0
+    assert "ingen handelsdag" in capsys.readouterr().out
+    assert list(tmp_path.iterdir()) == []

@@ -196,6 +196,25 @@ Hög omsättning räknas på veckans snitt, inte på största dagen. I W42 gav s
 veckosnittet 20. Trösklarna sparas i filen, och valideringen räknar om signalerna från värdena. Jämförelsen mot index
 görs bara för `.ST`-tickers, som antas vara i kronor.
 
+### Morgonrapport (`scripts/morning.py`)
+
+`morning.py` skriver `data/morning/<datum>.json` (git-ignorerad) varje handelsdag, utan Claude. Sidan visar den på
+`/morgon/`, med länk från veckosidan. Rapporten innehåller:
+
+- **Rapporter i dag** ur rapportkalendern. Kalendern för innevarande vecka skrivs om varje morgon.
+- **Pressmeddelanden** för bolag i listan sedan förra handelsdagen kl. 17:30, utan rutinmeddelanden. Bolag som
+  rapporterar i dag står först.
+- **Insyn** publicerad sedan förra handelsdagen, med samma filter som veckoanalysen.
+- **Blankning:** ändrade positioner över 0,5 % och ändringar i sammanlagd blankning på minst 0,2 procentenheter, mellan
+  registrets ögonblicksbilder.
+- **Kurser i går:** bolag med minst 2 gånger snittomsättningen eller högst 2 % från 52-veckorshögsta/-lägsta.
+
+MFN, Cision, Riksbanken och FI hämtas lokalt till `data/morning/raw/`, med en hämtning per källa och körning. De
+hämtas aldrig till `data/raw/`, som är klonen av det privata repot. GitHub Actions schemalagda jobb kan komma timmar
+för sent: FI-jobbet "06:37" har committats 10:45–11:15, så morgonrapporten kan inte vänta på dem. Avsändaren av ett
+pressmeddelande avgörs av MFN:s eller Cisions bolagsslug, inte av namn i rubriken. Annars skulle till exempel
+"Catena Media" räknas som Catena.
+
 ## Sidan (Astro)
 
 Kräver Node 22 eller senare.
@@ -231,6 +250,10 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
   Fler försök kör du manuellt med `-Week`. Om senaste veckan saknas visar sidan en varning överst. Skriptet kör `/sammanfatta-veckan` för förra veckan med den fristående Claude Code-CLI:n i
   läget `dontAsk`, med en uttömmande lista över tillåtna verktyg. Därefter bygger det om sidan. Finns veckofilen redan
   avbryts körningen. Loggarna och slutrapporten (`<vecka>-slutrapport.md`) hamnar i `logs/weekly/`.
+- **VeckansFinansMorgonrapport** kör `scripts/run_morning.ps1` vardagar 08:10, så att rapporter som släpps
+  07:00–08:00 kommer med före börsöppning. Den väcks och tas igen vid inloggning och upplåsning på samma sätt som
+  veckouppgiften. Claude används inte, så den drar ingenting av abonnemanget. Se [Morgonrapport](#morgonrapport-scriptsmorningpy).
+  Loggarna hamnar i `logs/morning/`.
 - Skrivbordsgenvägen **Veckans finans** kör `scripts/open_site.ps1`. Den startar servern om den inte svarar och
   öppnar sidan.
 

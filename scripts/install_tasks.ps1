@@ -6,7 +6,9 @@
 #   Väcker datorn (kräver nätström – väckningstimers är avstängda på batteri), körs i
 #   efterhand om datorn var avstängd, högst 2 timmar. Startas också fem minuter efter inloggning
 #   och upplåsning, så att en missad måndag tas igen (skriptet gör inget om veckan redan finns).
-# Båda körs som den inloggade användaren, bara när hen är inloggad, utan förhöjd behörighet.
+# - VeckansFinansMorgonrapport: vardagar 08:10, kör scripts\run_morning.ps1 (utan Claude).
+#   Samma väckning och inloggnings-/upplåsningsutlösare som veckouppgiften, högst 30 minuter.
+# Alla körs som den inloggade användaren, bara när hen är inloggad, utan förhöjd behörighet.
 # - Skrivbordsgenvägen "Veckans finans" kör scripts\open_site.ps1 dolt.
 #
 # Körs manuellt: powershell -NoProfile -File scripts\install_tasks.ps1
@@ -57,6 +59,19 @@ Register-ScheduledTask -TaskName "VeckansFinansVeckosammanfattning" -Force `
     -Action (HiddenAction "scripts\run_weekly.ps1") `
     -Trigger @($weekly, $atLogon, $atUnlock) `
     -Principal $Principal -Settings $weeklySettings | Out-Null
+
+# Vardagar 08:10 lokal tid (morning.py hoppar själv över börsens stängda dagar), samma
+# väckning, inloggnings- och upplåsningsutlösare som veckouppgiften.
+$morning = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday -At "08:10"
+$morning.StartBoundary = (Get-Date "08:10").ToString("yyyy-MM-dd'T'HH:mm:ss")
+$morningSettings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+Register-ScheduledTask -TaskName "VeckansFinansMorgonrapport" -Force `
+    -Description "Veckans finans: morgonrapport utan Claude (scripts\morning.py), bygger sedan om sidan. Loggar i logs\morning\." `
+    -Action (HiddenAction "scripts\run_morning.ps1") `
+    -Trigger @($morning, $atLogon, $atUnlock) `
+    -Principal $Principal -Settings $morningSettings | Out-Null
 
 $shell = New-Object -ComObject WScript.Shell
 $lnk = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath("Desktop")) "Veckans finans.lnk"))

@@ -168,12 +168,34 @@ def name_patterns(instruments: dict[str, Instrument]) -> list[tuple[re.Pattern, 
     return [(re.compile(rf"(?<!\w){re.escape(n)}(?::?s)?(?!\w)", re.IGNORECASE), t) for n, t in pairs]
 
 
+_SLUG_SUFFIXES = {"", "ab", "publ", "ab-publ", "group", "holding", "asa", "oyj", "plc"}
+
+
+def slugify(name: str) -> str:
+    """'Dometic Group' -> 'dometic-group', 'Bergman & Beving' -> 'bergman-beving' (som MFN:s och Cisions slugar)."""
+    s = name.casefold().translate(str.maketrans("åäöéü", "aaoeu"))
+    return "-".join(re.findall(r"[a-z0-9]+", s))
+
+
 def match_company(item: dict, instruments: dict[str, Instrument], patterns: list[tuple[re.Pattern, str]]) -> str | None:
-    """Ticker för postens bolag: MFN-slug först, annars namn eller alias i rubriken."""
-    if item.get("source") == "mfn":
+    """Ticker för postens avsändare.
+
+    Har posten en bolagsslug (MFN och Cision) måste den stämma med bolagets mfn_slug, eller
+    med namnet/ett alias som slug, eventuellt följt av ett bolagssuffix ("-ab", "-group" …).
+    Annars skulle t.ex. "Catena Media" (inte i listan) matchas som Catena via rubriken.
+    Bara poster utan slug matchas på namn eller alias i rubriken.
+    """
+    slug = item.get("company")
+    if slug:
         for inst in instruments.values():
-            if inst.mfn_slug and inst.mfn_slug == item.get("company"):
+            if inst.mfn_slug and inst.mfn_slug == slug and item.get("source") == "mfn":
                 return inst.ticker
+        for inst in instruments.values():
+            for n in (inst.namn, *inst.alias):
+                base = slugify(n)
+                if base and (slug == base or (slug.startswith(base + "-") and slug[len(base) + 1:] in _SLUG_SUFFIXES)):
+                    return inst.ticker
+        return None
     for rx, ticker in patterns:
         if rx.search(item.get("title", "")):
             return ticker

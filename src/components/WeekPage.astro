@@ -8,7 +8,8 @@ import AnalysisPanel from "./AnalysisPanel.astro";
 import CalendarPanel from "./CalendarPanel.astro";
 import SignalsPanel from "./SignalsPanel.astro";
 import CompanyCard from "./CompanyCard.astro";
-import { formatDate, weekLabel, type WeekView } from "../lib/data";
+import { formatDate, listMorningDates, weekLabel, type WeekView } from "../lib/data";
+import { shortDate } from "../lib/format";
 import { describePolicyRate, formatRate } from "../lib/policyRate";
 
 interface Props {
@@ -22,6 +23,7 @@ const directionLabel = { positiv: "Positiv", negativ: "Negativ", blandad: "Bland
 const pr = view.policyRate;
 // "oförändrad sedan …" om senaste ändringen skedde före veckan, annars "sänkt/höjd från …".
 const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
+const latestMorning = listMorningDates()[0] ?? null;
 ---
 
 <Base title={`${weekLabel(view.week)} – Veckans finans`}>
@@ -39,7 +41,17 @@ const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
 
     <header class="page-head">
       <div class="wrap">
-        <p class="brand"><a href={`${base}/`}>Veckans finans</a></p>
+        <p class="brand">
+          <a href={`${base}/`}>Veckans finans</a>
+          {
+            latestMorning && (
+              <>
+                <span aria-hidden="true"> · </span>
+                <a class="morning-link" href={`${base}/morgon/`}>Morgonrapport {shortDate(latestMorning)}</a>
+              </>
+            )
+          }
+        </p>
         <div class="title-row">
           <div>
             <h1>{weekLabel(view.week)}</h1>
@@ -342,6 +354,9 @@ const rateText = pr ? describePolicyRate(pr, view.start, view.end) : null;
   .brand a {
     color: var(--muted);
     text-decoration: none;
+  }
+  .brand .morning-link {
+    color: var(--accent);
   }
   .title-row {
     display: flex;

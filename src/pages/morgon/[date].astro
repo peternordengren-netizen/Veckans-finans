@@ -1,0 +1,15 @@
+---
+/** En dags morgonrapport. */
+import MorningPage from "../../components/MorningPage.astro";
+import { listMorningDates, loadMorning } from "../../lib/data";
+
+export function getStaticPaths() {
+  return listMorningDates().map((date) => ({ params: { date } }));
+}
+
+const { date } = Astro.params;
+const report = loadMorning(date!);
+const dates = listMorningDates();
+---
+
+<MorningPage report={report} dates={dates} />

@@ -816,13 +816,65 @@ def validate_signals(data: dict, expected_week: str | None, instruments: dict[st
     return res
 
 
+def validate_morning(data: dict, instruments: dict[str, Instrument]) -> Result:
+    """Morgonrapporten (scripts/morning.py): schema, handelsdag, bolagen finns i listan,
+    nyheterna ligger i tidsfönstret och kurssignalerna stämmer med värdena."""
+    from morning import is_business_day, price_signals  # sent, eftersom morning.py importerar den här modulen
+
+    res = Result()
+    res.errors += _schema_errors(_schema_validator("morning.schema.json"), data)
+    if res.errors:
+        return res
+    day = date.fromisoformat(data["date"])
+    if not is_business_day(day):
+        res.errors.append(f"{day} är ingen handelsdag")
+    _check_datetime(data["generated_at"], "generated_at", res)
+    _check_datetime(data["news_since"], "news_since", res)
+    if res.errors:
+        return res
+    since, until = datetime.fromisoformat(data["news_since"]), datetime.fromisoformat(data["generated_at"])
+
+    def known(ticker: str, name: str, where: str) -> None:
+        inst = instruments.get(ticker)
+        if inst is None or inst.namn != name:
+            res.errors.append(f"{where}: {name} ({ticker}) finns inte i instruments.csv")
+
+    for e in data["reports_today"]:
+        known(e["ticker"], e["name"], "reports_today")
+        if data["date"] not in (e["yahoo_date"], e["mfn_date"]):
+            res.errors.append(f"reports_today: {e['name']} har inget datum i dag")
+    reporting = {e["ticker"] for e in data["reports_today"] if e["kind"] == "rapport"}
+    for c in data["news"]:
+        known(c["ticker"], c["name"], "news")
+        if c["report_today"] != (c["ticker"] in reporting):
+            res.errors.append(f"news: {c['name']}: report_today stämmer inte med dagens rapporter")
+        for it in c["items"]:
+            if not since <= datetime.fromisoformat(it["published"]) <= until:
+                res.errors.append(f"news: {c['name']}: {it['published']} ligger utanför {since}–{until}")
+    for c in data["insider"]["companies"]:
+        known(c["ticker"], c["name"], "insider")
+        if c["net_value_sek"] != c["buy_value_sek"] - c["sell_value_sek"]:
+            res.errors.append(f"insider: {c['name']}: netto ≠ köp − sälj")
+    for key in ("positions", "aggregate"):
+        for c in data["short"][key]:
+            known(c["ticker"], c["name"], f"short.{key}")
+            if abs(c["end_pct"] - c["start_pct"] - c["change_pp"]) > 0.011:
+                res.errors.append(f"short.{key}: {c['name']}: förändring ≠ slut − start")
+    for c in data["price"]["companies"]:
+        known(c["ticker"], c["name"], "price")
+        expected = price_signals(c, data["price"]["thresholds"])
+        if sorted(c["signals"]) != sorted(expected):
+            res.errors.append(f"price: {c['name']}: signalerna {c['signals']} stämmer inte med värdena (väntat {expected})")
+    return res
+
+
 def _default_targets() -> list[Path]:
     return sorted(
         [*DATA_DIR.glob("weeks/*.json"), *DATA_DIR.glob("prices/*.json"), *DATA_DIR.glob("analysis/*.json"),
-         *DATA_DIR.glob("calendar/*.json"), *DATA_DIR.glob("signals/*.json"),
+         *DATA_DIR.glob("calendar/*.json"), *DATA_DIR.glob("signals/*.json"), *DATA_DIR.glob("morning/*.json"),
          *DATA_DIR.glob("mock/weeks/*.json"), *DATA_DIR.glob("mock/prices/*.json"),
          *DATA_DIR.glob("mock/analysis/*.json"), *DATA_DIR.glob("mock/calendar/*.json"),
-         *DATA_DIR.glob("mock/signals/*.json")]
+         *DATA_DIR.glob("mock/signals/*.json"), *DATA_DIR.glob("mock/morning/*.json")]
     )
 
 
@@ -839,6 +891,8 @@ def main(argv: list[str]) -> int:
             res = validate_prices(data, path.stem)
         elif path.parent.name == "analysis":
             res = validate_analysis(data, path.stem)
+        elif path.parent.name == "morning":
+            res = validate_morning(data, mock_instruments if in_mock_dir else instruments)
         elif path.parent.name == "signals":
             res = validate_signals(data, path.stem, mock_instruments if in_mock_dir else instruments)
         elif path.parent.name == "calendar":

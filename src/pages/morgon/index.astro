@@ -1,0 +1,22 @@
+---
+/** Senaste morgonrapporten. */
+import Base from "../../layouts/Base.astro";
+import MorningPage from "../../components/MorningPage.astro";
+import { listMorningDates, loadMorning } from "../../lib/data";
+
+const dates = listMorningDates();
+const report = dates.length > 0 ? loadMorning(dates[0]) : null;
+---
+
+{
+  report ? (
+    <MorningPage report={report} dates={dates} />
+  ) : (
+    <Base title="Morgonrapport – Veckans finans">
+      <main class="wrap" style="padding-top: 48px">
+        <h1>Morgonrapport</h1>
+        <p>Ingen morgonrapport finns ännu.</p>
+      </main>
+    </Base>
+  )
+}

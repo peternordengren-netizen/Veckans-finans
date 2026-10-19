@@ -15,6 +15,49 @@ const PRICES_DIR = IS_MOCK ? join(DATA, "mock", "prices") : join(DATA, "prices")
 const ANALYSIS_DIR = IS_MOCK ? join(DATA, "mock", "analysis") : join(DATA, "analysis");
 const CALENDAR_DIR = IS_MOCK ? join(DATA, "mock", "calendar") : join(DATA, "calendar");
 const SIGNALS_DIR = IS_MOCK ? join(DATA, "mock", "signals") : join(DATA, "signals");
+const MORNING_DIR = IS_MOCK ? join(DATA, "mock", "morning") : join(DATA, "morning");
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Morgonrapporten (scripts/morning.py, schema/morning.schema.json).
+export interface MorningChange {
+  ticker: string;
+  name: string;
+  holder?: string;
+  start_pct: number;
+  end_pct: number;
+  change_pp: number;
+}
+export interface MorningReport {
+  date: string;
+  generated_at: string;
+  news_since: string;
+  reports_today: (CalendarEvent & { kind: "rapport" | "stämma" })[];
+  news: { ticker: string; name: string; report_today: boolean; items: { published: string; title: string; url: string; source: string }[] }[];
+  insider: { threshold_sek: number; days: string[]; days_missing: string[]; companies: InsiderCompany[] };
+  short: { available: boolean; note: string | null; from_as_of: string | null; to_as_of: string | null; positions: MorningChange[]; aggregate: MorningChange[] };
+  price: {
+    day: string | null;
+    index_change_pct: number | null;
+    thresholds: { volume_ratio: number; near_52w_pct: number };
+    companies: { ticker: string; name: string; change_pct: number | null; relative_pp: number | null; volume_ratio: number | null; from_high_pct: number | null; from_low_pct: number | null; signals: ("omsättning" | "52v-högsta" | "52v-lägsta")[] }[];
+  };
+  errors: string[];
+}
+
+/** Datum med morgonrapport, nyast först. */
+export function listMorningDates(): string[] {
+  if (!existsSync(MORNING_DIR)) return [];
+  return readdirSync(MORNING_DIR)
+    .filter((f) => f.endsWith(".json"))
+    .map((f) => f.slice(0, -5))
+    .filter((d) => DATE_RE.test(d))
+    .sort()
+    .reverse();
+}
+
+export function loadMorning(day: string): MorningReport {
+  return readJson<MorningReport>(join(MORNING_DIR, `${day}.json`));
+}
 const WEEK_RE = /^\d{4}-W\d{2}$/;
 
 export type Impact = "direkt" | "indirekt";

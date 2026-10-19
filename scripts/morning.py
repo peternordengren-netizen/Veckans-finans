@@ -1,0 +1,338 @@
+"""Morgonrapport för en handelsdag, utan Claude: dagens rapporter, nattens pressmeddelanden,
+insyn och blankning sedan förra handelsdagen och gårdagens kurssignaler.
+
+Skriver data/morning/<datum>.json (schema/morning.schema.json). Körs vardagar 08:10 av
+scripts/run_morning.ps1, så att rapporter som släpps 07:00–08:00 kommer med före börsöppning.
+
+Källor och hämtning (en hämtning per källa och körning):
+- MFN/Cision/Riksbanken (fetch.py) och FI (fi_fetch.py) hämtas lokalt till
+  data/morning/raw/, aldrig till data/raw/ (klonen av det privata repot, som bara Actions
+  och säkerhetskopian skriver i). GitHub Actions schemalagda jobb kan komma timmar för sent
+  – FI-jobbet "06:37" har committats 10:45–11:15 – så rapporten kan inte vänta på dem.
+- data/raw/ (Actions) och data/morning/raw/ läses båda; samma post räknas en gång.
+- Rapportkalendern för innevarande vecka skrivs om (scripts/report_calendar.py), så att
+  veckosidans "Kommande vecka" också hålls aktuell.
+- Kursdata: ett batchanrop till Yahoo (scripts/signals.py) för gårdagens handelsdag.
+
+Innehåll:
+- reports_today: kalenderns rapporter och stämmor i dag
+- news: icke-rutinmässiga pressmeddelanden för bolag i listan sedan förra handelsdagen 17:30
+- insider: insyn (samma filter som registers.py) publicerad sedan förra rapporten
+- short: ändrade blankningspositioner över 0,5 % mellan registrets ögonblicksbilder, och
+  ändringar i sammanlagd blankning på minst SHORT_AGGREGATE_DAILY_PP procentenheter
+- price: bolag med hög omsättning eller nära 52-veckorshögsta/-lägsta under gårdagens
+  handelsdag (trösklar som signals.THRESHOLDS, men för en enda dag)
+
+Användning:
+    python scripts/morning.py                 # i dag
+    python scripts/morning.py --date 2026-10-20 --no-fetch
+Exit-kod: 0 = filen skriven eller ingen handelsdag, 1 = fel.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shutil
+import sys
+from datetime import date, datetime, time, timedelta
+from pathlib import Path
+from typing import Callable
+from zoneinfo import ZoneInfo
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import report_calendar  # noqa: E402
+from registers import _aggregate_by_ticker, insyn_summary  # noqa: E402
+from signals import THRESHOLDS, BarFetcher, price_stats, week_change, yahoo_bars  # noqa: E402
+from prices import INDEX_TICKER  # noqa: E402
+from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, validate_morning  # noqa: E402
+from workdays import non_business_days  # noqa: E402
+
+STOCKHOLM = ZoneInfo("Europe/Stockholm")
+MORNING_DIR = DATA_DIR / "morning"
+MORNING_RAW = MORNING_DIR / "raw"
+NEWS_FROM = time(17, 30)  # nattens nyheter räknas från förra handelsdagens stängning
+SHORT_AGGREGATE_DAILY_PP = 0.2  # på en dag är ändringarna mindre än över en vecka
+KEEP_RAW_WEEKS = 3  # data/morning/raw/ rensas från äldre veckor
+
+
+def is_business_day(d: date) -> bool:
+    return d.weekday() < 5 and d not in non_business_days(d.year)
+
+
+def previous_business_day(d: date) -> date:
+    d -= timedelta(days=1)
+    while not is_business_day(d):
+        d -= timedelta(days=1)
+    return d
+
+
+def _iso_week(d: date) -> str:
+    y, w, _ = d.isocalendar()
+    return f"{y}-W{w:02d}"
+
+
+def _dedupe_url(url: str) -> str:
+    return url.split("?")[0].rstrip("/")
+
+
+# --- Nyheter -----------------------------------------------------------------
+
+
+def overnight_news(raw_dirs: list[Path], instruments: dict[str, Instrument], since: datetime, until: datetime,
+                   reporting_today: set[str]) -> list[dict]:
+    """Pressmeddelanden för bolag i listan publicerade i [since, until], per bolag."""
+    patterns = report_calendar.name_patterns(instruments)
+    weeks = {_iso_week(since.date()), _iso_week(until.date())}
+    seen: set[str] = set()
+    per: dict[str, dict] = {}
+    for raw in raw_dirs:
+        for wk in sorted(weeks):
+            index_path = raw / wk / "index.json"
+            if not index_path.exists():
+                continue
+            for it in json.loads(index_path.read_text(encoding="utf-8")).get("items", []):
+                if it.get("source") not in ("mfn", "cision") or it.get("routine"):
+                    continue
+                published = datetime.fromisoformat(it["published"])
+                if not since <= published <= until:
+                    continue
+                key = _dedupe_url(it["url"])
+                also = {_dedupe_url(a["url"]) for a in it.get("also_in", [])}
+                if key in seen or also & seen:
+                    continue
+                ticker = report_calendar.match_company(it, instruments, patterns)
+                if ticker is None:
+                    continue
+                seen.add(key)
+                seen.update(also)
+                c = per.setdefault(ticker, {"ticker": ticker, "name": instruments[ticker].namn,
+                                            "report_today": ticker in reporting_today, "items": []})
+                c["items"].append({"published": published.isoformat(), "title": it["title"], "url": it["url"],
+                                   "source": it.get("source_name") or it["source"]})
+    out = list(per.values())
+    for c in out:
+        c["items"].sort(key=lambda i: i["published"])
+    # Bolag med rapport i dag först, sedan efter första nyhetens tid.
+    out.sort(key=lambda c: (not c["report_today"], c["items"][0]["published"], c["name"]))
+    return out
+
+
+# --- FI ----------------------------------------------------------------------
+
+
+def _fi_files(raw_dirs: list[Path], pattern: str) -> dict[str, Path]:
+    """FI-filer per datum ur alla rådatamappar (senast hämtad vinner inte – alla har samma as_of-innehåll)."""
+    files: dict[str, Path] = {}
+    for raw in raw_dirs:
+        for p in raw.glob(f"*/fi/{pattern}-*.json"):
+            files.setdefault(p.stem.removeprefix(f"{pattern}-"), p)
+    return files
+
+
+def insider_since(raw_dirs: list[Path], days: list[str], instruments: dict[str, Instrument]) -> dict:
+    """Insyn publicerad de angivna dagarna, med samma filter som veckoanalysen."""
+    paths = _fi_files(raw_dirs, "insyn")
+    files = {d: json.loads(paths[d].read_text(encoding="utf-8")) for d in days if d in paths}
+    isin_to_ticker = {isin: t for t, i in instruments.items() for isin in i.isin}
+    s = insyn_summary(RAW_DIR, "", date.min, date.min, isin_to_ticker, instruments, days=days, files=files)
+    return {"threshold_sek": s["threshold_sek"], "days": days, "days_missing": s["days_missing"],
+            "companies": s["companies"]}
+
+
+def short_since(raw_dirs: list[Path], prev_as_of: date, as_of: date, instruments: dict[str, Instrument]) -> dict:
+    """Ändringar mellan registrets ögonblicksbilder (senaste ≤ prev_as_of mot senaste ≤ as_of)."""
+    paths = _fi_files(raw_dirs, "blankning")
+    this_key = max((d for d in paths if d <= as_of.isoformat()), default=None)
+    prev_key = max((d for d in paths if d <= prev_as_of.isoformat()), default=None)
+    empty = {"from_as_of": prev_key, "to_as_of": this_key, "positions": [], "aggregate": []}
+    if this_key is None or prev_key is None or this_key == prev_key:
+        return {"available": False, "note": "ingen ny ögonblicksbild av blankningsregistret sedan förra rapporten",
+                **empty}
+    this = json.loads(paths[this_key].read_text(encoding="utf-8"))
+    prev = json.loads(paths[prev_key].read_text(encoding="utf-8"))
+    isin_to_ticker = {isin: t for t, i in instruments.items() for isin in i.isin}
+
+    def state(snap: dict) -> dict[tuple[str, str], float]:
+        return {(r["holder"], r["isin"]): r["pct"] for r in snap["current"] if r["pct"]}
+
+    before, after = state(prev), state(this)
+    positions = []
+    for key in set(before) | set(after):
+        ticker = isin_to_ticker.get(key[1])
+        b, a = before.get(key, 0.0), after.get(key, 0.0)
+        if ticker and abs(a - b) > 1e-9:
+            positions.append({"ticker": ticker, "name": instruments[ticker].namn, "holder": key[0],
+                              "start_pct": round(b, 2), "end_pct": round(a, 2), "change_pp": round(a - b, 2)})
+    positions.sort(key=lambda p: (-abs(p["change_pp"]), p["name"], p["holder"]))
+    agg_b = _aggregate_by_ticker(prev, instruments, isin_to_ticker)
+    agg_a = _aggregate_by_ticker(this, instruments, isin_to_ticker)
+    aggregate = []
+    for t in set(agg_a) | set(agg_b):
+        s, e = round(agg_b.get(t, 0.0), 2), round(agg_a.get(t, 0.0), 2)
+        if abs(e - s) >= SHORT_AGGREGATE_DAILY_PP - 1e-9:
+            aggregate.append({"ticker": t, "name": instruments[t].namn, "start_pct": s, "end_pct": e,
+                              "change_pp": round(e - s, 2)})
+    aggregate.sort(key=lambda c: (-abs(c["change_pp"]), c["name"]))
+    return {"available": True, "note": None, "from_as_of": prev_key, "to_as_of": this_key,
+            "positions": positions, "aggregate": aggregate}
+
+
+# --- Kurser ------------------------------------------------------------------
+
+
+def price_signals(c: dict, thresholds: dict) -> list[str]:
+    """Kurssignaler för en dag (används även av valideringen)."""
+    out = []
+    if c["volume_ratio"] is not None and c["volume_ratio"] >= thresholds["volume_ratio"]:
+        out.append("omsättning")
+    if c["from_high_pct"] is not None and c["from_high_pct"] >= -thresholds["near_52w_pct"]:
+        out.append("52v-högsta")
+    if c["from_low_pct"] is not None and c["from_low_pct"] <= thresholds["near_52w_pct"]:
+        out.append("52v-lägsta")
+    return out
+
+
+def yesterday_prices(instruments: dict[str, Instrument], today: date, fetch: BarFetcher) -> dict:
+    """Gårdagens handelsdag (senaste dagen före i dag med kurser): bolag med kurssignal."""
+    tickers = [i.yahoo_ticker for i in instruments.values()]
+    bars = fetch([*tickers, INDEX_TICKER], today - timedelta(days=400), today - timedelta(days=1))
+    days = sorted({b.day for bs in bars.values() for b in bs if b.day < today})
+    if not days:
+        return {"day": None, "index_change_pct": None, "thresholds": _price_thresholds(), "companies": []}
+    day = days[-1]
+    index_change = week_change(bars.get(INDEX_TICKER, []), day, day)
+    companies = []
+    for inst in instruments.values():
+        stats = price_stats(bars.get(inst.yahoo_ticker, []), day, day)
+        if not stats:
+            continue
+        change = stats["change_pct"]
+        c = {
+            "ticker": inst.ticker, "name": inst.namn, "change_pct": change,
+            "relative_pp": round(change - index_change, 2)
+            if change is not None and index_change is not None and inst.yahoo_ticker.endswith(".ST") else None,
+            "volume_ratio": stats["volume_ratio"], "from_high_pct": stats["from_high_pct"],
+            "from_low_pct": stats["from_low_pct"],
+        }
+        c["signals"] = price_signals(c, THRESHOLDS)
+        if c["signals"]:
+            companies.append(c)
+    companies.sort(key=lambda c: (-(c["volume_ratio"] or 0), c["name"]))
+    return {"day": day.isoformat(), "index_change_pct": index_change, "thresholds": _price_thresholds(),
+            "companies": companies}
+
+
+def _price_thresholds() -> dict:
+    return {"volume_ratio": THRESHOLDS["volume_ratio"], "near_52w_pct": THRESHOLDS["near_52w_pct"]}
+
+
+# --- Sammanställning ---------------------------------------------------------
+
+
+def build(today: date, now: datetime, instruments: dict[str, Instrument], raw_dirs: list[Path],
+          calendar: dict | None, fetch: BarFetcher) -> dict:
+    prev = previous_business_day(today)
+    since = datetime.combine(prev, NEWS_FROM, STOCKHOLM)
+    reports_today = [
+        {k: e[k] for k in ("ticker", "name", "kind", "status", "yahoo_date", "mfn_date", "mfn_url")}
+        for e in (calendar or {}).get("events", []) if e["date"] == today.isoformat()
+    ]
+    reporting = {e["ticker"] for e in reports_today if e["kind"] == "rapport"}
+    # Insyn och blankning: publiceringsdagar sedan förra rapporten (förra handelsdagen t.o.m. i går).
+    days = [(prev + timedelta(days=i)).isoformat() for i in range((today - prev).days)]
+    return {
+        "schema_version": 1,
+        "date": today.isoformat(),
+        "generated_at": now.isoformat(timespec="seconds"),
+        "news_since": since.isoformat(),
+        "reports_today": reports_today,
+        "news": overnight_news(raw_dirs, instruments, since, now, reporting),
+        "insider": insider_since(raw_dirs, days, instruments),
+        "short": short_since(raw_dirs, prev - timedelta(days=1), today - timedelta(days=1), instruments),
+        "price": yesterday_prices(instruments, today, fetch),
+    }
+
+
+def _prune_morning_raw(today: date) -> None:
+    """Rensar data/morning/raw/ från veckor äldre än KEEP_RAW_WEEKS."""
+    keep = {_iso_week(today - timedelta(weeks=i)) for i in range(KEEP_RAW_WEEKS)}
+    for p in MORNING_RAW.glob("*-W*"):
+        if p.is_dir() and re.fullmatch(r"\d{4}-W\d{2}", p.name) and p.name not in keep:
+            shutil.rmtree(p)
+
+
+def fetch_local(today: date) -> list[str]:
+    """Hämtar MFN/Cision/Riksbanken och FI till data/morning/raw/. Returnerar fel som text."""
+    import fetch
+    import fi_fetch
+
+    errors = []
+    MORNING_RAW.mkdir(parents=True, exist_ok=True)
+    if fetch.main(["--raw-dir", str(MORNING_RAW)]) != 0:
+        errors.append("fetch.py: alla källor fallerade")
+    if fi_fetch.main(["--raw-dir", str(MORNING_RAW)]) != 0:
+        errors.append("fi_fetch.py: fel vid hämtning från FI")
+    _prune_morning_raw(today)
+    return errors
+
+
+def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
+         get_dates: Callable[[str], list[date]] = report_calendar.yahoo_report_dates,
+         now: datetime | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8")
+    p = argparse.ArgumentParser()
+    p.add_argument("--date", type=date.fromisoformat, help="rapportens datum (standard: i dag)")
+    p.add_argument("--no-fetch", action="store_true", help="hämta inget lokalt, använd befintlig rådata")
+    args = p.parse_args(argv)
+    now = now or datetime.now(STOCKHOLM)
+    today = args.date or now.date()
+    if not is_business_day(today):
+        print(f"{today} är ingen handelsdag – ingen morgonrapport.")
+        return 0
+
+    errors = [] if args.no_fetch else fetch_local(today)
+    instruments = load_instruments()
+    raw_dirs = [RAW_DIR, MORNING_RAW]
+
+    # Rapportkalendern för veckan skrivs om, med både Actions- och den lokala rådatan.
+    week = _iso_week(today)
+    calendar = report_calendar.build(week, RAW_DIR, instruments, today, now, get_dates)
+    cal_res = report_calendar.validate_calendar(calendar, week, instruments, RAW_DIR)
+    if cal_res.errors:
+        errors += [f"kalender: {e}" for e in cal_res.errors]
+        calendar = None
+    else:
+        out_cal = DATA_DIR / "calendar" / f"{week}.json"
+        out_cal.parent.mkdir(parents=True, exist_ok=True)
+        out_cal.write_text(json.dumps(calendar, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    data = build(today, now, instruments, raw_dirs, calendar, fetch_bars)
+    data["errors"] = errors + calendar_errors(calendar)
+    res = validate_morning(data, instruments)
+    if res.errors:
+        print("Morgonrapporten klarar inte valideringen – skrivs inte:", *res.errors, sep="\n  ", file=sys.stderr)
+        return 1
+    out = MORNING_DIR / f"{today}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(out)
+    print(f"Morgonrapport {today}: {len(data['reports_today'])} rapporter/stämmor i dag, "
+          f"{sum(len(c['items']) for c in data['news'])} nyheter för {len(data['news'])} bolag, "
+          f"insyn {len(data['insider']['companies'])} bolag, blankning "
+          f"{len(data['short']['positions'])} positioner/{len(data['short']['aggregate'])} aggregat, "
+          f"kurssignaler {len(data['price']['companies'])} bolag, {len(data['errors'])} fel -> {out}")
+    return 0
+
+
+def calendar_errors(calendar: dict | None) -> list[str]:
+    return [f"Yahoo: {e}" for e in (calendar or {}).get("errors", [])]
+
+
+if __name__ == "__main__":
+    sys.exit(main())
