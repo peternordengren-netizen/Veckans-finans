@@ -59,6 +59,20 @@ export function shortChange(row: Pick<SignalRow, "short_positions_pp" | "short_a
   return row.short_positions_pp ?? row.short_aggregate_pp;
 }
 
+/**
+ * Etikett och färgklass för en signal i tabellen. Insyn visas som "Insynsköp" eller
+ * "Insynsförsäljning" efter nettot; går köp och försäljningar jämnt ut står det bara "Insyn".
+ */
+export function signalChip(signal: Signal, row: Pick<SignalRow, "insider_net_sek">): { label: string; cls: string } {
+  if (signal === "insyn") {
+    const net = row.insider_net_sek ?? 0;
+    if (net > 0) return { label: "Insynsköp", cls: "insyn-kop" };
+    if (net < 0) return { label: "Insynsförsäljning", cls: "insyn-salj" };
+    return { label: "Insyn", cls: "insyn" };
+  }
+  return { label: SIGNAL_LABELS[signal], cls: signal };
+}
+
 /** Tabellens förvalda ordning: flest signaler först, därefter bolagsnamn (svensk ordning). */
 export function defaultOrder<T extends { name: string; signals: unknown[] }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => b.signals.length - a.signals.length || a.name.localeCompare(b.name, "sv"));

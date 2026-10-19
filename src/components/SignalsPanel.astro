@@ -4,13 +4,13 @@
  * förvalt; utan JavaScript visas alla bolag i filens ordning.
  */
 import type { SignalsView } from "../lib/data";
-import { SIGNAL_LABELS, defaultOrder, ratio, sek, shortChange, signedPct } from "../lib/signals";
+import { defaultOrder, ratio, sek, shortChange, signalChip, signedPct } from "../lib/signals";
 
 interface Props {
   signals: SignalsView;
 }
 const { signals } = Astro.props;
-// Förvald sortering: kolumnen "Antal signaler", flest först (se DEFAULT_SORT nedan).
+// Förvald sortering: kolumnen "Antal", flest först (se DEFAULT_SORT nedan).
 const rows = defaultOrder(signals.rows);
 const flagged = rows.filter((r) => r.signals.length > 0).length;
 const t = signals.thresholds;
@@ -20,7 +20,7 @@ const toneOrder = { positiv: 3, blandad: 2, neutral: 1, negativ: 0 };
 // Kolumner: nyckel för sortering och om värdet är tal eller text.
 const columns = [
   { key: "name", label: "Bolag", type: "text" },
-  { key: "count", label: "Antal signaler", type: "num" },
+  { key: "count", label: "Antal", type: "num", title: "Antal signaler" },
   { key: "signals", label: "Signaler", type: "text" },
   { key: "tone", label: "Ton", type: "num" },
   { key: "change", label: "Vecka", type: "num" },
@@ -43,7 +43,10 @@ const DEFAULT_SORT = "count";
   <details class="legend">
     <summary>Så räknas signalerna</summary>
     <ul>
-      <li><strong>Insyn:</strong> insynspersoner har köpt eller sålt för mer än 100 000 kr under veckan.</li>
+      <li>
+        <strong>Insynsköp / Insynsförsäljning:</strong> insynspersoner har köpt eller sålt för mer än 100 000 kr under
+        veckan; etiketten följer nettot (står det bara "Insyn" tar köp och försäljningar ut varandra).
+      </li>
       <li>
         <strong>Blankning:</strong> en enskild position över 0,5 % har ändrats, eller den sammanlagda blankningen har
         ändrats med minst {n(t.short_aggregate_pp)} procentenheter.
@@ -73,14 +76,21 @@ const DEFAULT_SORT = "count";
     <span class="shown" data-shown aria-live="polite">{flagged} av {rows.length} bolag har en signal</span>
   </div>
 
-  <div class="table-wrap">
+  <div class="table-outer" data-table-outer>
+  <div class="table-wrap" data-table-wrap>
     <table>
       <thead>
         <tr>
           {
             columns.map((c) => (
-              <th scope="col" data-key={c.key} data-type={c.type} aria-sort={c.key === DEFAULT_SORT ? "descending" : "none"}>
-                <button type="button">{c.label}</button>
+              <th
+                scope="col"
+                class={`col-${c.key}`}
+                data-key={c.key}
+                data-type={c.type}
+                aria-sort={c.key === DEFAULT_SORT ? "descending" : "none"}
+              >
+                <button type="button" title={"title" in c ? c.title : undefined}>{c.label}</button>
               </th>
             ))
           }
@@ -90,18 +100,19 @@ const DEFAULT_SORT = "count";
         {
           rows.map((r) => {
             const s = shortChange(r);
+            const chips = r.signals.map((sig) => signalChip(sig, r));
             return (
               <tr data-flagged={r.signals.length > 0 ? "1" : "0"}>
                 <th scope="row" data-v={r.name}>
                   <span class="name">{r.name}</span> <span class="ticker">{r.ticker}</span>
                 </th>
-                <td class="num" data-v={r.signals.length}>
+                <td class="num col-count" data-v={r.signals.length}>
                   {r.signals.length}
                 </td>
-                <td data-v={r.signals.map((sig) => SIGNAL_LABELS[sig]).join(", ")}>
+                <td class="col-signals" data-v={chips.map((c) => c.label).join(", ")}>
                   <span class="chips">
-                    {r.signals.map((sig) => (
-                      <span class:list={["chip", sig]}>{SIGNAL_LABELS[sig]}</span>
+                    {chips.map((c) => (
+                      <span class:list={["chip", c.cls]}>{c.label}</span>
                     ))}
                   </span>
                 </td>
@@ -136,6 +147,7 @@ const DEFAULT_SORT = "count";
       </tbody>
     </table>
   </div>
+  </div>
   <p class="note">
     "Mot index" jämför med OMX Stockholm PI och visas bara för aktier i kronor. Blankning visar förändringen i andel av
     aktierna.
@@ -160,6 +172,28 @@ const DEFAULT_SORT = "count";
     };
     checkbox.addEventListener("change", applyFilter);
     applyFilter();
+
+    // Full fönsterbredd: CSS:en räknar med 100vw minus rullningslistens bredd (--sbw).
+    // Skuggor vid kanterna visar att tabellen går att rulla i sidled.
+    const outer = root.querySelector<HTMLElement>("[data-table-outer]")!;
+    const wrap = root.querySelector<HTMLElement>("[data-table-wrap]")!;
+    const setScrollbarWidth = () =>
+      document.documentElement.style.setProperty("--sbw", `${window.innerWidth - document.documentElement.clientWidth}px`);
+    const updateShadows = () => {
+      const max = wrap.scrollWidth - wrap.clientWidth;
+      outer.classList.toggle("more-right", max > 1 && wrap.scrollLeft < max - 1);
+      outer.classList.toggle("more-left", wrap.scrollLeft > 1);
+    };
+    wrap.addEventListener("scroll", updateShadows, { passive: true });
+    window.addEventListener("resize", () => {
+      setScrollbarWidth();
+      updateShadows();
+    });
+    // Fliken kan vara dold när sidan laddas; mät om när tabellen får sin storlek.
+    new ResizeObserver(updateShadows).observe(wrap);
+    new ResizeObserver(updateShadows).observe(wrap.querySelector("table")!);
+    setScrollbarWidth();
+    updateShadows();
 
     const headers = Array.from(root.querySelectorAll<HTMLTableCellElement>("thead th"));
     headers.forEach((th, col) => {
@@ -222,6 +256,37 @@ const DEFAULT_SORT = "count";
     color: var(--muted);
     font-size: 0.875rem;
   }
+  /* Tabellen bryter ut ur textspalten och använder fönstrets bredd (16 px marginal per sida).
+     --sbw = rullningslistens bredd, sätts av skriptet. */
+  .table-outer {
+    --full: calc(100vw - var(--sbw, 0px) - 32px);
+    position: relative;
+    /* Egen staplingskontext: den fasta kolumnen och skuggan får inte hamna över flikraden. */
+    isolation: isolate;
+    width: var(--full);
+    margin-left: calc((100% - var(--full)) / 2);
+  }
+  .table-outer::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    bottom: 1px;
+    width: 32px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    background: linear-gradient(to left, var(--scroll-shadow), transparent);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 3;
+  }
+  .table-outer.more-right::after {
+    opacity: 1;
+  }
+  /* Rullat åt höger: skugga vid kanten av den fasta bolagskolumnen. */
+  .table-outer.more-left :is(tbody th, thead th:first-child) {
+    box-shadow: 8px 0 8px -6px var(--scroll-shadow);
+  }
   .table-wrap {
     overflow-x: auto;
     border: 1px solid var(--border);
@@ -261,7 +326,23 @@ const DEFAULT_SORT = "count";
     cursor: pointer;
     width: 100%;
     text-align: left;
-    white-space: nowrap;
+    /* Långa rubriker ("Från 52 v högsta") får bryta så att kolumnerna blir smalare. */
+    white-space: normal;
+    min-width: 4.5rem;
+  }
+  thead th.col-name button {
+    min-width: 0;
+  }
+  thead th:first-child {
+    left: 0;
+    z-index: 2;
+  }
+  .col-count {
+    width: 1%;
+    text-align: right;
+  }
+  thead .col-count button {
+    text-align: right;
   }
   thead th[aria-sort="ascending"] button::after {
     content: " ▲";
@@ -274,6 +355,10 @@ const DEFAULT_SORT = "count";
     position: sticky;
     left: 0;
     background: var(--surface);
+    /* Långa bolagsnamn bryts hellre än att bolagskolumnen tar halva bredden. */
+    white-space: normal;
+    min-width: 9rem;
+    max-width: 13rem;
   }
   .name {
     font-weight: 600;
@@ -294,18 +379,22 @@ const DEFAULT_SORT = "count";
   .neg {
     color: var(--neg);
   }
+  /* Etiketterna ligger bredvid varandra och radbryts bara när cellen blir för smal. */
   .chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
-    min-width: 12rem;
+    gap: 3px;
+    min-width: 15rem;
+    max-width: 22rem;
     white-space: normal;
   }
   .chip {
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     font-weight: 600;
-    padding: 1px 7px;
-    border-radius: 4px;
+    line-height: 1.5;
+    padding: 0 5px;
+    border-radius: 3px;
+    white-space: nowrap;
     background: var(--direct-bg);
     color: var(--direct-fg);
   }
@@ -318,6 +407,14 @@ const DEFAULT_SORT = "count";
   .chip.insyn {
     background: var(--indirect-bg);
     color: var(--indirect-fg);
+  }
+  .chip.insyn-kop {
+    background: var(--pos-bg);
+    color: var(--pos);
+  }
+  .chip.insyn-salj {
+    background: var(--neg-bg);
+    color: var(--neg);
   }
   .tone {
     font-size: 0.75rem;

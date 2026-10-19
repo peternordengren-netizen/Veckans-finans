@@ -2,7 +2,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { compareValues, defaultOrder, ratio, sek, shortChange, signedPct } from "../src/lib/signals.ts";
+import { compareValues, defaultOrder, ratio, sek, shortChange, signalChip, signedPct } from "../src/lib/signals.ts";
+
+test("insynsetiketten följer nettot", () => {
+  assert.deepEqual(signalChip("insyn", { insider_net_sek: 5_642_500 }), { label: "Insynsköp", cls: "insyn-kop" });
+  assert.deepEqual(signalChip("insyn", { insider_net_sek: -190_680 }), { label: "Insynsförsäljning", cls: "insyn-salj" });
+  assert.deepEqual(signalChip("insyn", { insider_net_sek: 0 }), { label: "Insyn", cls: "insyn" });
+  assert.deepEqual(signalChip("omsättning", { insider_net_sek: null }), { label: "Hög omsättning", cls: "omsättning" });
+});
 
 test("förvald ordning: flest signaler först, sedan namn", () => {
   const rows = [
