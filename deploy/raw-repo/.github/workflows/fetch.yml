@@ -2,16 +2,16 @@
 # .github/workflows/fetch.yml – ligger här under deploy/ så att den aldrig
 # körs i det publika repot.
 #
-# Hämtar råtext var fjärde timme med scripts/fetch.py från det publika repot
+# Hämtar råtext varannan timme med scripts/fetch.py från det publika repot
 # och committar resultatet till det privata repot. Rådatan når aldrig det
 # publika repot.
 name: Hämta råtext
 
 on:
   schedule:
-    # Var fjärde timme, dygnet runt (UTC). Minut 17 för att undvika
+    # Varannan timme, dygnet runt (UTC). Minut 17 för att undvika
     # rusningen vid hel timme i GitHub Actions.
-    - cron: "17 */4 * * *"
+    - cron: "17 */2 * * *"
   workflow_dispatch:
 
 permissions:

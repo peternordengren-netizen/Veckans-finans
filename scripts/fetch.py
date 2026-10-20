@@ -1,6 +1,6 @@
 """Hämtar veckans råtext från MFN, Cision och Riksbanken till <raw-dir>/<vecka>/.
 
-Körs var fjärde timme i GitHub Actions i det privata repot veckans-finans-raw
+Körs varannan timme i GitHub Actions i det privata repot veckans-finans-raw
 (se deploy/raw-repo/). Varje körning gör exakt ett anrop per källa, med timeout
 och tydlig User-Agent. Poster samlas på hög över veckan: en post som redan finns
 skrivs inte om.
@@ -53,7 +53,8 @@ TIMEOUT_S = 30
 
 # Kontrollerade 2026-10-02. MFN:s RSS och limit-parametern är odokumenterade
 # men fungerar; limit=200 täcker ungefär ett dygn. Cisions flöde täcker ungefär
-# 7 timmar och kan inte pagineras – därav körning var fjärde timme.
+# 7 timmar och kan inte pagineras – därav körning varannan timme (GitHub hoppar ibland
+# över eller försenar schemalagda körningar).
 MFN_URL = "https://mfn.se/all/s/nordic.rss?limit=200"
 CISION_URL = "https://news.cision.com/se/ListItems?format=rss"
 # Styrräntan: dagliga observationer för ett datumintervall (…/<från>/<till>),

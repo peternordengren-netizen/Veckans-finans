@@ -4,8 +4,8 @@ Rådata till [Veckans finans](https://github.com/peternordengren-netizen/veckans
 Ska vara **privat**: här ligger fulltext från MFN, utdrag från Cision och Riksbankens styrränta,
 och det får inte publiceras.
 
-Rådatan fylls i automatiskt av `.github/workflows/fetch.yml`, som kör `scripts/fetch.py` från det publika repot var
-fjärde timme. Ändra inget för hand.
+Rådatan fylls i automatiskt av `.github/workflows/fetch.yml`, som kör `scripts/fetch.py` från det publika repot
+varannan timme. Ändra inget för hand.
 
 ```
 <vecka>/index.json            metadata per post och logg över körningar

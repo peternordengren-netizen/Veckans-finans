@@ -19,7 +19,7 @@ Veckor anges som ISO-vecka, t.ex. `2026-W40` (mån–sön, Europe/Stockholm).
 
 ### Hämtning (`scripts/fetch.py`)
 
-Körs var fjärde timme i GitHub Actions i det privata repot `veckans-finans-raw`.
+Körs varannan timme i GitHub Actions i det privata repot `veckans-finans-raw`.
 Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas det privata repot in som `data/raw/`.
 
 | Källa | Adress (kontrollerad 2026-10-02) | Text |
@@ -347,7 +347,9 @@ npm run preview       # visa dist/ lokalt
 Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
 
 - **VeckansFinansServer** startar `scripts/serve.ps1` dolt vid inloggning. Sidan finns på
-  http://localhost:4321/veckans-finans/. Utskrifterna hamnar i `logs/server.log`.
+  http://localhost:4321/veckans-finans/. Utskrifterna hamnar i `logs/server.log`. Om Node kraschar startar
+  `serve.ps1` om servern efter en minut, högst tre gånger i följd. Omstarten ligger i skriptet eftersom
+  `conhost --headless` alltid ger Schemaläggaren felkod 0.
 - **VeckansFinansVeckosammanfattning** kör `scripts/run_weekly.ps1` måndagar 07:30 lokal tid och väcker datorn om
   den är ansluten till ström. Uppgiften startar också fem minuter efter inloggning och upplåsning, så att en missad
   måndag tas igen, till exempel när datorn låg i viloläge till disk. Varje vecka får högst två automatiska försök.
@@ -356,7 +358,9 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
   avbryts körningen. Loggarna och slutrapporten (`<vecka>-slutrapport.md`) hamnar i `logs/weekly/`.
 - **VeckansFinansMorgonrapport** kör `scripts/run_morning.ps1` vardagar 08:10, så att rapporter som släpps
   07:00–08:00 kommer med före börsöppning. Den väcks och tas igen vid inloggning och upplåsning på samma sätt som
-  veckouppgiften. Claude används inte, så den drar ingenting av abonnemanget. Se [Morgonrapport](#morgonrapport-scriptsmorningpy).
+  veckouppgiften, men aldrig före 08:10: en inloggning eller upplåsning tidigare på morgonen gör ingenting, så att
+  dagens rapportfönster inte låses innan morgonens rapporter släppts. Claude används inte i själva morgonrapporten,
+  så den drar ingenting av abonnemanget. Se [Morgonrapport](#morgonrapport-scriptsmorningpy).
   Loggarna hamnar i `logs/morning/`.
 - Skrivbordsgenvägen **Veckans finans** kör `scripts/open_site.ps1`. Den startar servern om den inte svarar och
   öppnar sidan.
