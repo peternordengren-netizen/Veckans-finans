@@ -21,7 +21,7 @@ export interface Comparison {
   analysts: number | null;
   currency: string;
   surprise_pct: number;
-  verdict: "över" | "i linje" | "under";
+  verdict: "över" | "i linje" | "under" | "osäker konsensus";
 }
 
 export interface ReportResult {
@@ -34,7 +34,13 @@ export interface ReportResult {
   period: string;
   note: string | null;
   kpis: ResultKpi[];
-  vs_consensus: { consensus_date: string; eps: Comparison | null; revenue: Comparison | null } | null;
+  vs_consensus: {
+    consensus_date: string;
+    /** Varningen "stor förändring, få analytiker": ingen bedömning över/under (saknas i äldre filer). */
+    uncertain?: boolean;
+    eps: Comparison | null;
+    revenue: Comparison | null;
+  } | null;
 }
 
 const UNIT_LABELS: Record<string, string> = { SEK: "kr", TSEK: "tkr", MSEK: "mn kr", MDSEK: "mdr kr", procent: "%" };
@@ -62,8 +68,12 @@ export function yoyText(k: Pick<ResultKpi, "value" | "previous_value" | "yoy_pct
   return k.yoy_pct === null ? "–" : `${signed(k.yoy_pct, 0)} %`;
 }
 
-/** Utfall mot förväntan: "+4,2 % mot förväntan", eller "i linje med förväntan" inom ±2 %. */
+/**
+ * Utfall mot förväntan: "+4,2 % mot förväntan", "i linje med förväntan" inom ±2 %, eller
+ * "osäker konsensus" (stor förändring, få analytiker) – då utan avvikelse och över/under.
+ */
 export function surpriseText(c: Comparison): string {
+  if (c.verdict === "osäker konsensus") return "osäker konsensus";
   return c.verdict === "i linje" ? "i linje med förväntan" : `${signed(c.surprise_pct, 1)} % mot förväntan`;
 }
 

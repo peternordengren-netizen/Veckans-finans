@@ -38,7 +38,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from report_list import DAY_RE, MORNING_RAW, WEEK_RE, kpis_for, list_scope  # noqa: E402
 from validate import DATA_DIR, RAW_DIR, Instrument, iso_week_period, load_instruments, load_sector_kpis  # noqa: E402
 from validate_results import (  # noqa: E402
-    scope_period, surprise_pct, unit_factor, validate_batch, validate_results, verdict,
+    UNCERTAIN, scope_period, surprise_pct, uncertain_consensus, unit_factor, validate_batch, validate_results,
+    verdict,
 )
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
@@ -62,8 +63,9 @@ def consensus_before(day: date, consensus_dir: Path = CONSENSUS_DIR) -> dict | N
     return json.loads(files[-1].read_text(encoding="utf-8")) if files else None
 
 
-def compare(kpi: dict | None, estimate: dict | None) -> dict | None:
-    """Utfall mot förväntan för ett kvartalsvärde, eller None om det inte går att jämföra."""
+def compare(kpi: dict | None, estimate: dict | None, uncertain: bool = False) -> dict | None:
+    """Utfall mot förväntan för ett kvartalsvärde, eller None om det inte går att jämföra.
+    uncertain: konsensus har varningen "stor förändring, få analytiker" – ingen över/under."""
     if kpi is None or estimate is None or kpi["period_kind"] != "kvartal" or not estimate.get("avg"):
         return None
     factor = unit_factor(kpi["unit"])
@@ -72,7 +74,7 @@ def compare(kpi: dict | None, estimate: dict | None) -> dict | None:
     actual = float(Decimal(str(kpi["value"])) * factor[0])
     s = round(surprise_pct(actual, estimate["avg"]), 1)
     return {"actual": actual, "expected": estimate["avg"], "analysts": estimate.get("analysts"),
-            "currency": factor[1], "surprise_pct": s, "verdict": verdict(s)}
+            "currency": factor[1], "surprise_pct": s, "verdict": UNCERTAIN if uncertain else verdict(s)}
 
 
 def vs_consensus(report: dict, published: date, consensus_dir: Path) -> dict | None:
@@ -85,11 +87,12 @@ def vs_consensus(report: dict, published: date, consensus_dir: Path) -> dict | N
     if abs((date.fromisoformat(c["next_report_date"]) - published).days) > CONSENSUS_DATE_DAYS:
         return None
     by_id = {k["id"]: k for k in report["kpis"]}
-    eps = compare(by_id.get("resultat-per-aktie"), c.get("eps"))
-    revenue = compare(by_id.get("nettoomsattning"), c.get("revenue"))
+    uncertain = uncertain_consensus(c)
+    eps = compare(by_id.get("resultat-per-aktie"), c.get("eps"), uncertain)
+    revenue = compare(by_id.get("nettoomsattning"), c.get("revenue"), uncertain)
     if eps is None and revenue is None:
         return None
-    return {"consensus_date": snap["date"], "eps": eps, "revenue": revenue}
+    return {"consensus_date": snap["date"], "uncertain": uncertain, "eps": eps, "revenue": revenue}
 
 
 def yoy_pct(k: dict, kind: str) -> float | None:

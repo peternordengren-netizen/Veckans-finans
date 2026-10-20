@@ -16,7 +16,7 @@
         "analysts": { "type": ["integer", "null"] },
         "currency": { "type": "string" },
         "surprise_pct": { "type": "number" },
-        "verdict": { "enum": ["över", "i linje", "under"] }
+        "verdict": { "enum": ["över", "i linje", "under", "osäker konsensus"] }
       }
     }
   },
@@ -75,6 +75,7 @@
             "required": ["consensus_date", "eps", "revenue"],
             "properties": {
               "consensus_date": { "type": "string" },
+              "uncertain": { "type": "boolean", "description": "Konsensus har varningen \"stor förändring, få analytiker\": utfallet bedöms inte som över/under (saknas i äldre filer = false)." },
               "eps": { "$ref": "#/$defs/comparison" },
               "revenue": { "$ref": "#/$defs/comparison" }
             }

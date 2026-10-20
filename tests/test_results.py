@@ -195,6 +195,58 @@ def test_sammanslagning_med_konsensus(tmp_path):
     assert any("bedömningen" in e for e in validate_results(data, WEEK, INSTRUMENTS, raw).errors)
 
 
+def test_validate_py_valjer_resultatvalideringen_for_morgonfiler(tmp_path, monkeypatch):
+    """validate.py ska känna igen morgonens omgångar och sammanslagna fil (2026-10-20 validerades
+    omgången som en veckofil, så en godkänd omgång kördes alltid om)."""
+    import validate
+    import validate_results
+
+    calls = []
+    monkeypatch.setattr(validate_results, "validate_batch", lambda d, scope, n, i: calls.append(("omgång", scope, n)) or Result())
+    monkeypatch.setattr(validate_results, "validate_results", lambda d, scope, i: calls.append(("fil", scope)) or Result())
+    paths = [tmp_path / "results" / "morning" / "2026-10-20" / "omgang-1.json",
+             tmp_path / "results" / "morning" / "2026-10-20.json",
+             tmp_path / "results" / "2026-W43" / "omgang-2.json",
+             tmp_path / "results" / "2026-W43.json"]
+    for p in paths:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("{}", encoding="utf-8")
+    assert validate.main([str(p) for p in paths]) == 0
+    assert calls == [("omgång", "2026-10-20", 1), ("fil", "2026-10-20"), ("omgång", "2026-W43", 2), ("fil", "2026-W43")]
+
+
+def test_osaker_konsensus_ger_ingen_bedomning(tmp_path):
+    """Förväntad förändring över ±50 % mot fjol från färre än 3 analytiker: "osäker konsensus"
+    i stället för över/under, för båda jämförelserna."""
+    raw = make_raw(tmp_path)
+    results_dir, cons_dir = tmp_path / "results", tmp_path / "consensus"
+    (results_dir / WEEK).mkdir(parents=True)
+    (results_dir / WEEK / "omgang-1.json").write_text(json.dumps(batch([alfa(), beta()])), encoding="utf-8")
+    cons_dir.mkdir()
+    eps = {"avg": 2.4, "low": None, "high": None, "analysts": 1, "year_ago": 1.2, "currency": "SEK"}  # +100 %
+    rev = {"avg": 1.6e9, "low": None, "high": None, "analysts": 8, "year_ago": 1.5e9, "currency": "SEK"}
+    snap = {"date": "2026-10-21", "companies": [{"ticker": "ALFA", "eps": eps, "revenue": rev,
+                                                 "next_report_date": "2026-10-22"}]}
+    (cons_dir / "2026-10-21.json").write_text(json.dumps(snap), encoding="utf-8")
+    data, _ = results.build(WEEK, INSTRUMENTS, NOW, raw, results_dir, cons_dir)
+    c = next(r for r in data["reports"] if r["ticker"] == "ALFA")["vs_consensus"]
+    assert c["uncertain"] is True
+    assert (c["eps"]["verdict"], c["revenue"]["verdict"]) == ("osäker konsensus", "osäker konsensus")
+    assert c["eps"]["surprise_pct"] == 4.2  # avvikelsen sparas men visas inte
+    assert validate_results(data, WEEK, INSTRUMENTS, raw, consensus_dir=cons_dir).errors == []
+    # Över/under trots varningen underkänns, liksom en flagga som inte stämmer med konsensusbilden.
+    c["eps"]["verdict"] = "över"
+    assert any("bedömningen" in e for e in validate_results(data, WEEK, INSTRUMENTS, raw, consensus_dir=cons_dir).errors)
+    c["eps"]["verdict"], c["revenue"]["verdict"], c["uncertain"] = "över", "under", False
+    assert any("uncertain" in e for e in validate_results(data, WEEK, INSTRUMENTS, raw, consensus_dir=cons_dir).errors)
+    # Med tre analytiker är konsensus inte osäker.
+    eps["analysts"] = 3
+    (cons_dir / "2026-10-21.json").write_text(json.dumps(snap), encoding="utf-8")
+    data, _ = results.build(WEEK, INSTRUMENTS, NOW, raw, results_dir, cons_dir)
+    c = next(r for r in data["reports"] if r["ticker"] == "ALFA")["vs_consensus"]
+    assert (c["uncertain"], c["eps"]["verdict"]) == (False, "över")
+
+
 def test_saknad_omgang_listas(tmp_path):
     raw = make_raw(tmp_path)
     data, problems = results.build(WEEK, INSTRUMENTS, NOW, raw, tmp_path / "results", tmp_path / "consensus")

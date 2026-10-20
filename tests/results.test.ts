@@ -28,6 +28,8 @@ test("utfall mot förväntan", () => {
   assert.equal(surpriseText(c), "+4,2 % mot förväntan");
   assert.equal(surpriseText({ ...c, surprise_pct: -6.2, verdict: "under" }), `${MINUS}6,2 % mot förväntan`);
   assert.equal(surpriseText({ ...c, surprise_pct: 1.1, verdict: "i linje" }), "i linje med förväntan");
+  // Stor förändring, få analytiker: ingen avvikelse och inget över/under.
+  assert.equal(surpriseText({ ...c, surprise_pct: -43.9, verdict: "osäker konsensus" }), "osäker konsensus");
   assert.equal(expectedText(c, true), "2,4 kr");
   assert.equal(expectedText({ ...c, expected: 1.6e9 }, false), "1,6 mdr kr");
   assert.equal(expectedText({ ...c, expected: 950e6 }, false), "950 mn kr");

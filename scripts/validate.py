@@ -1034,7 +1034,8 @@ def _default_targets() -> list[Path]:
          *DATA_DIR.glob("calendar/*.json"), *DATA_DIR.glob("signals/*.json"), *DATA_DIR.glob("morning/*.json"),
          *DATA_DIR.glob("consensus/*.json"), *DATA_DIR.glob("results/*.json"),
          *DATA_DIR.glob("valuation/*.json"),
-         *DATA_DIR.glob("results/*/omgang-*.json"),
+         *DATA_DIR.glob("results/*/omgang-*.json"), *DATA_DIR.glob("results/morning/*.json"),
+         *DATA_DIR.glob("results/morning/*/omgang-*.json"),
          *DATA_DIR.glob("mock/weeks/*.json"), *DATA_DIR.glob("mock/prices/*.json"),
          *DATA_DIR.glob("mock/analysis/*.json"), *DATA_DIR.glob("mock/calendar/*.json"),
          *DATA_DIR.glob("mock/signals/*.json"), *DATA_DIR.glob("mock/morning/*.json")]
@@ -1050,11 +1051,17 @@ def main(argv: list[str]) -> int:
     for path in targets:
         data = json.loads(path.read_text(encoding="utf-8"))
         in_mock_dir = MOCK_DIR in path.resolve().parents
-        if path.parent.parent.name == "results" and re.fullmatch(r"omgang-\d+", path.stem):
+        # Rapportutfall: data/results/<vecka>/omgang-N.json, data/results/morning/<datum>/omgang-N.json,
+        # data/results/<vecka>.json och data/results/morning/<datum>.json.
+        in_results = path.parent.name == "results" or (path.parent.name == "morning"
+                                                       and path.parent.parent.name == "results")
+        batch_in_results = path.parent.parent.name == "results" or (path.parent.parent.name == "morning"
+                                                                    and path.parent.parent.parent.name == "results")
+        if batch_in_results and re.fullmatch(r"omgang-\d+", path.stem):
             from validate_results import validate_batch
 
             res = validate_batch(data, path.parent.name, int(path.stem.split("-")[1]), instruments)
-        elif path.parent.name == "results":
+        elif in_results:
             from validate_results import validate_results
 
             res = validate_results(data, path.stem, instruments)

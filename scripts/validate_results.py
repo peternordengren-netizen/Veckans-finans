@@ -15,12 +15,13 @@ Samma princip som för nyheterna – Claude skriver, valideringen kontrollerar m
 
 from __future__ import annotations
 
+import json
 import re
 from decimal import Decimal
 from pathlib import Path
 
 from validate import (
-    RAW_DIR, Instrument, Result, _check_datetime, _normalize_ws, _schema_errors, _schema_validator,
+    DATA_DIR, RAW_DIR, Instrument, Result, _check_datetime, _normalize_ws, _schema_errors, _schema_validator,
     extract_numbers, iso_week_period, load_sector_kpis,
 )
 
@@ -214,7 +215,8 @@ def scope_period(scope: str) -> dict:
 
 
 def validate_results(data: dict, week: str, instruments: dict[str, Instrument], raw_dir: Path = RAW_DIR,
-                     morning_raw: Path | None = None, results_dir: Path | None = None) -> Result:
+                     morning_raw: Path | None = None, results_dir: Path | None = None,
+                     consensus_dir: Path | None = DATA_DIR / "consensus") -> Result:
     """Den sammanslagna filen från scripts/results.py: data/results/<vecka>.json eller
     data/results/morning/<datum>.json. Varje rapport valideras mot listan för sitt eget
     läge (scope): veckans fil innehåller också morgonkörningarnas rapporter."""
@@ -248,7 +250,7 @@ def validate_results(data: dict, week: str, instruments: dict[str, Instrument], 
         _check_report(r, listed[r["ticker"]], kinds[r["ticker"]], where, res)
         for k in r["kpis"]:
             _check_yoy(k, kinds[r["ticker"]].get(k["id"]), f"{where} {k['id']}", res)
-        _check_comparison(r, where, res)
+        _check_comparison(r, where, res, consensus_dir)
     return res
 
 
@@ -276,11 +278,47 @@ def verdict(surprise: float) -> str:
     return "i linje" if abs(surprise) <= IN_LINE_PCT else "över" if surprise > 0 else "under"
 
 
-def _check_comparison(r: dict, where: str, res: Result) -> None:
-    """Utfall mot förväntan: räknas om ur nyckeltalet och den sparade konsensusen."""
+# Samma regel som varningen "stor förändring, få analytiker" i src/lib/consensus.ts: förväntad
+# förändring mot fjol över ±50 % från färre än 3 analytiker. Har bolagets konsensus den varningen
+# (för vinst per aktie eller omsättning) bedöms utfallet inte som över/under.
+BIG_CHANGE_PCT = 50.0
+MIN_ANALYSTS = 3
+UNCERTAIN = "osäker konsensus"
+
+
+def expected_change(estimate: dict) -> float | None:
+    """Förväntad förändring mot fjol i procent; None om fjolåret saknas, är noll eller har annat tecken."""
+    ya = estimate.get("year_ago")
+    if not ya or (ya > 0) != (estimate["avg"] > 0):
+        return None
+    return (estimate["avg"] - ya) / abs(ya) * 100
+
+
+def big_change_few_analysts(estimate: dict | None) -> bool:
+    if not estimate or not estimate.get("avg"):
+        return False
+    change = expected_change(estimate)
+    return change is not None and abs(change) > BIG_CHANGE_PCT and (estimate.get("analysts") or 0) < MIN_ANALYSTS
+
+
+def uncertain_consensus(company: dict) -> bool:
+    """Sant om bolagets konsensus har varningen "stor förändring, få analytiker"."""
+    return big_change_few_analysts(company.get("eps")) or big_change_few_analysts(company.get("revenue"))
+
+
+def _check_comparison(r: dict, where: str, res: Result, consensus_dir: Path | None) -> None:
+    """Utfall mot förväntan: räknas om ur nyckeltalet och den sparade konsensusen. Osäker
+    konsensus kontrolleras mot konsensusfilen när den finns lokalt."""
     cmp = r.get("vs_consensus")
     if not cmp:
         return
+    uncertain = cmp.get("uncertain", False)
+    snap = consensus_dir / f"{cmp['consensus_date']}.json" if consensus_dir else None
+    if snap and snap.exists():
+        company = next((c for c in json.loads(snap.read_text(encoding="utf-8"))["companies"]
+                        if c["ticker"] == r["ticker"]), None)
+        if company is not None and uncertain_consensus(company) != uncertain:
+            res.errors.append(f"{where}: uncertain={uncertain} stämmer inte med konsensus {cmp['consensus_date']}")
     by_id = {k["id"]: k for k in r["kpis"]}
     for key, kpi_id in (("eps", "resultat-per-aktie"), ("revenue", "nettoomsattning")):
         c = cmp.get(key)
@@ -300,6 +338,6 @@ def _check_comparison(r: dict, where: str, res: Result) -> None:
         surprise = surprise_pct(actual, c["expected"])
         if abs(surprise - c["surprise_pct"]) > 0.051:
             res.errors.append(f"{where}: {key} avvikelse {c['surprise_pct']} % ≠ {surprise:.1f} %")
-        if c["verdict"] != verdict(c["surprise_pct"]):
+        if c["verdict"] != (UNCERTAIN if uncertain else verdict(c["surprise_pct"])):
             res.errors.append(f"{where}: {key} bedömningen {c['verdict']!r} stämmer inte med avvikelsen")
 
