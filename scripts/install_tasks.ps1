@@ -1,13 +1,15 @@
 ﻿# Skapar (eller ersätter) de schemalagda uppgifterna och skrivbordsgenvägen för Veckans finans.
 #
 # - VeckansFinansServer: vid inloggning, dolt (conhost --headless), kör scripts\serve.ps1.
-#   Ingen tidsgräns, startas om tre gånger med en minuts mellanrum om den kraschar.
+#   Ingen tidsgräns. Omstart vid krasch sker i serve.ps1 (conhost --headless returnerar alltid 0,
+#   så Schemaläggarens egen omstart nedan slår bara till om uppgiften inte går att starta).
 # - VeckansFinansVeckosammanfattning: måndagar 07:30, kör scripts\run_weekly.ps1.
 #   Väcker datorn (kräver nätström – väckningstimers är avstängda på batteri), körs i
 #   efterhand om datorn var avstängd, högst 2 timmar. Startas också fem minuter efter inloggning
 #   och upplåsning, så att en missad måndag tas igen (skriptet gör inget om veckan redan finns).
 # - VeckansFinansMorgonrapport: vardagar 08:10, kör scripts\run_morning.ps1 (utan Claude).
 #   Samma väckning och inloggnings-/upplåsningsutlösare som veckouppgiften, högst 30 minuter.
+#   Utlöses den före 08:10 (inloggning eller upplåsning tidigt) gör run_morning.ps1 ingenting.
 # Alla körs som den inloggade användaren, bara när hen är inloggad, utan förhöjd behörighet.
 # - Skrivbordsgenvägen "Veckans finans" kör scripts\open_site.ps1 dolt.
 #

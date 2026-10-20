@@ -3,6 +3,9 @@
 #
 # Körs av den schemalagda uppgiften VeckansFinansMorgonrapport vardagar 08:10, samt fem
 # minuter efter inloggning och upplåsning för att ta igen en missad morgon.
+# - Före 08:10 gör skriptet ingenting: en inloggning eller upplåsning tidigt på morgonen skulle
+#   annars låsa dagens rapportfönster innan morgonens rapporter (07:00-08:00) publicerats.
+#   Körningen 08:10 (eller nästa inloggning/upplåsning efter 08:10) tar hand om dagen.
 # Stegen körs bara om deras fil saknas, så skriptet kan köras om och tar då bara det som fattas:
 #   1. data/morning/<datum>.json        morning.py (ingen handelsdag: avslutar utan fil)
 #   2. data/consensus/<datum>.json      consensus.py --backup (märker bolag som redan rapporterat)
@@ -13,8 +16,18 @@
 # - Logg i logs/morning/<datum>.log, bygget i logs/morning/<datum>-build.log.
 #
 # Manuellt: powershell -NoProfile -File scripts\run_morning.ps1
+# -Now "2026-10-21 07:00" anger klockslaget för kontrollen mot 08:10 (för test).
+
+param(
+    [datetime]$Now = (Get-Date)
+)
 
 $ErrorActionPreference = "Stop"
+$EarliestStart = [timespan]"08:09"  # en minuts marginal, så att utlösaren 08:10 aldrig stoppas
+if ($Now.TimeOfDay -lt $EarliestStart) {
+    Write-Output ("{0:HH:mm} är före 08:10 - morgonflödet körs inte än (körningen 08:10 tar hand om dagen)." -f $Now)
+    exit 0
+}
 $Root = Split-Path -Parent $PSScriptRoot
 $LogDir = Join-Path $Root "logs\morning"
 New-Item -ItemType Directory -Force $LogDir | Out-Null
