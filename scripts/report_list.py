@@ -55,6 +55,7 @@ COMMON_KPIS = [
 REPORT_RE = re.compile(
     r"delårsrapport|interim report|kvartalsrapport|bokslutskommuniké|year[- ]end report|"
     r"rapport för (det )?(första|andra|tredje|fjärde) kvartalet|"
+    r"\bresultat (för )?(det )?(första|andra|tredje|fjärde) kvartalet|"
     r"(first|second|third|fourth) quarter (20\d\d )?(report|results)|\bq[1-4][ -]?(20\d\d )?(rapport|report|results)",
     re.IGNORECASE,
 )
@@ -75,8 +76,9 @@ REPORT_AND_INVITE_RE = re.compile(r"\boch inbjudan|\band invitation", re.IGNOREC
 
 def is_report_title(title: str, published: date) -> bool:
     """Sant om rubriken är själva rapporten. "… publicerar rapport för tredje kvartalet den 21
-    oktober" (ett framtida datum i rubriken) är ett datumbesked, ingen rapport."""
-    if not REPORT_RE.search(title):
+    oktober" (ett framtida datum i rubriken) är ett datumbesked, ingen rapport. "Preliminärt
+    resultat för tredje kvartalet" är preliminära siffror, ingen rapport."""
+    if not REPORT_RE.search(title) or PRELIM_RE.search(title):
         return False
     if any(d > published for _, d in find_dates(title, published)):
         return False

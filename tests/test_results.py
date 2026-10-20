@@ -88,6 +88,12 @@ def test_rapportrubriker():
     assert is_report_title("Atlas: Rapport för tredje kvartalet 2026 och inbjudan till telefonkonferens", d)
     assert not is_report_title("Inbjudan till presentation av delårsrapport", d)
     assert not is_report_title("Bolaget publicerar delårsrapport den 30 oktober", d)
+    # Rubriker utan ordet "rapport" (2026-10-20 missades två sådana)
+    assert is_report_title("Resultat tredje kvartalet 2026", d)
+    assert is_report_title("Alfaverken rapporterar resultat för tredje kvartalet 2026: starkt kassaflöde", d)
+    assert not is_report_title("Alfaverken publicerar resultat för tredje kvartalet den 30 oktober", d)
+    assert not is_report_title("Alfaverken: preliminärt resultat för tredje kvartalet 2026", d)
+    assert not is_report_title("Inbjudan till presentation av resultat för tredje kvartalet", d)
 
 
 def test_lista_hoppar_over_datumbesked(tmp_path):

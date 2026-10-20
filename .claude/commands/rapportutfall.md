@@ -76,7 +76,8 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
 5. **Inga nyckeltal:** om rapporten saknar alla nyckeltalen (t.ex. investmentbolag som inte redovisar räntenetto,
    eller ett utdrag utan siffror) anger du `"kpis": []` och en kort förklaring i `note`.
 6. Skriv bara i `data/results/`. Ändra aldrig källtexten, listan, fönstret (`window.json`) eller valideringen.
-7. `raw_file` i utfilen är kolumnen `raw_file` (utan mappen före), inte `sökväg`.
+7. `raw_file` i utfilen är kolumnen `raw_file` tecken för tecken, inklusive källmappen: `mfn/….txt` eller
+   `cision/….txt`, aldrig bara filnamnet. Använd inte kolumnen `sökväg` (den har dessutom `data/…/<vecka>/` före).
 
 ## Svar
 
