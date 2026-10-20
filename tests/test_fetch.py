@@ -283,6 +283,19 @@ def run(tmp_path, mfn=None, cision=None, riksbank=RIKSBANK, now=NOW):
     return fetch.main(["--raw-dir", str(tmp_path)], get=get, now=now)
 
 
+def test_mfn_limit_ett_anrop_med_storre_flode(tmp_path):
+    """--mfn-limit (morgonflödet: 500) ändrar bara antalet poster; fortfarande ett anrop per källa."""
+    urls = []
+    get = fake_get({"https://mfn.se/": mfn_feed(), fetch.CISION_URL: cision_feed(), fetch.RIKSBANK_URL: RIKSBANK})
+    assert fetch.main(["--raw-dir", str(tmp_path), "--mfn-limit", "500"],
+                      get=lambda u: urls.append(u) or get(u), now=NOW) == 0
+    assert [u for u in urls if u.startswith("https://mfn.se/")] == ["https://mfn.se/all/s/nordic.rss?limit=500"]
+    assert len(urls) == 3
+    urls.clear()
+    fetch.main(["--raw-dir", str(tmp_path)], get=lambda u: urls.append(u) or get(u), now=NOW)
+    assert fetch.MFN_URL in urls and fetch.MFN_URL.endswith("limit=200")
+
+
 def test_textfil_och_index_skrivs(tmp_path):
     assert run(tmp_path, mfn=mfn_feed(mfn_item("a1", "Fjällhem tecknar avtal", "Fri, 02 Oct 2026 08:00:00 +0000"))) == 0
     idx = read_index(tmp_path, "2026-W40")

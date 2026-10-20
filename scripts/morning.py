@@ -6,7 +6,8 @@ scripts/run_morning.ps1, så att rapporter som släpps 07:00–08:00 kommer med 
 
 Källor och hämtning (en hämtning per källa och körning):
 - MFN/Cision/Riksbanken (fetch.py) och FI (fi_fetch.py) hämtas lokalt till
-  data/morning/raw/, aldrig till data/raw/ (klonen av det privata repot, som bara Actions
+  data/morning/raw/ (MFN med 500 poster i stället för 200, så att även en tung rapportdag
+  täcks tillbaka till förra morgonrapporten), aldrig till data/raw/ (klonen av det privata repot, som bara Actions
   och säkerhetskopian skriver i). GitHub Actions schemalagda jobb kan komma timmar för sent
   – FI-jobbet "06:37" har committats 10:45–11:15 – så rapporten kan inte vänta på dem.
 - data/raw/ (Actions) och data/morning/raw/ läses båda; samma post räknas en gång.
@@ -54,6 +55,7 @@ from workdays import non_business_days  # noqa: E402
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 MORNING_DIR = DATA_DIR / "morning"
 MORNING_RAW = MORNING_DIR / "raw"
+MORNING_MFN_LIMIT = 500
 NEWS_FROM = time(17, 30)  # nattens nyheter räknas från förra handelsdagens stängning
 SHORT_AGGREGATE_DAILY_PP = 0.2  # på en dag är ändringarna mindre än över en vecka
 KEEP_RAW_WEEKS = 3  # data/morning/raw/ rensas från äldre veckor
@@ -272,7 +274,9 @@ def fetch_local(today: date) -> list[str]:
 
     errors = []
     MORNING_RAW.mkdir(parents=True, exist_ok=True)
-    if fetch.main(["--raw-dir", str(MORNING_RAW)]) != 0:
+    # 500 poster från MFN (ett anrop), så att hämtningen når tillbaka till förra morgonrapporten
+    # även på tunga rapportdagar; standardens 200 räcker där bara några timmar.
+    if fetch.main(["--raw-dir", str(MORNING_RAW), "--mfn-limit", str(MORNING_MFN_LIMIT)]) != 0:
         errors.append("fetch.py: alla källor fallerade")
     if fi_fetch.main(["--raw-dir", str(MORNING_RAW)]) != 0:
         errors.append("fi_fetch.py: fel vid hämtning från FI")

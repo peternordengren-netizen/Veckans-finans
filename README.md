@@ -24,7 +24,7 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
 
 | Källa | Adress (kontrollerad 2026-10-02) | Text |
 |---|---|---|
-| MFN | `https://mfn.se/all/s/nordic.rss?limit=200` (odokumenterad, men flödet anger själv adressen) | fulltext |
+| MFN | `https://mfn.se/all/s/nordic.rss?limit=200` (odokumenterad, men flödet anger själv adressen); morgonflödet använder `limit=500` (`--mfn-limit`), fortfarande ett anrop | fulltext |
 | Cision | `https://news.cision.com/se/ListItems?format=rss` | utdrag, ca 600 tecken |
 | Riksbanken | `https://api.riksbank.se/swea/v1/Observations/SECBREPOEFF/<från>/<till>`, fem år bakåt i ett anrop (ingen nyckel krävs) | nyckeltal |
 
@@ -225,7 +225,9 @@ Måndagens körning (läge `<vecka>`) tar bara de bolag som morgnarna missat och
 
 4. `results.py <vecka|datum>` slår ihop omgångarna och räknar förändringen mot föregående år. Den jämför resultat per aktie
    och omsättning för kvartalet med Yahoos konsensus från dagen före rapporten (aldrig samma dag eller efter), om valutan stämmer och prognosen
-   gäller samma rapport. Inom ±2 % räknas som "i linje". Filen säkerhetskopieras med `backup_week.py`.
+   gäller samma rapport. Inom ±2 % räknas som "i linje". Har konsensus varningen "stor förändring, få analytiker"
+   (över ±50 % mot fjol från färre än 3 analytiker) blir bedömningen "osäker konsensus" i stället för över/under.
+   Filen säkerhetskopieras med `backup_week.py`.
 
 Provkörning W42 (11 rapporter, en omgång): 1,4 minuter, motsvarande 0,29 USD till API-pris med Sonnet.
 

@@ -55,7 +55,11 @@ TIMEOUT_S = 30
 # men fungerar; limit=200 täcker ungefär ett dygn. Cisions flöde täcker ungefär
 # 7 timmar och kan inte pagineras – därav körning varannan timme (GitHub hoppar ibland
 # över eller försenar schemalagda körningar).
-MFN_URL = "https://mfn.se/all/s/nordic.rss?limit=200"
+# På tunga rapportdagar räcker 200 poster bara några timmar bakåt (2026-10-20 kl. 15: till
+# 08:15). Morgonflödet, som ska nå tillbaka till förra morgonrapporten, använder därför
+# --mfn-limit 500 – fortfarande ett anrop (500 gav 249 svenska poster).
+MFN_LIMIT = 200
+MFN_URL = f"https://mfn.se/all/s/nordic.rss?limit={MFN_LIMIT}"
 CISION_URL = "https://news.cision.com/se/ListItems?format=rss"
 # Styrräntan: dagliga observationer för ett datumintervall (…/<från>/<till>),
 # kontrollerat 2026-10-05. Fem år bakåt räcker för att hitta senaste ändringen
@@ -516,10 +520,14 @@ def store(result: RunResult, raw_dir: Path, now: datetime) -> dict[str, int]:
 def main(argv: list[str] | None = None, get: Callable[[str], bytes] = http_get, now: datetime | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--raw-dir", type=Path, default=ROOT / "data" / "raw")
+    parser.add_argument("--mfn-limit", type=int, default=MFN_LIMIT,
+                        help=f"antal poster i MFN:s flöde (standard {MFN_LIMIT}; morgonflödet 500)")
     args = parser.parse_args(argv)
 
     now = now or datetime.now(STOCKHOLM)
-    result = fetch_all(get=get, today=now.astimezone(STOCKHOLM).date())
+    sources = [(name, MFN_URL.replace(f"limit={MFN_LIMIT}", f"limit={args.mfn_limit}") if name == "mfn" else url, parse)
+               for name, url, parse in SOURCES]
+    result = fetch_all(sources, get=get, today=now.astimezone(STOCKHOLM).date())
     new = store(result, args.raw_dir, now)
     print("nya poster:", new)
     if len(result.failed) == len(result.log):
