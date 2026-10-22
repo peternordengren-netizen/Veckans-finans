@@ -30,7 +30,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -41,7 +41,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from report_list import (  # noqa: E402
     MORNING_RAW, WEEK_RE, is_run, kpis_for, list_scope, run_dir, run_output, week_run_files,
 )
-from validate import DATA_DIR, RAW_DIR, Instrument, iso_week_period, load_instruments, load_sector_kpis  # noqa: E402
+from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, load_sector_kpis  # noqa: E402
 from validate_results import (  # noqa: E402
     UNCERTAIN, scope_period, surprise_pct, uncertain_consensus, unit_factor, validate_batch, validate_results,
     verdict,
