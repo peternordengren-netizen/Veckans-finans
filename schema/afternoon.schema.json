@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "afternoon.schema.json",
+  "title": "Eftermiddagsuppdatering: dagens kursreaktion för rapporterande bolag (scripts/afternoon.py, data/afternoon/<datum>.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["date", "generated_at", "scopes", "price_day", "index", "companies", "errors"],
+  "properties": {
+    "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "generated_at": { "type": "string" },
+    "mock": { "const": true },
+    "scopes": {
+      "type": "array",
+      "description": "Dagens körningar (morgon och uppdateringar) vars rapporter ingår.",
+      "items": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{4})?$" }
+    },
+    "price_day": { "type": ["string", "null"], "description": "Dagen kurserna gäller; null om Yahoo saknar kurser i dag." },
+    "index": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ticker", "name", "change_pct"],
+      "properties": {
+        "ticker": { "type": "string" },
+        "name": { "type": "string" },
+        "change_pct": { "type": ["number", "null"] }
+      }
+    },
+    "companies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ticker", "name", "scope", "published", "title", "url", "after_close", "close", "change_pct", "relative_pp"],
+        "properties": {
+          "ticker": { "type": "string" },
+          "name": { "type": "string" },
+          "scope": { "type": "string" },
+          "published": { "type": "string" },
+          "title": { "type": "string" },
+          "url": { "type": "string" },
+          "after_close": { "type": "boolean", "description": "Publicerad efter dagens stängning 17:30 – ingen reaktion i dag." },
+          "close": { "type": ["number", "null"], "description": "Senaste kursen i dag (stängning efter 17:30)." },
+          "change_pct": { "type": ["number", "null"], "description": "I dag mot förra handelsdagens stängning." },
+          "relative_pp": { "type": ["number", "null"], "description": "Mot index i procentenheter (bara aktier i kronor)." }
+        }
+      }
+    },
+    "errors": { "type": "array", "items": { "type": "string" } }
+  }
+}

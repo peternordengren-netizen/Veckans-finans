@@ -10,6 +10,9 @@
 # - VeckansFinansMorgonrapport: vardagar 08:10, kör scripts\run_morning.ps1 (utan Claude).
 #   Samma väckning och inloggnings-/upplåsningsutlösare som veckouppgiften, högst 30 minuter.
 #   Utlöses den före 08:10 (inloggning eller upplåsning tidigt) gör run_morning.ps1 ingenting.
+# - VeckansFinansEftermiddag: vardagar 17:45, kör scripts\run_update.ps1 -Scheduled. Samma väckning,
+#   högst en timme.
+# - Skrivbordsgenvägen "Uppdatera nu" kör scripts\run_update.ps1 -Open i ett synligt fönster.
 # Alla körs som den inloggade användaren, bara när hen är inloggad, utan förhöjd behörighet.
 # - Skrivbordsgenvägen "Veckans finans" kör scripts\open_site.ps1 dolt.
 #
@@ -75,7 +78,34 @@ Register-ScheduledTask -TaskName "VeckansFinansMorgonrapport" -Force `
     -Trigger @($morning, $atLogon, $atUnlock) `
     -Principal $Principal -Settings $morningSettings | Out-Null
 
+# Vardagar 17:45 lokal tid: eftermiddagsuppdateringen. Väcker datorn och tas igen samma kväll om
+# datorn var avstängd; run_update.ps1 -Scheduled gör ingenting före 17:45 (t.ex. nästa morgon)
+# eller när börsen är stängd. Ingen inloggnings-/upplåsningsutlösare: morgonflödet tar upp det
+# som missats.
+$afternoon = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday -At "17:45"
+$afternoon.StartBoundary = (Get-Date "17:45").ToString("yyyy-MM-dd'T'HH:mm:ss")
+# En timme: på en tung rapportdag kan det bli flera Claude-omgångar, och låset i run_results.ps1
+# kan behöva vänta på en pågående körning.
+$afternoonSettings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable `
+    -ExecutionTimeLimit (New-TimeSpan -Hours 1) -MultipleInstances IgnoreNew `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$afternoonAction = New-ScheduledTaskAction -Execute $Conhost -WorkingDirectory $Root `
+    -Argument "--headless `"$Ps`" -NoProfile -File `"$(Join-Path $Root 'scripts\run_update.ps1')`" -Scheduled"
+Register-ScheduledTask -TaskName "VeckansFinansEftermiddag" -Force `
+    -Description "Veckans finans: eftermiddagsuppdatering (rapportutfall sedan morgonen med Claude Code om det finns nya rapporter, dagens kursreaktion), bygger sedan om sidan. Loggar i logs\updates\." `
+    -Action $afternoonAction -Trigger $afternoon `
+    -Principal $Principal -Settings $afternoonSettings | Out-Null
+
 $shell = New-Object -ComObject WScript.Shell
+# "Uppdatera nu": samma flöde direkt, i ett synligt fönster så att förloppet syns; öppnar sidan när den är klar.
+$upd = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath("Desktop")) "Uppdatera nu.lnk"))
+$upd.TargetPath = $Ps
+$upd.Arguments = "-NoProfile -File `"$(Join-Path $Root 'scripts\run_update.ps1')`" -Open"
+$upd.WorkingDirectory = $Root
+$upd.IconLocation = "$env:WINDIR\System32\shell32.dll,238"
+$upd.Description = "Veckans finans: hämta, ta fram nya rapportutfall och dagens kursreaktion, och öppna sidan"
+$upd.Save()
+
 $lnk = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath("Desktop")) "Veckans finans.lnk"))
 $lnk.TargetPath = $Conhost
 $lnk.Arguments = "--headless `"$Ps`" -NoProfile -File `"$(Join-Path $Root 'scripts\open_site.ps1')`""

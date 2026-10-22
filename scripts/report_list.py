@@ -1,14 +1,19 @@
 """Listar rapporter (delårsrapporter, bokslutskommunikéer) för bolagen i instruments.csv,
 i omgångar om BATCH_SIZE, för /rapportutfall.
 
-Två lägen ("scope"):
+Tre lägen ("scope"):
 - vecka ("2026-W43"): veckans rapporter ur data/raw/<vecka>/ (måndagens uppsamling). Bolag
-  som redan fått sitt utfall i en godkänd morgonkörning samma vecka hoppas över.
-- dag ("2026-10-20"): rapporter publicerade i morgonens tidsfönster, ur både data/raw/ och
-  data/morning/raw/. Fönstret sparas i data/results/morning/<datum>/window.json när det skapas
-  (--skapa-fonster), så att listan och valideringen alltid räknar på samma fönster. Det börjar
-  där förra handelsdagens fönster slutade (annars förra handelsdagen 08:10) och slutar när
-  morgonkörningen startar.
+  som redan fått sitt utfall i en godkänd morgon- eller uppdateringskörning samma vecka hoppas över.
+- dag ("2026-10-20"): morgonkörningen, rapporter publicerade i dess tidsfönster, ur både
+  data/raw/ och data/morning/raw/. Fönstret sparas i data/results/morning/<datum>/window.json.
+- uppdatering ("2026-10-20T1745"): eftermiddagsuppdateringen 17:45 eller "Uppdatera nu", med
+  fönstret i data/results/updates/<läge>/window.json. Flera uppdateringar per dag går bra.
+Ett fönster sparas när det skapas (--skapa-fonster) och ändras aldrig, så att listan och
+valideringen alltid räknar på samma fönster. Det börjar där det senast slutande fönstret
+(morgon eller uppdatering, från förra handelsdagen till och med dagen) slutade, annars förra
+handelsdagen 08:10, och slutar när körningen startar. Därmed räknas ingen rapport två gånger,
+oavsett i vilken ordning körningarna sker. Bolag som redan fått ett godkänt utfall i en annan
+körning från förra handelsdagen till och med dagen hoppas över (en rapport som publiceras om).
 
 En rapport per bolag: den första icke-rutinmässiga MFN/Cision-posten vars rubrik är en rapport
 (inte en inbjudan eller ett datumbesked). Avsändaren avgörs som i rapportkalendern
@@ -20,6 +25,7 @@ Användning:
     python scripts/report_list.py 2026-W42                 # alla, med omgångsnummer
     python scripts/report_list.py 2026-W42 --omgang 2      # bara omgång 2
     python scripts/report_list.py 2026-10-20 --skapa-fonster --antal-omgangar
+    python scripts/report_list.py 2026-10-20T1745 --skapa-fonster --antal-omgangar
 """
 
 from __future__ import annotations
@@ -46,6 +52,34 @@ BATCH_SIZE = 20
 MORNING_START = time(8, 10)  # fönstrets början om förra handelsdagen saknar fönster
 WEEK_RE = re.compile(r"^\d{4}-W\d{2}$")
 DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+UPDATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{4}$")
+
+
+def is_run(scope: str) -> bool:
+    """Sant för en körning med eget tidsfönster: morgon (datum) eller uppdatering (datumThhmm)."""
+    return bool(DAY_RE.match(scope) or UPDATE_RE.match(scope))
+
+
+def run_dir(scope: str, results_dir: Path = RESULTS_DIR) -> Path:
+    """Katalogen med en körnings fönster och omgångar."""
+    return results_dir / ("updates" if UPDATE_RE.match(scope) else "morning") / scope
+
+
+def run_output(scope: str, results_dir: Path = RESULTS_DIR) -> Path:
+    """Den sammanslagna filen för en körning (data/results/morning|updates/<läge>.json)."""
+    d = run_dir(scope, results_dir)
+    return d.parent / f"{scope}.json"
+
+
+def runs_on(day: date, results_dir: Path = RESULTS_DIR) -> list[str]:
+    """Dagens körningar med fönster eller sammanslagen fil: morgonen först, sedan uppdateringarna."""
+    out = [day.isoformat()] if (results_dir / "morning" / day.isoformat()).exists() or \
+        (results_dir / "morning" / f"{day.isoformat()}.json").exists() else []
+    updates = results_dir / "updates"
+    if updates.exists():
+        out += sorted({p.name.removesuffix(".json") for p in updates.glob(f"{day.isoformat()}T*")
+                       if UPDATE_RE.match(p.name.removesuffix(".json"))})
+    return out
 
 # Nyckeltal som tas fram för alla bolag, utöver sektorns: de jämförs med Yahoos konsensus.
 COMMON_KPIS = [
@@ -55,7 +89,10 @@ COMMON_KPIS = [
 REPORT_RE = re.compile(
     r"delårsrapport|interim report|kvartalsrapport|bokslutskommuniké|year[- ]end report|"
     r"rapport för (det )?(första|andra|tredje|fjärde) kvartalet|"
-    r"\bresultat (för )?(det )?(första|andra|tredje|fjärde) kvartalet|"
+    # "Resultat tredje kvartalet 2026", "Tele2 rapporterar resultat för …", "Bolaget: Resultat för …",
+    # "SEB:s resultat för …" – men inte "bedömer att omsättning och resultat för tredje kvartalet
+    # överstiger …" (resultatvarning).
+    r"(^|\brapporterar |:s? ?)resultat (för )?(det )?(första|andra|tredje|fjärde) kvartalet|"
     r"(first|second|third|fourth) quarter (20\d\d )?(report|results)|\bq[1-4][ -]?(20\d\d )?(rapport|report|results)",
     re.IGNORECASE,
 )
@@ -106,27 +143,42 @@ def previous_business_day(d: date) -> date:
     return d
 
 
-def window_path(day: str, results_dir: Path = RESULTS_DIR) -> Path:
-    return results_dir / "morning" / day / "window.json"
+def window_path(scope: str, results_dir: Path = RESULTS_DIR) -> Path:
+    return run_dir(scope, results_dir) / "window.json"
 
 
-def load_window(day: str, results_dir: Path = RESULTS_DIR) -> tuple[datetime, datetime] | None:
-    p = window_path(day, results_dir)
+def load_window(scope: str, results_dir: Path = RESULTS_DIR) -> tuple[datetime, datetime] | None:
+    p = window_path(scope, results_dir)
     if not p.exists():
         return None
     w = json.loads(p.read_text(encoding="utf-8"))
     return datetime.fromisoformat(w["since"]), datetime.fromisoformat(w["until"])
 
 
-def create_window(day: str, now: datetime, results_dir: Path = RESULTS_DIR) -> tuple[datetime, datetime]:
-    """Skapar dagens fönster om det inte finns (ett befintligt fönster ändras aldrig)."""
-    existing = load_window(day, results_dir)
+def latest_window_end(day: date, results_dir: Path = RESULTS_DIR, exclude: str | None = None) -> datetime | None:
+    """Senaste slut bland alla fönster (morgon och uppdateringar) från förra handelsdagen till och
+    med day, utom exclude."""
+    ends = []
+    d = previous_business_day(day)
+    while d <= day:
+        for scope in runs_on(d, results_dir):
+            w = load_window(scope, results_dir) if scope != exclude else None
+            if w:
+                ends.append(w[1])
+        d += timedelta(days=1)
+    return max(ends, default=None)
+
+
+def create_window(scope: str, now: datetime, results_dir: Path = RESULTS_DIR) -> tuple[datetime, datetime]:
+    """Skapar körningens fönster om det inte finns (ett befintligt fönster ändras aldrig). Det
+    börjar där det senast slutande fönstret slutade (se modulens beskrivning)."""
+    existing = load_window(scope, results_dir)
     if existing:
         return existing
-    prev = previous_business_day(date.fromisoformat(day)).isoformat()
-    prev_window = load_window(prev, results_dir)
-    since = prev_window[1] if prev_window else datetime.combine(date.fromisoformat(prev), MORNING_START, STOCKHOLM)
-    p = window_path(day, results_dir)
+    day = date.fromisoformat(scope[:10])
+    since = latest_window_end(day, results_dir, exclude=scope) or \
+        datetime.combine(previous_business_day(day), MORNING_START, STOCKHOLM)
+    p = window_path(scope, results_dir)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps({"since": since.isoformat(timespec="seconds"),
                              "until": now.isoformat(timespec="seconds")}) + "\n", encoding="utf-8")
@@ -144,32 +196,57 @@ def _rel(path: Path) -> str:
         return path.as_posix()
 
 
-def _morning_tickers(week: str, results_dir: Path) -> set[str]:
-    """Bolag med godkänt utfall i veckans morgonkörningar (sammanslagna morgonfiler)."""
+def week_run_files(week: str, results_dir: Path = RESULTS_DIR) -> list[Path]:
+    """Veckans sammanslagna filer från morgon- och uppdateringskörningar, i tidsordning."""
     start, _ = iso_week_period(week)
-    out: set[str] = set()
+    out = []
     for i in range(7):
-        p = results_dir / "morning" / f"{start + timedelta(days=i)}.json"
-        if p.exists():
-            out |= {r["ticker"] for r in json.loads(p.read_text(encoding="utf-8")).get("reports", [])}
+        for scope in runs_on(start + timedelta(days=i), results_dir):
+            p = run_output(scope, results_dir)
+            if p.exists():
+                out.append(p)
+    return out
+
+
+def _recent_run_tickers(scope: str, results_dir: Path) -> set[str]:
+    """Bolag med godkänt utfall i en annan körning från förra handelsdagen till och med dagen.
+    En rapport som publiceras om (t.ex. Castellum 2026-10-22 08:00 och 08:25 med ny adress) ska
+    inte få ett andra utfall i nästa körning."""
+    day = date.fromisoformat(scope[:10])
+    out: set[str] = set()
+    d = previous_business_day(day)
+    while d <= day:
+        for other in runs_on(d, results_dir):
+            p = run_output(other, results_dir)
+            if other != scope and p.exists():
+                out |= {r["ticker"] for r in json.loads(p.read_text(encoding="utf-8")).get("reports", [])}
+        d += timedelta(days=1)
+    return out
+
+
+def _morning_tickers(week: str, results_dir: Path) -> set[str]:
+    """Bolag med godkänt utfall i veckans morgon- och uppdateringskörningar (sammanslagna filer)."""
+    out: set[str] = set()
+    for p in week_run_files(week, results_dir):
+        out |= {r["ticker"] for r in json.loads(p.read_text(encoding="utf-8")).get("reports", [])}
     return out
 
 
 def list_scope(scope: str, instruments: dict[str, Instrument], sector_kpis: dict[str, list[dict]],
                raw_dir: Path = RAW_DIR, morning_raw: Path | None = MORNING_RAW,
                results_dir: Path | None = RESULTS_DIR) -> list[dict]:
-    """Rapporterna för en vecka eller en dag (se modulens beskrivning), en per bolag."""
+    """Rapporterna för en vecka eller en körning (se modulens beskrivning), en per bolag."""
     if WEEK_RE.match(scope):
         bases = [raw_dir / scope]
         window = None
         skip = _morning_tickers(scope, results_dir) if results_dir else set()
-    elif DAY_RE.match(scope):
+    elif is_run(scope):
         window = load_window(scope, results_dir) if results_dir else None
         if window is None:
             return []
         weeks = sorted({_iso_week(window[0].date()), _iso_week(window[1].date())})
         bases = [b / w for w in weeks for b in (raw_dir, morning_raw) if b is not None]
-        skip = set()
+        skip = _recent_run_tickers(scope, results_dir)
     else:
         raise ValueError(f"ogiltig vecka eller dag: {scope!r}")
     return _list(bases, window, skip, instruments, sector_kpis)
@@ -258,22 +335,22 @@ def batches(reports: list[dict]) -> int:
 def main(argv: list[str] | None = None, now: datetime | None = None) -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     p = argparse.ArgumentParser()
-    p.add_argument("scope", help="vecka (2026-W43) eller dag (2026-10-20)")
+    p.add_argument("scope", help="vecka (2026-W43), dag (2026-10-20) eller uppdatering (2026-10-20T1745)")
     p.add_argument("--omgang", type=int)
     p.add_argument("--antal-omgangar", action="store_true")
-    p.add_argument("--skapa-fonster", action="store_true", help="dagsläge: skapa dagens tidsfönster om det saknas")
+    p.add_argument("--skapa-fonster", action="store_true", help="dag/uppdatering: skapa tidsfönstret om det saknas")
     args = p.parse_args(argv)
-    if not (WEEK_RE.match(args.scope) or DAY_RE.match(args.scope)):
-        print(f"ogiltig vecka eller dag: {args.scope!r}", file=sys.stderr)
+    if not (WEEK_RE.match(args.scope) or is_run(args.scope)):
+        print(f"ogiltig vecka, dag eller uppdatering: {args.scope!r}", file=sys.stderr)
         return 1
-    if args.skapa_fonster and DAY_RE.match(args.scope):
+    if args.skapa_fonster and is_run(args.scope):
         create_window(args.scope, now or datetime.now(STOCKHOLM))
     reports = list_scope(args.scope, load_instruments(), load_sector_kpis())
     if args.antal_omgangar:
         print(batches(reports))
         return 0
     chosen = [r for r in reports if args.omgang is None or r["batch"] == args.omgang]
-    label = "Vecka" if WEEK_RE.match(args.scope) else "Dag"
+    label = "Vecka" if WEEK_RE.match(args.scope) else "Uppdatering" if UPDATE_RE.match(args.scope) else "Dag"
     print(f"{label} {args.scope}: {len(reports)} rapporter i {batches(reports)} omgångar"
           + (f", omgång {args.omgang}: {len(chosen)}" if args.omgang else ""))
     print("nr | omgång | ticker | bolag | sektor | nyckeltal | publicerad | text | raw_file | sökväg | rubrik")

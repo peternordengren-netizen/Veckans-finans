@@ -207,11 +207,11 @@ def validate_batch(data: dict, week: str, batch: int, instruments: dict[str, Ins
 
 
 def scope_period(scope: str) -> dict:
-    """{start, end} för en vecka eller en dag."""
+    """{start, end} för en vecka, en dag eller en uppdatering (dess datum)."""
     if re.fullmatch(r"\d{4}-W\d{2}", scope):
         start, end = iso_week_period(scope)
         return {"start": start.isoformat(), "end": end.isoformat()}
-    return {"start": scope, "end": scope}
+    return {"start": scope[:10], "end": scope[:10]}
 
 
 def validate_results(data: dict, week: str, instruments: dict[str, Instrument], raw_dir: Path = RAW_DIR,
@@ -235,7 +235,7 @@ def validate_results(data: dict, week: str, instruments: dict[str, Instrument], 
     for r in data["reports"]:
         where = f"{r['ticker']} ({r['scope']})"
         if r["scope"] != week and not (re.fullmatch(r"\d{4}-W\d{2}", week) and scope_period(week)["start"]
-                                       <= r["scope"] <= scope_period(week)["end"]):
+                                       <= r["scope"][:10] <= scope_period(week)["end"]):
             res.errors.append(f"{where}: läget {r['scope']} hör inte till {week}")
             continue
         if r["scope"] not in listings:

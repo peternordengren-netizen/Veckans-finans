@@ -17,6 +17,7 @@ const CALENDAR_DIR = IS_MOCK ? join(DATA, "mock", "calendar") : join(DATA, "cale
 const SIGNALS_DIR = IS_MOCK ? join(DATA, "mock", "signals") : join(DATA, "signals");
 const MORNING_DIR = IS_MOCK ? join(DATA, "mock", "morning") : join(DATA, "morning");
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const UPDATE_RE = /^\d{4}-\d{2}-\d{2}T\d{4}$/;
 
 // Morgonrapporten (scripts/morning.py, schema/morning.schema.json).
 export interface MorningChange {
@@ -57,6 +58,61 @@ export function listMorningDates(): string[] {
 
 export function loadMorning(day: string): MorningReport {
   return readJson<MorningReport>(join(MORNING_DIR, `${day}.json`));
+}
+
+// Eftermiddagsuppdateringen (scripts/afternoon.py, schema/afternoon.schema.json).
+const AFTERNOON_DIR = IS_MOCK ? join(DATA, "mock", "afternoon") : join(DATA, "afternoon");
+export interface AfternoonReaction {
+  ticker: string;
+  name: string;
+  scope: string;
+  published: string;
+  title: string;
+  url: string;
+  after_close: boolean;
+  close: number | null;
+  change_pct: number | null;
+  relative_pp: number | null;
+}
+export interface AfternoonReport {
+  date: string;
+  generated_at: string;
+  scopes: string[];
+  price_day: string | null;
+  index: { ticker: string; name: string; change_pct: number | null };
+  companies: AfternoonReaction[];
+  errors: string[];
+}
+
+/** Senaste eftermiddagsuppdateringen, eller null. Valfri fil; en trasig fil visas inte. */
+export function loadLatestAfternoon(): AfternoonReport | null {
+  if (!existsSync(AFTERNOON_DIR)) return null;
+  const days = readdirSync(AFTERNOON_DIR)
+    .filter((f) => f.endsWith(".json") && DATE_RE.test(f.slice(0, -5)))
+    .sort();
+  if (days.length === 0) return null;
+  const path = join(AFTERNOON_DIR, days[days.length - 1]);
+  try {
+    return readJson<AfternoonReport>(path);
+  } catch (err) {
+    console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan eftermiddagsuppdatering:`, err);
+    return null;
+  }
+}
+
+/** Rapportutfallen från en dags uppdateringar (data/results/updates/<datum>T<hhmm>.json), sammanslagna. */
+export function loadUpdateResults(day: string): { reports: ReportResult[]; missingBatches: number[] } | null {
+  const dir = join(RESULTS_DIR, "updates");
+  if (!existsSync(dir)) return null;
+  const files = readdirSync(dir)
+    .filter((f) => f.startsWith(`${day}T`) && f.endsWith(".json"))
+    .sort();
+  const all = files.map((f) => loadResults(f.slice(0, -5))).filter((r) => r !== null);
+  if (all.length === 0) return null;
+  return {
+    reports: all.flatMap((r) => r.reports).sort((a, b) => a.published.localeCompare(b.published)),
+    missingBatches: all.flatMap((r) => r.missingBatches),
+  };
 }
 const WEEK_RE = /^\d{4}-W\d{2}$/;
 
@@ -226,10 +282,15 @@ export function loadValuation(week: string): ValuationView | null {
   }
 }
 
-/** Rapportutfall (scripts/results.py) för en vecka eller, med ett datum, en morgonkörning
- * (data/results/morning/<datum>.json). Valfri fil; saknas den visas ingenting. */
+/** Rapportutfall (scripts/results.py) för en vecka, en morgonkörning (datum,
+ * data/results/morning/<datum>.json) eller en uppdatering (datumThhmm, data/results/updates/).
+ * Valfri fil; saknas den visas ingenting. */
 export function loadResults(scope: string): { reports: ReportResult[]; missingBatches: number[] } | null {
-  const path = DATE_RE.test(scope) ? join(RESULTS_DIR, "morning", `${scope}.json`) : join(RESULTS_DIR, `${scope}.json`);
+  const path = DATE_RE.test(scope)
+    ? join(RESULTS_DIR, "morning", `${scope}.json`)
+    : UPDATE_RE.test(scope)
+      ? join(RESULTS_DIR, "updates", `${scope}.json`)
+      : join(RESULTS_DIR, `${scope}.json`);
   if (!existsSync(path)) return null;
   try {
     const raw = readJson<{ reports: ReportResult[]; missing_batches: number[] }>(path);

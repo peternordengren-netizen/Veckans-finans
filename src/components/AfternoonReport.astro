@@ -1,0 +1,192 @@
+---
+/**
+ * Eftermiddagsuppdateringen överst på startsidan (scripts/afternoon.py och rapportutfallen från
+ * dagens uppdateringar): dagens kursreaktion för bolagen som rapporterat, och utfallen i rapporterna
+ * som kommit sedan morgonrapporten.
+ */
+import type { AfternoonReport } from "../lib/data";
+import { shortDate } from "../lib/format";
+import type { ReportResult } from "../lib/results";
+import { signedPct } from "../lib/signals";
+import ResultsPanel from "./ResultsPanel.astro";
+
+interface Props {
+  report: AfternoonReport;
+  /** Rapportutfall från dagens uppdateringar (data/results/updates/<datum>T*.json). */
+  results: { reports: ReportResult[]; missingBatches: number[] } | null;
+}
+const { report, results } = Astro.props;
+const time = (iso: string) =>
+  new Date(iso).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" });
+const dayTime = (iso: string) => {
+  const d = new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" });
+  return d === report.date ? time(iso) : `${shortDate(d)} ${time(iso)}`;
+};
+const price = (v: number | null) => (v === null ? "–" : v.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const generated = time(report.generated_at);
+const beforeClose = generated < "17:30";
+const reacted = report.companies.filter((c) => !c.after_close);
+const afterClose = report.companies.filter((c) => c.after_close);
+const tone = (v: number | null) => (v === null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "");
+---
+
+<div class="afternoon">
+  <section class="block" aria-labelledby="reaktion-rubrik">
+    <h3 id="reaktion-rubrik">Kursreaktion i dag</h3>
+    <p class="note">
+      Bolag som rapporterat sedan förra handelsdagens stängning: kursen {beforeClose ? `kl. ${generated}` : "vid stängning"}{" "}
+      mot förra handelsdagens stängning, och mot index.
+      {report.index.change_pct !== null && ` ${report.index.name}: ${signedPct(report.index.change_pct, 2)}.`}
+      {report.price_day === null && reacted.length > 0 && " Yahoo har inga kurser för i dag ännu."}
+    </p>
+    {report.companies.length === 0 && <p class="empty">Inga rapporter från bolag i bevakningslistan sedan förra handelsdagens stängning.</p>}
+    {
+      reacted.length > 0 && (
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Bolag</th>
+                <th scope="col">Rapport</th>
+                <th scope="col" class="num">Kurs</th>
+                <th scope="col" class="num">I dag</th>
+                <th scope="col" class="num">Mot index</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reacted.map((c) => (
+                <tr>
+                  <th scope="row">
+                    <strong>{c.name}</strong> <span class="muted">{c.ticker}</span>
+                  </th>
+                  <td>
+                    <a href={c.url} rel="noopener noreferrer" target="_blank">
+                      {dayTime(c.published)}
+                      <span class="sr-only"> – {c.title} (öppnas i ny flik)</span>
+                      <span aria-hidden="true"> ↗</span>
+                    </a>
+                  </td>
+                  <td class="num">{price(c.close)}</td>
+                  <td class:list={["num", tone(c.change_pct)]}>{signedPct(c.change_pct)}</td>
+                  <td class:list={["num", tone(c.relative_pp)]}>{signedPct(c.relative_pp)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+    {
+      afterClose.length > 0 && (
+        <p class="note after">
+          Efter stängning, reaktionen syns nästa handelsdag:{" "}
+          {afterClose.map((c, i) => (
+            <>
+              {i > 0 && ", "}
+              <a href={c.url} rel="noopener noreferrer" target="_blank">
+                {c.name} {time(c.published)}
+              </a>
+            </>
+          ))}
+          .
+        </p>
+      )
+    }
+  </section>
+
+  {
+    results && (
+      <section class="block" aria-labelledby="eftermiddag-utfall">
+        <h3 id="eftermiddag-utfall">Utfall sedan morgonen</h3>
+        <ResultsPanel results={results} context="afternoon" />
+      </section>
+    )
+  }
+
+  {
+    report.errors.length > 0 && (
+      <details class="errors">
+        <summary>Fel vid hämtningen ({report.errors.length})</summary>
+        <ul>
+          {report.errors.map((e) => (
+            <li>{e}</li>
+          ))}
+        </ul>
+      </details>
+    )
+  }
+</div>
+
+<style>
+  .block {
+    padding: 12px 0 8px;
+  }
+  .block > h3 {
+    margin: 0 0 6px;
+    font-size: 1.1875rem;
+  }
+  .note,
+  .empty,
+  .muted {
+    color: var(--muted);
+  }
+  .note {
+    margin: 0 0 10px;
+    font-size: 0.875rem;
+    max-width: 70ch;
+  }
+  .note.after {
+    margin-top: 10px;
+  }
+  .empty {
+    margin: 0 0 8px;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+  }
+  th,
+  td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  thead th {
+    background: var(--surface-2);
+  }
+  tbody th {
+    font-weight: normal;
+  }
+  th.num,
+  td.num {
+    text-align: right;
+  }
+  .pos {
+    color: var(--pos);
+  }
+  .neg {
+    color: var(--neg);
+  }
+  .errors {
+    margin-top: 12px;
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+</style>

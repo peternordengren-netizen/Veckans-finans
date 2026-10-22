@@ -22,7 +22,7 @@
   },
   "properties": {
     "schema_version": { "const": 1 },
-    "week": { "type": "string", "pattern": "^(\\d{4}-W\\d{2}|\\d{4}-\\d{2}-\\d{2})$", "description": "Vecka (måndagens uppsamling) eller datum (morgonkörning)." },
+    "week": { "type": "string", "pattern": "^(\\d{4}-W\\d{2}|\\d{4}-\\d{2}-\\d{2}(T\\d{4})?)$", "description": "Vecka (måndagens uppsamling), datum (morgonkörning) eller datumThhmm (uppdatering)." },
     "period": {
       "type": "object",
       "additionalProperties": false,
@@ -42,7 +42,7 @@
         "properties": {
           "ticker": { "type": "string" },
           "name": { "type": "string" },
-          "scope": { "type": "string", "pattern": "^(\\d{4}-W\\d{2}|\\d{4}-\\d{2}-\\d{2})$", "description": "Körningen rapporten kom från: datum (morgon) eller vecka (måndag)." },
+          "scope": { "type": "string", "pattern": "^(\\d{4}-W\\d{2}|\\d{4}-\\d{2}-\\d{2}(T\\d{4})?)$", "description": "Körningen rapporten kom från: datum (morgon), datumThhmm (uppdatering) eller vecka (måndag)." },
           "sector": { "type": ["string", "null"] },
           "published": { "type": "string" },
           "url": { "type": "string" },

@@ -364,6 +364,23 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
   dagens rapportfönster inte låses innan morgonens rapporter släppts. Claude används inte i själva morgonrapporten,
   så den drar ingenting av abonnemanget. Se [Morgonrapport](#morgonrapport-scriptsmorningpy).
   Loggarna hamnar i `logs/morning/`.
+- **VeckansFinansEftermiddag** kör `scripts/run_update.ps1 -Scheduled` vardagar 17:45:
+  1. Lokal hämtning till `data/morning/raw/`.
+  2. Rapportutfall för rapporterna sedan förra körningens fönster, i läget `<datum>T<hhmm>` under
+     `data/results/updates/`. Claude körs bara om fönstret innehåller rapporter.
+  3. Dagens kursreaktion för de rapporterande bolagen med `scripts/afternoon.py`: kurs i dag och mot index, i
+     `data/afternoon/<datum>.json`.
+  4. Bygget av sidan.
+
+  Uppdateringen visas som **Eftermiddag** överst på startsidan, ovanför morgonrapporten, tills nästa morgonrapport
+  finns. Varje fönster börjar där det senast slutande fönstret slutade, morgon eller uppdatering, så att ingen rapport
+  räknas två gånger. Ett bolag som redan fått ett utfall i en annan körning samma eller förra handelsdagen hoppas
+  också över, eftersom bolag ibland skickar ut samma rapport igen. Uppgiften väcker datorn och tas igen samma kväll.
+  Före 17:45 och när börsen är stängd gör den ingenting. Den har ingen inloggningsutlösare, eftersom morgonflödet tar
+  upp det som missats. Loggarna hamnar i `logs/updates/`.
+- Skrivbordsgenvägen **Uppdatera nu** kör samma flöde direkt, i ett synligt fönster, och öppnar sidan när den är
+  klar. Den kan köras när som helst och hur ofta som helst, och varje körning får ett eget fönster. Ett lås i
+  `run_results.ps1` gör att två körningar aldrig tar fram rapportutfall samtidigt.
 - Skrivbordsgenvägen **Veckans finans** kör `scripts/open_site.ps1`. Den startar servern om den inte svarar och
   öppnar sidan.
 

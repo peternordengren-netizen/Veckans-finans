@@ -11,6 +11,7 @@ data/morning/
 data/consensus/
 data/results/
 data/valuation/
+data/afternoon/
 
 # Python
 .venv/

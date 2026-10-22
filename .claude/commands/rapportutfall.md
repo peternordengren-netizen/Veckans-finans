@@ -1,14 +1,16 @@
 ---
-description: Ta fram rapporterade nyckeltal ur rapporter (en omgång om 20) för en vecka eller en morgon
-argument-hint: "<ISO-vecka eller datum> <omgång>, t.ex. 2026-W43 1 eller 2026-10-20 1"
+description: Ta fram rapporterade nyckeltal ur rapporter (en omgång om 20) för en vecka, en morgon eller en uppdatering
+argument-hint: "<ISO-vecka, datum eller datumThhmm> <omgång>, t.ex. 2026-W43 1, 2026-10-20 1 eller 2026-10-20T1745 1"
 ---
 
 Du ska ta fram rapporterade nyckeltal ur bolagens egna rapporter för Veckans finans. Argument: `$ARGUMENTS`:
-läge och omgång. Läget är antingen en vecka (`2026-W43 1`, måndagens uppsamling) eller ett datum (`2026-10-20 1`,
-morgonkörningen med rapporter sedan föregående morgon).
+läge och omgång. Läget är en vecka (`2026-W43 1`, måndagens uppsamling), ett datum (`2026-10-20 1`,
+morgonkörningen) eller ett datum med klockslag (`2026-10-20T1745 1`, eftermiddagsuppdateringen eller
+"Uppdatera nu"). Morgon och uppdatering tar rapporterna sedan föregående körning.
 
 Utfil: `data/results/<vecka>/omgang-<omgång>.json` för en vecka, `data/results/morning/<datum>/omgang-<omgång>.json`
-för ett datum. I filen är `"week"` läget, alltså veckan eller datumet.
+för ett datum och `data/results/updates/<datumThhmm>/omgang-<omgång>.json` för en uppdatering. I filen är `"week"`
+läget, alltså veckan, datumet eller datumet med klockslag.
 
 ## Schemalagd körning
 

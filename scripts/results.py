@@ -1,9 +1,12 @@
 """Slår ihop omgångarna från /rapportutfall och jämför med föregående år och med förväntan.
 
-Två lägen (se scripts/report_list.py):
+Tre lägen (se scripts/report_list.py):
 - dag (morgonkörningen): data/results/morning/<datum>/omgang-<N>.json -> data/results/morning/<datum>.json
+- uppdatering (17:45 eller "Uppdatera nu"): data/results/updates/<datumThhmm>/omgang-<N>.json
+  -> data/results/updates/<datumThhmm>.json
 - vecka (måndagens uppsamling): data/results/<vecka>/omgang-<N>.json plus veckans godkända
-  morgonfiler -> data/results/<vecka>.json. Varje rapport har "scope" = körningen den kom från.
+  morgon- och uppdateringsfiler -> data/results/<vecka>.json. Varje rapport har "scope" = körningen
+  den kom från.
 
 - Omgångsfilerna valideras var för sig; en omgång som saknas eller underkänns tas inte med
   (listas i "missing_batches").
@@ -35,7 +38,9 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from report_list import DAY_RE, MORNING_RAW, WEEK_RE, kpis_for, list_scope  # noqa: E402
+from report_list import (  # noqa: E402
+    MORNING_RAW, WEEK_RE, is_run, kpis_for, list_scope, run_dir, run_output, week_run_files,
+)
 from validate import DATA_DIR, RAW_DIR, Instrument, iso_week_period, load_instruments, load_sector_kpis  # noqa: E402
 from validate_results import (  # noqa: E402
     UNCERTAIN, scope_period, surprise_pct, uncertain_consensus, unit_factor, validate_batch, validate_results,
@@ -49,11 +54,11 @@ CONSENSUS_DATE_DAYS = 3
 
 
 def output_path(scope: str, results_dir: Path = RESULTS_DIR) -> Path:
-    return results_dir / "morning" / f"{scope}.json" if DAY_RE.match(scope) else results_dir / f"{scope}.json"
+    return run_output(scope, results_dir) if is_run(scope) else results_dir / f"{scope}.json"
 
 
 def batch_dir(scope: str, results_dir: Path = RESULTS_DIR) -> Path:
-    return results_dir / "morning" / scope if DAY_RE.match(scope) else results_dir / scope
+    return run_dir(scope, results_dir) if is_run(scope) else results_dir / scope
 
 
 def consensus_before(day: date, consensus_dir: Path = CONSENSUS_DIR) -> dict | None:
@@ -153,12 +158,10 @@ def build(scope: str, instruments: dict[str, Instrument], now: datetime, raw_dir
     dirs = {"raw_dir": raw_dir, "morning_raw": morning_raw, "results_dir": results_dir}
     reports, missing, problems = _merge_batches(scope, instruments, dirs, results_dir, consensus_dir)
     if WEEK_RE.match(scope):
-        # Veckans morgonkörningar: redan godkända när de skrevs, valideras igen i validate_results.
-        start, _ = iso_week_period(scope)
-        for i in range(7):
-            p = output_path((start + timedelta(days=i)).isoformat(), results_dir)
-            if p.exists():
-                reports += json.loads(p.read_text(encoding="utf-8"))["reports"]
+        # Veckans morgon- och uppdateringskörningar: redan godkända när de skrevs, valideras igen
+        # i validate_results.
+        for p in week_run_files(scope, results_dir):
+            reports += json.loads(p.read_text(encoding="utf-8"))["reports"]
     reports.sort(key=lambda r: (r["published"], r["name"]))
     return ({"schema_version": 1, "week": scope, "period": scope_period(scope),
              "generated_at": now.isoformat(timespec="seconds"), "reports": reports, "missing_batches": missing},
@@ -169,12 +172,12 @@ def main(argv: list[str] | None = None, now: datetime | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8")
     p = argparse.ArgumentParser()
-    p.add_argument("scope", help="vecka (2026-W43) eller dag (2026-10-20)")
+    p.add_argument("scope", help="vecka (2026-W43), dag (2026-10-20) eller uppdatering (2026-10-20T1745)")
     p.add_argument("--backup", action="store_true",
                    help="säkerhetskopiera filen till det privata repot (veckan sköts annars av backup_week.py)")
     args = p.parse_args(argv)
-    if not (WEEK_RE.match(args.scope) or DAY_RE.match(args.scope)):
-        print(f"ogiltig vecka eller dag: {args.scope!r}", file=sys.stderr)
+    if not (WEEK_RE.match(args.scope) or is_run(args.scope)):
+        print(f"ogiltig vecka, dag eller uppdatering: {args.scope!r}", file=sys.stderr)
         return 1
     instruments = load_instruments()
     data, problems = build(args.scope, instruments, now or datetime.now(STOCKHOLM))

@@ -93,6 +93,11 @@ def test_rapportrubriker():
     assert is_report_title("Alfaverken rapporterar resultat för tredje kvartalet 2026: starkt kassaflöde", d)
     assert not is_report_title("Alfaverken publicerar resultat för tredje kvartalet den 30 oktober", d)
     assert not is_report_title("Alfaverken: preliminärt resultat för tredje kvartalet 2026", d)
+    assert is_report_title("Alfaverken AB: Resultat för tredje kvartalet 2026", d)
+    assert is_report_title("ALFA:s resultat för tredje kvartalet 2026", d)
+    # Resultatvarning, ingen rapport (2026-10-15 räknades en sådan som rapport).
+    assert not is_report_title("Alfaverken bedömer att omsättning och resultat för tredje kvartalet 2026 "
+                               "väsentligt överstiger marknadens förväntningar", d)
     assert not is_report_title("Inbjudan till presentation av resultat för tredje kvartalet", d)
 
 
@@ -207,12 +212,15 @@ def test_validate_py_valjer_resultatvalideringen_for_morgonfiler(tmp_path, monke
     paths = [tmp_path / "results" / "morning" / "2026-10-20" / "omgang-1.json",
              tmp_path / "results" / "morning" / "2026-10-20.json",
              tmp_path / "results" / "2026-W43" / "omgang-2.json",
-             tmp_path / "results" / "2026-W43.json"]
+             tmp_path / "results" / "2026-W43.json",
+             tmp_path / "results" / "updates" / "2026-10-20T1745" / "omgang-1.json",
+             tmp_path / "results" / "updates" / "2026-10-20T1745.json"]
     for p in paths:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("{}", encoding="utf-8")
     assert validate.main([str(p) for p in paths]) == 0
-    assert calls == [("omgång", "2026-10-20", 1), ("fil", "2026-10-20"), ("omgång", "2026-W43", 2), ("fil", "2026-W43")]
+    assert calls == [("omgång", "2026-10-20", 1), ("fil", "2026-10-20"), ("omgång", "2026-W43", 2), ("fil", "2026-W43"),
+                     ("omgång", "2026-10-20T1745", 1), ("fil", "2026-10-20T1745")]
 
 
 def test_osaker_konsensus_ger_ingen_bedomning(tmp_path):
@@ -329,6 +337,76 @@ def test_nasta_fonster_borjar_dar_forra_slutade(tmp_path):
     # Ett befintligt fönster ändras aldrig.
     again = create_window("2026-10-23", datetime(2026, 10, 23, 15, 0, tzinfo=tz), d)
     assert again[1].isoformat() == "2026-10-23T08:10:00+02:00"
+
+
+def test_uppdateringar_och_morgnar_kedjas_utan_overlapp(tmp_path):
+    """Varje fönster börjar där det senast slutande fönstret slutade, oavsett ordning och körningstyp."""
+    from report_list import create_window
+
+    tz = ZoneInfo("Europe/Stockholm")
+    d = tmp_path / "results"
+    at = lambda day, h, m: datetime(2026, 10, day, h, m, tzinfo=tz)  # noqa: E731
+    create_window("2026-10-22", at(22, 8, 10), d)
+    # Eftermiddagen samma dag fortsätter från morgonen, nästa morgon från eftermiddagen.
+    assert create_window("2026-10-22T1745", at(22, 17, 45), d)[0] == at(22, 8, 10)
+    # "Uppdatera nu" före morgonkörningen: morgonen fortsätter från uppdateringen.
+    assert create_window("2026-10-23T0730", at(23, 7, 30), d)[0] == at(22, 17, 45)
+    assert create_window("2026-10-23", at(23, 8, 10), d)[0] == at(23, 7, 30)
+    assert create_window("2026-10-23T1745", at(23, 17, 45), d)[0] == at(23, 8, 10)
+    # En uppdatering på lördagen räknas in när måndagens morgon börjar (förra handelsdagen är fredag).
+    assert create_window("2026-10-24T1100", at(24, 11, 0), d)[0] == at(23, 17, 45)
+    assert create_window("2026-10-26", at(26, 8, 10), d)[0] == at(24, 11, 0)
+    assert (d / "updates" / "2026-10-22T1745" / "window.json").exists()
+
+
+def test_omskickad_rapport_far_inget_andra_utfall(tmp_path):
+    """Samma rapport publicerad igen (ny adress) efter morgonens fönster: uppdateringen hoppar över bolaget."""
+    from report_list import create_window, list_scope
+
+    raw, morning_raw, results_dir = _morning_setup(tmp_path)
+    tz = ZoneInfo("Europe/Stockholm")
+    idx = json.loads((morning_raw / WEEK / "index.json").read_text(encoding="utf-8"))
+    idx["items"].append({**idx["items"][0], "id": "alfa-2", "url": "https://mfn.example/alfa-1",
+                         "published": "2026-10-22T08:25:00+02:00"})
+    (morning_raw / WEEK / "index.json").write_text(json.dumps(idx), encoding="utf-8")
+    scope = "2026-10-22T1745"
+    create_window(scope, datetime(2026, 10, 22, 17, 45, tzinfo=tz), results_dir)
+    assert [r["ticker"] for r in list_scope(scope, INSTRUMENTS, load_sector_kpis(), raw, morning_raw, results_dir)] \
+        == ["ALFA"]  # morgonen har inget godkänt utfall: omskicket tas med
+    (results_dir / "morning" / "2026-10-22" / "omgang-1.json").write_text(
+        json.dumps({"week": "2026-10-22", "batch": 1, "reports": [alfa()]}), encoding="utf-8")
+    day, _ = results.build("2026-10-22", INSTRUMENTS, datetime(2026, 10, 22, 8, 15, tzinfo=tz), raw, results_dir,
+                           tmp_path / "consensus", morning_raw)
+    (results_dir / "morning" / "2026-10-22.json").write_text(json.dumps(day), encoding="utf-8")
+    assert list_scope(scope, INSTRUMENTS, load_sector_kpis(), raw, morning_raw, results_dir) == []
+    # Morgonens egen lista påverkas inte av sin egen fil.
+    assert [r["ticker"] for r in list_scope("2026-10-22", INSTRUMENTS, load_sector_kpis(), raw, morning_raw,
+                                            results_dir)] == ["ALFA"]
+
+
+def test_uppdatering_listas_slas_ihop_och_tas_med_i_veckan(tmp_path):
+    from report_list import create_window, list_scope
+
+    raw, morning_raw, results_dir = _morning_setup(tmp_path)  # morgonfönster 21 okt 08:10 - 22 okt 08:10
+    tz = ZoneInfo("Europe/Stockholm")
+    scope = "2026-10-23T1745"
+    create_window(scope, datetime(2026, 10, 23, 17, 45, tzinfo=tz), results_dir)
+    listed = list_scope(scope, INSTRUMENTS, load_sector_kpis(), raw, morning_raw, results_dir)
+    assert [r["ticker"] for r in listed] == ["BETA"]  # Alfaverken (22 okt 07:00) låg i morgonens fönster
+    (results_dir / "updates" / scope / "omgang-1.json").write_text(
+        json.dumps({"week": scope, "batch": 1, "reports": [beta()]}), encoding="utf-8")
+    upd, problems = results.build(scope, INSTRUMENTS, datetime(2026, 10, 23, 17, 50, tzinfo=tz), raw, results_dir,
+                                  tmp_path / "consensus", morning_raw)
+    assert problems == [] and upd["period"] == {"start": "2026-10-23", "end": "2026-10-23"}
+    assert validate_results(upd, scope, INSTRUMENTS, raw, morning_raw, results_dir).errors == []
+    assert results.output_path(scope, results_dir) == results_dir / "updates" / f"{scope}.json"
+    results.output_path(scope, results_dir).write_text(json.dumps(upd), encoding="utf-8")
+    # Måndagens uppsamling hoppar över bolaget och tar med uppdateringens utfall.
+    assert [r["ticker"] for r in list_scope(WEEK, INSTRUMENTS, load_sector_kpis(), raw, morning_raw, results_dir)] \
+        == ["ALFA"]
+    week, _ = results.build(WEEK, INSTRUMENTS, NOW, raw, results_dir, tmp_path / "consensus", morning_raw)
+    assert [(r["ticker"], r["scope"]) for r in week["reports"]] == [("BETA", scope)]
+    assert validate_results(week, WEEK, INSTRUMENTS, raw, morning_raw, results_dir).errors == []
 
 
 def test_veckan_hoppar_over_morgonens_bolag_och_tar_med_dem(tmp_path):

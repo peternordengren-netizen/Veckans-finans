@@ -1,10 +1,12 @@
 ﻿# Rapportutfall: /rapportutfall med Claude Code (Sonnet) i omgångar om 20, sedan scripts/results.py
 # (sammanslagning, jämförelse med föregående år och förväntan) och säkerhetskopia.
 #
-# Två lägen (se scripts/report_list.py):
+# Tre lägen (se scripts/report_list.py):
 #   -Week 2026-W43   måndagens uppsamling (anropas av run_weekly.ps1): det som morgnarna missat
-#   -Week 2026-10-20 morgonkörningen (anropas av run_morning.ps1): rapporter sedan förra morgonen;
+#   -Week 2026-10-20 morgonkörningen (anropas av run_morning.ps1): rapporter sedan förra körningen;
 #                    tidsfönstret skapas och sparas först
+#   -Week 2026-10-20T1745 uppdateringen (anropas av run_update.ps1), som morgonkörningen.
+# Claude körs bara om fönstret innehåller rapporter.
 # - En omgång vars fil redan finns och klarar valideringen körs inte om (går att återuppta).
 # - Claude körs i läget dontAsk med samma sorts begränsade lista som veckokörningen: läsa,
 #   skriva bara i data/results/, och bara report_list.py och validate.py.
@@ -21,11 +23,12 @@ $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $env:PYTHONIOENCODING = "utf-8"
-$IsDay = $Week -match '^\d{4}-\d{2}-\d{2}$'
-if (-not $IsDay -and $Week -notmatch '^\d{4}-W\d{2}$') { throw "Ogiltig vecka eller dag: '$Week'" }
-$LogDir = Join-Path $Root $(if ($IsDay) { "logs\morning" } else { "logs\weekly" })
+$IsUpdate = $Week -match '^\d{4}-\d{2}-\d{2}T\d{4}$'
+$IsDay = $IsUpdate -or $Week -match '^\d{4}-\d{2}-\d{2}$'  # körning med eget tidsfönster
+if (-not $IsDay -and $Week -notmatch '^\d{4}-W\d{2}$') { throw "Ogiltig vecka, dag eller uppdatering: '$Week'" }
+$LogDir = Join-Path $Root $(if ($IsUpdate) { "logs\updates" } elseif ($IsDay) { "logs\morning" } else { "logs\weekly" })
 New-Item -ItemType Directory -Force $LogDir | Out-Null
-$BatchDir = if ($IsDay) { "data\results\morning\$Week" } else { "data\results\$Week" }
+$BatchDir = if ($IsUpdate) { "data\results\updates\$Week" } elseif ($IsDay) { "data\results\morning\$Week" } else { "data\results\$Week" }
 
 $RunLog = Join-Path $LogDir "$Week-rapportutfall.log"
 function Log([string]$Text) {
@@ -39,6 +42,13 @@ if (-not (Test-Path $Claude)) { Log "Hittar inte Claude Code-CLI:n ($Claude) - a
 foreach ($name in @(Get-ChildItem env: | Where-Object { $_.Name -match '^(CLAUDE|ANTHROPIC)' } | ForEach-Object Name)) {
     [Environment]::SetEnvironmentVariable($name, $null, "Process")
 }
+
+# Ett lås för alla körningar (morgon, uppdatering, vecka): fönstren skapas efter varandra och
+# Claude körs aldrig i två omgångar samtidigt. Väntar högst 25 minuter på en pågående körning.
+$Lock = New-Object System.Threading.Mutex($false, "Local\VeckansFinansRapportutfall")
+try {
+    if (-not $Lock.WaitOne([TimeSpan]::FromMinutes(25))) { Log "En annan rapportutfallskörning pågår fortfarande - avbryter."; exit 0 }
+} catch [System.Threading.AbandonedMutexException] { }  # förra ägaren avslutades utan att släppa låset
 
 $listArgs = @("scripts\report_list.py", $Week, "--antal-omgangar")
 if ($IsDay) { $listArgs += "--skapa-fonster" }

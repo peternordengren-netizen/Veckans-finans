@@ -38,9 +38,10 @@ import json
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from jsonschema import Draft202012Validator, FormatChecker
 
@@ -976,6 +977,64 @@ def validate_consensus(data: dict, instruments: dict[str, Instrument]) -> Result
     return res
 
 
+def validate_afternoon(data: dict, day: str, instruments: dict[str, Instrument]) -> Result:
+    """Eftermiddagsuppdateringen (scripts/afternoon.py): schema, handelsdag, dagens körningar,
+    bolagen finns i listan, rapporterna ligger från förra handelsdagens stängning och framåt, och
+    kursreaktionen stämmer (ingen efter stängning, mot index = dag − index)."""
+    from morning import is_business_day, previous_business_day  # sent, morning.py importerar den här modulen
+
+    res = Result()
+    res.errors += _schema_errors(_schema_validator("afternoon.schema.json"), data)
+    if res.errors:
+        return res
+    if data["date"] != day:
+        res.errors.append(f"date {data['date']} stämmer inte med filnamnet {day}")
+    d = date.fromisoformat(data["date"])
+    if not is_business_day(d):
+        res.errors.append(f"{d} är ingen handelsdag")
+    _check_datetime(data["generated_at"], "generated_at", res)
+    if res.errors:
+        return res
+    for s in data["scopes"]:
+        if s[:10] != data["date"]:
+            res.errors.append(f"scopes: {s} är inte en körning {data['date']}")
+    since = datetime.combine(previous_business_day(d), time(17, 30), ZoneInfo("Europe/Stockholm"))
+    close = datetime.combine(d, time(17, 30), ZoneInfo("Europe/Stockholm"))
+    index_change = data["index"]["change_pct"]
+    seen = set()
+    for c in data["companies"]:
+        where = f"{c['name']} ({c['ticker']})"
+        inst = instruments.get(c["ticker"])
+        if inst is None or inst.namn != c["name"]:
+            res.errors.append(f"{where} finns inte i instruments.csv")
+            continue
+        if c["ticker"] in seen:
+            res.errors.append(f"{where} förekommer flera gånger")
+        seen.add(c["ticker"])
+        if c["scope"] not in data["scopes"]:
+            res.errors.append(f"{where}: körningen {c['scope']} finns inte i scopes")
+        _check_datetime(c["published"], f"{where} published", res)
+        published = datetime.fromisoformat(c["published"])
+        if published < since:
+            res.errors.append(f"{where}: rapporten {c['published']} är äldre än förra handelsdagens stängning")
+        if c["after_close"] != (published >= close):
+            res.errors.append(f"{where}: after_close stämmer inte med publiceringstiden")
+        if c["after_close"] and c["change_pct"] is not None:
+            res.errors.append(f"{where}: kursreaktion trots rapport efter stängning")
+        if (c["change_pct"] is None) != (c["close"] is None):
+            res.errors.append(f"{where}: kurs och förändring ska finnas båda eller ingen")
+        if c["relative_pp"] is not None:
+            if c["change_pct"] is None or index_change is None or not inst.yahoo_ticker.endswith(".ST"):
+                res.errors.append(f"{where}: mot index utan kurs, index eller kronor")
+            elif abs(c["relative_pp"] - round(c["change_pct"] - index_change, 2)) > 0.011:
+                res.errors.append(f"{where}: mot index {c['relative_pp']} ≠ {c['change_pct']} − {index_change}")
+    if data["price_day"] not in (None, data["date"]):
+        res.errors.append(f"price_day {data['price_day']} är inte {data['date']}")
+    if data["price_day"] is None and any(c["change_pct"] is not None for c in data["companies"]):
+        res.errors.append("kursreaktion utan kurser i dag (price_day saknas)")
+    return res
+
+
 def validate_morning(data: dict, instruments: dict[str, Instrument]) -> Result:
     """Morgonrapporten (scripts/morning.py): schema, handelsdag, bolagen finns i listan,
     nyheterna ligger i tidsfönstret och kurssignalerna stämmer med värdena."""
@@ -1035,7 +1094,8 @@ def _default_targets() -> list[Path]:
          *DATA_DIR.glob("consensus/*.json"), *DATA_DIR.glob("results/*.json"),
          *DATA_DIR.glob("valuation/*.json"),
          *DATA_DIR.glob("results/*/omgang-*.json"), *DATA_DIR.glob("results/morning/*.json"),
-         *DATA_DIR.glob("results/morning/*/omgang-*.json"),
+         *DATA_DIR.glob("results/morning/*/omgang-*.json"), *DATA_DIR.glob("results/updates/*.json"),
+         *DATA_DIR.glob("results/updates/*/omgang-*.json"), *DATA_DIR.glob("afternoon/*.json"),
          *DATA_DIR.glob("mock/weeks/*.json"), *DATA_DIR.glob("mock/prices/*.json"),
          *DATA_DIR.glob("mock/analysis/*.json"), *DATA_DIR.glob("mock/calendar/*.json"),
          *DATA_DIR.glob("mock/signals/*.json"), *DATA_DIR.glob("mock/morning/*.json")]
@@ -1051,11 +1111,12 @@ def main(argv: list[str]) -> int:
     for path in targets:
         data = json.loads(path.read_text(encoding="utf-8"))
         in_mock_dir = MOCK_DIR in path.resolve().parents
-        # Rapportutfall: data/results/<vecka>/omgang-N.json, data/results/morning/<datum>/omgang-N.json,
-        # data/results/<vecka>.json och data/results/morning/<datum>.json.
-        in_results = path.parent.name == "results" or (path.parent.name == "morning"
+        # Rapportutfall: data/results/<vecka>/omgang-N.json, data/results/morning|updates/<läge>/omgang-N.json,
+        # data/results/<vecka>.json och data/results/morning|updates/<läge>.json.
+        runs = ("morning", "updates")
+        in_results = path.parent.name == "results" or (path.parent.name in runs
                                                        and path.parent.parent.name == "results")
-        batch_in_results = path.parent.parent.name == "results" or (path.parent.parent.name == "morning"
+        batch_in_results = path.parent.parent.name == "results" or (path.parent.parent.name in runs
                                                                     and path.parent.parent.parent.name == "results")
         if batch_in_results and re.fullmatch(r"omgang-\d+", path.stem):
             from validate_results import validate_batch
@@ -1065,6 +1126,8 @@ def main(argv: list[str]) -> int:
             from validate_results import validate_results
 
             res = validate_results(data, path.stem, instruments)
+        elif path.parent.name == "afternoon":
+            res = validate_afternoon(data, path.stem, mock_instruments if in_mock_dir else instruments)
         elif path.parent.name == "prices":
             res = validate_prices(data, path.stem)
         elif path.parent.name == "analysis":

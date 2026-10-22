@@ -12,7 +12,17 @@ import ValuationPanel from "./ValuationPanel.astro";
 import CompanyCard from "./CompanyCard.astro";
 import MorningReportView from "./MorningReport.astro";
 import { weekdayDate } from "../lib/calendar";
-import { formatDate, listMorningDates, loadResults, weekLabel, type MorningReport, type WeekView } from "../lib/data";
+import AfternoonReportView from "./AfternoonReport.astro";
+import {
+  formatDate,
+  listMorningDates,
+  loadResults,
+  loadUpdateResults,
+  weekLabel,
+  type AfternoonReport,
+  type MorningReport,
+  type WeekView,
+} from "../lib/data";
 import { shortDate } from "../lib/format";
 import { describePolicyRate, formatRate } from "../lib/policyRate";
 
@@ -21,8 +31,13 @@ interface Props {
   weeks: string[];
   /** Startsidan: senaste morgonrapporten visas överst, före veckan och flikarna. */
   morning?: MorningReport | null;
+  /** Startsidan: eftermiddagsuppdateringen, ovanför morgonrapporten. */
+  afternoon?: AfternoonReport | null;
 }
-const { view, weeks, morning = null } = Astro.props;
+const { view, weeks, morning = null, afternoon = null } = Astro.props;
+const afternoonTime = afternoon
+  ? new Date(afternoon.generated_at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" })
+  : null;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const directionLabel = { positiv: "Positiv", negativ: "Negativ", blandad: "Blandad", oklar: "Oklar" };
 
@@ -49,12 +64,31 @@ const morningTime = morning
     }
 
     {
-      morning && (
-        <section class="morning-top" aria-labelledby="morgon-rubrik">
+      afternoon && (
+        <section class="morning-top afternoon-top" aria-labelledby="eftermiddag-rubrik">
           <div class="wrap">
             <p class="brand">
               <a href={`${base}/`}>Veckans finans</a>
             </p>
+            <h2 id="eftermiddag-rubrik" class="morning-title">
+              Eftermiddag {weekdayDate(afternoon.date).toLowerCase()}
+              <span class="morning-time">uppdaterad kl. {afternoonTime}</span>
+            </h2>
+            <AfternoonReportView report={afternoon} results={loadUpdateResults(afternoon.date)} />
+          </div>
+        </section>
+      )
+    }
+
+    {
+      morning && (
+        <section class="morning-top" aria-labelledby="morgon-rubrik">
+          <div class="wrap">
+            {!afternoon && (
+              <p class="brand">
+                <a href={`${base}/`}>Veckans finans</a>
+              </p>
+            )}
             <h2 id="morgon-rubrik" class="morning-title">
               Morgonrapport {weekdayDate(morning.date).toLowerCase()}
               <span class="morning-time">sammanställd kl. {morningTime}</span>

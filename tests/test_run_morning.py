@@ -35,6 +35,21 @@ def test_fore_0810_gors_ingenting(tmp_path, now):
     assert not (tmp_path / "logs").exists()  # inget steg har startat, ingen logg skapad
 
 
+@pytest.mark.parametrize("now", ["2026-10-22 07:00", "2026-10-22 17:43"])
+def test_schemalagd_eftermiddag_fore_1745_gor_ingenting(tmp_path, now):
+    """run_update.ps1 -Scheduled: en körning som tas igen nästa morgon (eller för tidigt) gör ingenting."""
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    shutil.copy(ROOT / "scripts" / "run_update.ps1", scripts)
+    p = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-File", str(scripts / "run_update.ps1"), "-Scheduled", "-Now", now],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+    )
+    assert p.returncode == 0
+    assert "före 17:45" in p.stdout
+    assert not (tmp_path / "logs").exists()
+
+
 @pytest.mark.parametrize("now", ["2026-10-21 08:10", "2026-10-21 13:20"])
 def test_fran_0810_startar_flodet(tmp_path, now):
     code, out = run_morning(tmp_path, now)
