@@ -320,6 +320,47 @@ def uncertain_consensus(company: dict) -> bool:
     return big_change_few_analysts(company.get("eps")) or big_change_few_analysts(company.get("revenue"))
 
 
+# Bedömningar utan procent mot förväntan (utredning W43: Volvo Car −1,63 mot −0,14 kr, Electrolux
+# och Volati med bolagshändelse och teckenbyte, Green Landscaping teckenbyte, Hexagon +126 % mot
+# ett annat resultatmått än Yahoos):
+CORPORATE = "bolagshändelse"  # känd bolagshändelse under året (data/corporate_actions.json)
+SIGN_CHANGE = "teckenbyte"    # utfall och förväntan har olika tecken
+NEAR_ZERO = "nära noll"       # det ena värdet är mindre än NEAR_ZERO_RATIO av det andra
+CHECK = "kontrollera"         # avvikelse över ±CHECK_PCT % utan någon av förklaringarna ovan
+NEAR_ZERO_RATIO = 0.1
+CHECK_PCT = 50.0
+CORPORATE_ACTIONS = DATA_DIR / "corporate_actions.json"
+
+
+def corporate_event_tickers(path: Path | None = None) -> set[str]:
+    """Bolag med en känd bolagshändelse under året: utredda händelser (investigated) och justerade
+    händelser (actions med factor ≠ 1). Verkliga kursrörelser (factor 1) och nynoteringar
+    (listings) påverkar inte jämförelsen med förväntan och räknas inte."""
+    path = path or CORPORATE_ACTIONS
+    if not path.exists():
+        return set()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return ({e["ticker"] for e in data.get("investigated", [])}
+            | {e["ticker"] for e in data.get("actions", []) if e.get("factor", 1.0) != 1.0})
+
+
+def comparison_verdict(actual: float, expected: float, surprise: float, uncertain: bool, corporate: bool) -> str:
+    """Bedömningen för utfall mot förväntan, i ordning: bolagshändelse, teckenbyte, nära noll,
+    osäker konsensus, kontrollera (över ±CHECK_PCT %), annars över/i linje/under."""
+    if corporate:
+        return CORPORATE
+    if actual != 0 and expected != 0 and (actual > 0) != (expected > 0):
+        return SIGN_CHANGE
+    small, big = sorted((abs(actual), abs(expected)))
+    if big > 0 and small < NEAR_ZERO_RATIO * big:
+        return NEAR_ZERO
+    if uncertain:
+        return UNCERTAIN
+    if abs(surprise) > CHECK_PCT:
+        return CHECK
+    return verdict(surprise)
+
+
 def _check_comparison(r: dict, where: str, res: Result, consensus_dir: Path | None) -> None:
     """Utfall mot förväntan: räknas om ur nyckeltalet och den sparade konsensusen. Osäker
     konsensus kontrolleras mot konsensusfilen när den finns lokalt."""
@@ -333,6 +374,9 @@ def _check_comparison(r: dict, where: str, res: Result, consensus_dir: Path | No
                         if c["ticker"] == r["ticker"]), None)
         if company is not None and uncertain_consensus(company) != uncertain:
             res.errors.append(f"{where}: uncertain={uncertain} stämmer inte med konsensus {cmp['consensus_date']}")
+    corporate = cmp.get("corporate_event", False)
+    if corporate != (r["ticker"] in corporate_event_tickers()):
+        res.errors.append(f"{where}: corporate_event={corporate} stämmer inte med data/corporate_actions.json")
     by_id = {k["id"]: k for k in r["kpis"]}
     for key, kpi_id in (("eps", "resultat-per-aktie"), ("revenue", "nettoomsattning")):
         c = cmp.get(key)
@@ -352,6 +396,6 @@ def _check_comparison(r: dict, where: str, res: Result, consensus_dir: Path | No
         surprise = surprise_pct(actual, c["expected"])
         if abs(surprise - c["surprise_pct"]) > 0.051:
             res.errors.append(f"{where}: {key} avvikelse {c['surprise_pct']} % ≠ {surprise:.1f} %")
-        if c["verdict"] != (UNCERTAIN if uncertain else verdict(c["surprise_pct"])):
+        if c["verdict"] != comparison_verdict(actual, c["expected"], c["surprise_pct"], uncertain, corporate):
             res.errors.append(f"{where}: {key} bedömningen {c['verdict']!r} stämmer inte med avvikelsen")
 

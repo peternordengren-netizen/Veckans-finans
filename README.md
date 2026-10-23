@@ -236,6 +236,14 @@ Måndagens körning (läge `<vecka>`) tar bara de bolag som morgnarna missat och
    och omsättning för kvartalet med Yahoos konsensus från dagen före rapporten (aldrig samma dag eller efter), om valutan stämmer och prognosen
    gäller samma rapport. Inom ±2 % räknas som "i linje". Har konsensus varningen "stor förändring, få analytiker"
    (över ±50 % mot fjol från färre än 3 analytiker) blir bedömningen "osäker konsensus" i stället för över/under.
+   Procent mot förväntan visas inte heller i följande fall, i den här ordningen:
+   - **Bolagshändelse:** bolaget har en känd bolagshändelse under året (`investigated` eller en justerad händelse
+     under `actions` i `data/corporate_actions.json`). Sidan visar "bolagshändelse påverkar jämförelsen".
+   - **Teckenbyte eller nära noll:** utfall och förväntan har olika tecken, eller det ena värdet är mindre än en
+     tiondel av det andra. Båda värdena visas.
+   - **Kontrollera:** avvikelsen är över ±50 % utan någon av förklaringarna. Båda värdena visas.
+
+   Per aktie i eurocent eller öre räknas om till euro eller kronor före jämförelsen.
    Filen säkerhetskopieras med `backup_week.py`.
 
 Provkörning W42 (11 rapporter, en omgång): 1,4 minuter, motsvarande 0,29 USD till API-pris med Sonnet.

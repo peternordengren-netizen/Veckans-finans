@@ -255,6 +255,50 @@ def test_osaker_konsensus_ger_ingen_bedomning(tmp_path):
     assert (c["uncertain"], c["eps"]["verdict"]) == (False, "över")
 
 
+def test_bedomning_utan_procent():
+    """Utredningen W43: teckenbyte (Electrolux −0,46 mot 0,53), nära noll (Volvo Car −1,63 mot
+    −0,14), bolagshändelse före allt annat, kontrollera vid över ±50 % (Hexagon 0,166 mot 0,074 EUR)."""
+    from validate_results import comparison_verdict as cv
+
+    assert cv(-0.46, 0.53, -187.6, False, False) == "teckenbyte"
+    assert cv(-1.63, -0.14, -1064.3, False, False) == "nära noll"
+    assert cv(0.01, 0.5, -98.0, False, False) == "nära noll"
+    assert cv(-0.46, 0.53, -187.6, False, True) == "bolagshändelse"
+    assert cv(2.5, 2.4, 4.2, False, True) == "bolagshändelse"
+    assert cv(0.166, 0.07357, 125.6, False, False) == "kontrollera"
+    assert cv(1.5, 1.0, 50.0, False, False) == "över"  # gränsen: över ±50 % krävs
+    assert cv(2.5, 2.4, 4.2, True, False) == "osäker konsensus"
+    assert cv(-0.26, 0.71, -136.8, True, False) == "teckenbyte"  # båda värdena säger mer än "osäker"
+
+
+def test_bolagshandelse_och_cent_mot_forvantan(tmp_path, monkeypatch):
+    import validate_results as vr
+
+    raw = make_raw(tmp_path)
+    results_dir, cons_dir = tmp_path / "results", tmp_path / "consensus"
+    (results_dir / WEEK).mkdir(parents=True)
+    (results_dir / WEEK / "omgang-1.json").write_text(json.dumps(batch([alfa(), beta()])), encoding="utf-8")
+    cons_dir.mkdir()
+    est = lambda avg: {"avg": avg, "low": None, "high": None, "analysts": 4, "year_ago": None, "currency": "SEK"}  # noqa: E731
+    snap = {"date": "2026-10-21", "companies": [{"ticker": "ALFA", "eps": est(2.4), "revenue": est(1.6e9),
+                                                 "next_report_date": "2026-10-22"}]}
+    (cons_dir / "2026-10-21.json").write_text(json.dumps(snap), encoding="utf-8")
+    ca = tmp_path / "corporate_actions.json"
+    ca.write_text(json.dumps({"actions": [], "investigated": [{"ticker": "ALFA", "label": "nyemission"}]}), encoding="utf-8")
+    monkeypatch.setattr(vr, "CORPORATE_ACTIONS", ca)
+    data, _ = results.build(WEEK, INSTRUMENTS, NOW, raw, results_dir, cons_dir)
+    c = next(r for r in data["reports"] if r["ticker"] == "ALFA")["vs_consensus"]
+    assert c["corporate_event"] and c["eps"]["verdict"] == c["revenue"]["verdict"] == "bolagshändelse"
+    assert validate_results(data, WEEK, INSTRUMENTS, raw, consensus_dir=cons_dir).errors == []
+    c["corporate_event"] = False
+    assert any("corporate_event" in e for e in validate_results(data, WEEK, INSTRUMENTS, raw, consensus_dir=cons_dir).errors)
+    # Eurocent räknas om till euro före jämförelsen: 16,6 cent = 0,166 EUR.
+    euro = {"avg": 0.07357, "low": None, "high": None, "analysts": 6, "year_ago": 0.096, "currency": "EUR"}
+    k = kpi("resultat-per-aktie", 16.6, "Euro cent", -1.6, None, "kvartal", "Resultatet per aktie uppgick till 16,6 Euro cent (-1,6)")
+    cmp = results.compare(k, euro)
+    assert (cmp["actual"], cmp["currency"], cmp["surprise_pct"], cmp["verdict"]) == (0.166, "EUR", 125.6, "kontrollera")
+
+
 def test_saknad_omgang_listas(tmp_path):
     raw = make_raw(tmp_path)
     data, problems = results.build(WEEK, INSTRUMENTS, NOW, raw, tmp_path / "results", tmp_path / "consensus")

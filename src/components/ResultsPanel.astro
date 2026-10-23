@@ -101,7 +101,7 @@ const periodLabel = { kvartal: "", delår: " (året hittills)", helår: " (helå
               <li>
                 <span>Omsättning mot förväntan {expectedText(r.vs_consensus.revenue, false)}
                   {r.vs_consensus.revenue.analysts !== null && ` (${r.vs_consensus.revenue.analysts} analytiker)`}</span>
-                <span class:list={["verdict", r.vs_consensus.revenue.verdict.replace(" ", "-")]}>{surpriseText(r.vs_consensus.revenue)}</span>
+                <span class:list={["verdict", r.vs_consensus.revenue.verdict.replace(" ", "-")]}>{surpriseText(r.vs_consensus.revenue, false)}</span>
               </li>
             )}
           </ul>
@@ -128,8 +128,10 @@ const periodLabel = { kvartal: "", delår: " (året hittills)", helår: " (helå
   }
   <p class="note">
     Förväntan är analytikernas snitt enligt Yahoo, sparat dagen före rapporten. Inom ±2 % räknas som i linje. Väntades
-    en förändring över ±50 % mot fjol från färre än 3 analytiker står det "osäker konsensus" i stället för över/under. Yahoos
-    vinst per aktie kan vara justerad och skilja sig från bolagets redovisade resultat per aktie.
+    en förändring över ±50 % mot fjol från färre än 3 analytiker står det "osäker konsensus" i stället för över/under. Vid
+    en känd bolagshändelse under året (nyemission, avknoppning …) visas ingen procent. Byter utfall och förväntan tecken,
+    eller är det ena värdet nära noll, visas båda värdena, och en avvikelse över ±50 % utan förklaring markeras
+    "kontrollera". Yahoos vinst per aktie kan vara justerad och skilja sig från bolagets redovisade resultat per aktie.
   </p>
 </div>
 
@@ -226,6 +228,11 @@ const periodLabel = { kvartal: "", delår: " (året hittills)", helår: " (helå
   }
   .verdict.under {
     color: var(--neg);
+  }
+  .verdict.kontrollera {
+    color: var(--banner-fg);
+    background: var(--banner-bg);
+    border-color: var(--banner-border);
   }
   .note {
     margin: 8px 0 0;

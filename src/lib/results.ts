@@ -21,7 +21,7 @@ export interface Comparison {
   analysts: number | null;
   currency: string;
   surprise_pct: number;
-  verdict: "över" | "i linje" | "under" | "osäker konsensus";
+  verdict: "över" | "i linje" | "under" | "osäker konsensus" | "bolagshändelse" | "teckenbyte" | "nära noll" | "kontrollera";
 }
 
 export interface ReportResult {
@@ -38,6 +38,8 @@ export interface ReportResult {
     consensus_date: string;
     /** Varningen "stor förändring, få analytiker": ingen bedömning över/under (saknas i äldre filer). */
     uncertain?: boolean;
+    /** Känd bolagshändelse under året: ingen procent mot förväntan (saknas i äldre filer). */
+    corporate_event?: boolean;
     eps: Comparison | null;
     revenue: Comparison | null;
   } | null;
@@ -69,19 +71,46 @@ export function yoyText(k: Pick<ResultKpi, "value" | "previous_value" | "yoy_pct
 }
 
 /**
- * Utfall mot förväntan: "+4,2 % mot förväntan", "i linje med förväntan" inom ±2 %, eller
- * "osäker konsensus" (stor förändring, få analytiker) – då utan avvikelse och över/under.
+ * Utfall mot förväntan:
+ * - "+4,2 % mot förväntan", eller "i linje med förväntan" inom ±2 %
+ * - "osäker konsensus" (stor förändring, få analytiker) och "bolagshändelse påverkar jämförelsen":
+ *   ingen procent
+ * - teckenbyte och nära noll: båda värdena utan procent, som i "Kommande vecka"
+ * - "kontrollera" (över ±50 % utan förklaring): båda värdena
  */
-export function surpriseText(c: Comparison): string {
-  if (c.verdict === "osäker konsensus") return "osäker konsensus";
-  return c.verdict === "i linje" ? "i linje med förväntan" : `${signed(c.surprise_pct, 1)} % mot förväntan`;
+export function surpriseText(c: Comparison, perShare = true): string {
+  const both = `utfall ${amountText(c.actual, c.currency, perShare)}, förväntan ${amountText(c.expected, c.currency, perShare)}`;
+  switch (c.verdict) {
+    case "osäker konsensus":
+      return "osäker konsensus";
+    case "bolagshändelse":
+      return "bolagshändelse påverkar jämförelsen";
+    case "teckenbyte":
+    case "nära noll":
+      return both;
+    case "kontrollera":
+      return `kontrollera: ${both}`;
+    case "i linje":
+      return "i linje med förväntan";
+    default:
+      return `${signed(c.surprise_pct, 1)} % mot förväntan`;
+  }
 }
 
-/** Förväntat belopp i samma skala som utfallet: per aktie i kr, omsättning i mn/mdr. */
+/** Belopp i samma skala som utfallet: per aktie med två decimaler (tre under 1, så att t.ex.
+ * 16,6 eurocent blir "0,166 EUR"), omsättning i mn/mdr. */
+export function amountText(value: number, currency: string, perShare: boolean): string {
+  const unit = currency === "SEK" ? "kr" : currency;
+  if (perShare) {
+    const digits = Math.abs(value) < 1 ? 3 : 2;
+    return `${new Intl.NumberFormat("sv-SE", { maximumFractionDigits: digits }).format(value)} ${unit}`;
+  }
+  const abs = Math.abs(value);
+  if (abs >= 1e9) return `${new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 1 }).format(value / 1e9)} mdr ${unit}`;
+  return `${new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(value / 1e6)} mn ${unit}`;
+}
+
+/** Förväntat belopp i samma skala som utfallet. */
 export function expectedText(c: Comparison, perShare: boolean): string {
-  const unit = c.currency === "SEK" ? "kr" : c.currency;
-  if (perShare) return `${nf.format(Math.round(c.expected * 100) / 100)} ${unit}`;
-  const abs = Math.abs(c.expected);
-  if (abs >= 1e9) return `${new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 1 }).format(c.expected / 1e9)} mdr ${unit}`;
-  return `${new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(c.expected / 1e6)} mn ${unit}`;
+  return amountText(c.expected, c.currency, perShare);
 }

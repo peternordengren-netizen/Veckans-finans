@@ -43,8 +43,8 @@ from report_list import (  # noqa: E402
 )
 from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, load_sector_kpis  # noqa: E402
 from validate_results import (  # noqa: E402
-    UNCERTAIN, scope_period, surprise_pct, uncertain_consensus, unit_factor, validate_batch, validate_results,
-    verdict,
+    comparison_verdict, corporate_event_tickers, scope_period, surprise_pct, uncertain_consensus, unit_factor,
+    validate_batch, validate_results,
 )
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
@@ -68,9 +68,11 @@ def consensus_before(day: date, consensus_dir: Path = CONSENSUS_DIR) -> dict | N
     return json.loads(files[-1].read_text(encoding="utf-8")) if files else None
 
 
-def compare(kpi: dict | None, estimate: dict | None, uncertain: bool = False) -> dict | None:
+def compare(kpi: dict | None, estimate: dict | None, uncertain: bool = False,
+            corporate: bool = False) -> dict | None:
     """Utfall mot förväntan för ett kvartalsvärde, eller None om det inte går att jämföra.
-    uncertain: konsensus har varningen "stor förändring, få analytiker" – ingen över/under."""
+    Bedömningen enligt validate_results.comparison_verdict: bolagshändelse, teckenbyte, nära noll,
+    osäker konsensus ("stor förändring, få analytiker"), kontrollera, annars över/i linje/under."""
     if kpi is None or estimate is None or kpi["period_kind"] != "kvartal" or not estimate.get("avg"):
         return None
     factor = unit_factor(kpi["unit"])
@@ -79,7 +81,8 @@ def compare(kpi: dict | None, estimate: dict | None, uncertain: bool = False) ->
     actual = float(Decimal(str(kpi["value"])) * factor[0])
     s = round(surprise_pct(actual, estimate["avg"]), 1)
     return {"actual": actual, "expected": estimate["avg"], "analysts": estimate.get("analysts"),
-            "currency": factor[1], "surprise_pct": s, "verdict": UNCERTAIN if uncertain else verdict(s)}
+            "currency": factor[1], "surprise_pct": s,
+            "verdict": comparison_verdict(actual, estimate["avg"], s, uncertain, corporate)}
 
 
 def vs_consensus(report: dict, published: date, consensus_dir: Path) -> dict | None:
@@ -93,11 +96,13 @@ def vs_consensus(report: dict, published: date, consensus_dir: Path) -> dict | N
         return None
     by_id = {k["id"]: k for k in report["kpis"]}
     uncertain = uncertain_consensus(c)
-    eps = compare(by_id.get("resultat-per-aktie"), c.get("eps"), uncertain)
-    revenue = compare(by_id.get("nettoomsattning"), c.get("revenue"), uncertain)
+    corporate = report["ticker"] in corporate_event_tickers()
+    eps = compare(by_id.get("resultat-per-aktie"), c.get("eps"), uncertain, corporate)
+    revenue = compare(by_id.get("nettoomsattning"), c.get("revenue"), uncertain, corporate)
     if eps is None and revenue is None:
         return None
-    return {"consensus_date": snap["date"], "uncertain": uncertain, "eps": eps, "revenue": revenue}
+    return {"consensus_date": snap["date"], "uncertain": uncertain, "corporate_event": corporate,
+            "eps": eps, "revenue": revenue}
 
 
 def yoy_pct(k: dict, kind: str) -> float | None:

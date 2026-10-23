@@ -16,7 +16,7 @@
         "analysts": { "type": ["integer", "null"] },
         "currency": { "type": "string" },
         "surprise_pct": { "type": "number" },
-        "verdict": { "enum": ["över", "i linje", "under", "osäker konsensus"] }
+        "verdict": { "enum": ["över", "i linje", "under", "osäker konsensus", "bolagshändelse", "teckenbyte", "nära noll", "kontrollera"] }
       }
     }
   },
@@ -76,6 +76,7 @@
             "properties": {
               "consensus_date": { "type": "string" },
               "uncertain": { "type": "boolean", "description": "Konsensus har varningen \"stor förändring, få analytiker\": utfallet bedöms inte som över/under (saknas i äldre filer = false)." },
+              "corporate_event": { "type": "boolean", "description": "Känd bolagshändelse under året (data/corporate_actions.json): ingen procent mot förväntan (saknas i äldre filer = false)." },
               "eps": { "$ref": "#/$defs/comparison" },
               "revenue": { "$ref": "#/$defs/comparison" }
             }
