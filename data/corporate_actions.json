@@ -1,5 +1,5 @@
 {
-  "description": "Verifierade förklaringar till en enskild kursdag över ±40 % i Yahoos serie. En post gäller bara om den stora kursrörelsen ligger exakt på ex_date (kursdagen) i serien; då multipliceras kurserna före ex_date med factor. factor 1.0 = verklig kursrörelse (t.ex. efter en rapport) som inte ska justeras men inte heller flaggas. Saknas en verifierad post visas varken kurs i år eller P/E, bara 'kontrollera bolagshändelse'. Poster läggs bara in efter kontroll mot bolagets eget pressmeddelande och kursserien. Under investigated står händelser som är kända men inte går att justera; har en post label och yahoo_dates visas etiketten i stället för kurs i år och P/E (status känd bolagshändelse). Under listings står bolag som noterats under året (verifierad första handelsdag): de visas som noterad under året i stället för kurs saknas. En investigated-post med label och missing_price: true gäller när kurs vid årets början saknas.",
+  "description": "Verifierade förklaringar till en enskild kursdag över ±40 % i Yahoos serie. En post gäller bara om den stora kursrörelsen ligger exakt på ex_date (kursdagen) i serien; då multipliceras kurserna före ex_date med factor. factor 1.0 = verklig kursrörelse (t.ex. efter en rapport) som inte ska justeras men inte heller flaggas. Saknas en verifierad post visas varken kurs i år eller P/E, bara 'kontrollera bolagshändelse'. Poster läggs bara in efter kontroll mot bolagets eget pressmeddelande och kursserien. Under investigated står händelser som är kända men inte går att justera; har en post label och yahoo_dates visas etiketten i stället för kurs i år och P/E (status känd bolagshändelse). Under listings står bolag som noterats under året (verifierad första handelsdag): de visas som noterad under året i stället för kurs saknas. En investigated-post med label och missing_price: true gäller när kurs vid årets början saknas. Alla bolag under investigated, och under actions med factor ≠ 1, räknas som 'bolagshändelse' när rapportutfallen jämförs med Yahoos förväntan (scripts/validate_results.corporate_event_tickers); en investigated-post utan label och yahoo_dates påverkar bara den jämförelsen.",
   "actions": [
     {
       "ticker": "CYNCA",
@@ -92,6 +92,14 @@
       "checked": "2026-10-19",
       "label": "A-aktie sedan 16 feb (tidigare depåbevis)",
       "missing_price": true
+    },
+    {
+      "ticker": "HEXA B",
+      "event": "Avknoppning av Octave Intelligence plc, noterat på Nasdaq Stockholm (OCTV SDB) 25 maj 2026",
+      "source_url": "https://www.inderes.se/releases/hexagon-octave-intelligence-plc-har-noterats-pa-nasdaq-stockholm",
+      "yahoo_big_move": "ingen dag över ±40 % i Yahoos serie för HEXA-B.ST (Kurs mot vinst W42)",
+      "conclusion": "Avknoppningen är verifierad via Hexagons meddelande om Octaves notering. Ingen kursjustering (ingen faktor och ingen stor kursrörelse), men Yahoos förväntan och fjolårssiffror gäller Hexagon före avknoppningen (fjolårsomsättning 1 303,8 MEUR mot rapportens 975,4 MEUR för Q3 2025), så utfall mot förväntan visas som bolagshändelse. Utan label och yahoo_dates påverkar posten inte Kurs mot vinst.",
+      "checked": "2026-10-23"
     }
   ],
   "listings": [

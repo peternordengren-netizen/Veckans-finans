@@ -244,6 +244,12 @@ Måndagens körning (läge `<vecka>`) tar bara de bolag som morgnarna missat och
    - **Kontrollera:** avvikelsen är över ±50 % utan någon av förklaringarna. Båda värdena visas.
 
    Per aktie i eurocent eller öre räknas om till euro eller kronor före jämförelsen.
+
+   Anger rapporten ett justerat resultat per aktie för kvartalet ("justerat", "underliggande", "exklusive
+   jämförelsestörande poster" o.d.) tas det fram som ett eget nyckeltal, med ett citat som innehåller ordet. Det är
+   det som jämförs med förväntan, eftersom Yahoos förväntan oftast gäller justerat resultat. Annars jämförs det
+   redovisade. Sidan visar vilket som användes ("Justerat resultat per aktie mot förväntan"). Förändringen mot
+   fjolåret för resultat per aktie gäller alltid det redovisade.
    Filen säkerhetskopieras med `backup_week.py`.
 
 Provkörning W42 (11 rapporter, en omgång): 1,4 minuter, motsvarande 0,29 USD till API-pris med Sonnet.

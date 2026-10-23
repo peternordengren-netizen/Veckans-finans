@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { expectedText, kpiValue, surpriseText, yoyText } from "../src/lib/results.ts";
+import { epsLabel, expectedText, kpiValue, surpriseText, yoyText } from "../src/lib/results.ts";
 
 const MINUS = "−";
 const NBSP = " ";
@@ -30,6 +30,9 @@ test("utfall mot förväntan", () => {
   assert.equal(surpriseText({ ...c, surprise_pct: 1.1, verdict: "i linje" }), "i linje med förväntan");
   // Stor förändring, få analytiker: ingen avvikelse och inget över/under.
   assert.equal(surpriseText({ ...c, surprise_pct: -43.9, verdict: "osäker konsensus" }), "osäker konsensus");
+  assert.equal(epsLabel({ basis: "justerat" }), "Justerat resultat per aktie");
+  assert.equal(epsLabel({ basis: "redovisat" }), "Resultat per aktie");
+  assert.equal(epsLabel({}), "Resultat per aktie");  // äldre filer
   // Bolagshändelse, teckenbyte, nära noll och kontrollera (utredningen W43).
   assert.equal(surpriseText({ ...c, verdict: "bolagshändelse" }), "bolagshändelse påverkar jämförelsen");
   assert.equal(surpriseText({ ...c, actual: -0.46, expected: 0.53, surprise_pct: -187.6, verdict: "teckenbyte" }),

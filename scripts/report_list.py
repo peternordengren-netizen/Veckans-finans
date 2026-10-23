@@ -84,9 +84,13 @@ def runs_on(day: date, results_dir: Path = RESULTS_DIR) -> list[str]:
     return out
 
 # Nyckeltal som tas fram för alla bolag, utöver sektorns: de jämförs med Yahoos konsensus.
+# Resultat per aktie är alltid det redovisade; det justerade (justerat, underliggande, exklusive
+# jämförelsestörande poster …) tas fram separat när rapporten anger ett, och jämförs då med
+# förväntan i stället (Yahoos förväntan gäller oftast justerat resultat, se Hexagon 2026-10-23).
 COMMON_KPIS = [
     {"id": "nettoomsattning", "name": "Nettoomsättning", "kind": "belopp"},
     {"id": "resultat-per-aktie", "name": "Resultat per aktie", "kind": "per_aktie"},
+    {"id": "justerat-resultat-per-aktie", "name": "Justerat resultat per aktie", "kind": "per_aktie"},
 ]
 REPORT_RE = re.compile(
     r"delårsrapport|interim report|kvartalsrapport|bokslutskommuniké|year[- ]end report|"

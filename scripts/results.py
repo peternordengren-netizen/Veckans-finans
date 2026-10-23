@@ -43,7 +43,7 @@ from report_list import (  # noqa: E402
 )
 from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, load_sector_kpis  # noqa: E402
 from validate_results import (  # noqa: E402
-    comparison_verdict, corporate_event_tickers, scope_period, surprise_pct, uncertain_consensus, unit_factor,
+    comparison_verdict, corporate_event_tickers, eps_for_comparison, scope_period, surprise_pct, uncertain_consensus, unit_factor,
     validate_batch, validate_results,
 )
 
@@ -97,7 +97,12 @@ def vs_consensus(report: dict, published: date, consensus_dir: Path) -> dict | N
     by_id = {k["id"]: k for k in report["kpis"]}
     uncertain = uncertain_consensus(c)
     corporate = report["ticker"] in corporate_event_tickers()
-    eps = compare(by_id.get("resultat-per-aktie"), c.get("eps"), uncertain, corporate)
+    # Justerat resultat per aktie när rapporten anger ett (Yahoos förväntan gäller oftast justerat),
+    # annars redovisat; "basis" visar vilket som användes.
+    eps_kpi, basis = eps_for_comparison(by_id, (c.get("eps") or {}).get("currency"))
+    eps = compare(eps_kpi, c.get("eps"), uncertain, corporate)
+    if eps is not None:
+        eps["basis"] = basis
     revenue = compare(by_id.get("nettoomsattning"), c.get("revenue"), uncertain, corporate)
     if eps is None and revenue is None:
         return None

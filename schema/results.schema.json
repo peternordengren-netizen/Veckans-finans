@@ -16,7 +16,8 @@
         "analysts": { "type": ["integer", "null"] },
         "currency": { "type": "string" },
         "surprise_pct": { "type": "number" },
-        "verdict": { "enum": ["över", "i linje", "under", "osäker konsensus", "bolagshändelse", "teckenbyte", "nära noll", "kontrollera"] }
+        "verdict": { "enum": ["över", "i linje", "under", "osäker konsensus", "bolagshändelse", "teckenbyte", "nära noll", "kontrollera"] },
+        "basis": { "enum": ["justerat", "redovisat"], "description": "Resultat per aktie: vilket värde som jämfördes med förväntan (saknas för omsättning och i äldre filer = redovisat)." }
       }
     }
   },

@@ -22,6 +22,13 @@ export interface Comparison {
   currency: string;
   surprise_pct: number;
   verdict: "över" | "i linje" | "under" | "osäker konsensus" | "bolagshändelse" | "teckenbyte" | "nära noll" | "kontrollera";
+  /** Resultat per aktie: justerat eller redovisat värde jämfört med förväntan (saknas = redovisat). */
+  basis?: "justerat" | "redovisat";
+}
+
+/** Rubriken för jämförelsen av resultat per aktie: "Justerat resultat per aktie" eller "Resultat per aktie". */
+export function epsLabel(c: Pick<Comparison, "basis">): string {
+  return c.basis === "justerat" ? "Justerat resultat per aktie" : "Resultat per aktie";
 }
 
 export interface ReportResult {

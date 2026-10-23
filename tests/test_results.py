@@ -105,7 +105,8 @@ def test_lista_hoppar_over_datumbesked(tmp_path):
     raw = make_raw(tmp_path)
     reports = list_reports(raw, WEEK, INSTRUMENTS, load_sector_kpis())
     assert [r["ticker"] for r in reports] == ["ALFA", "BETA"]
-    assert reports[0]["kpis"] == ["orderingang", "rorelsemarginal", "nettoomsattning", "resultat-per-aktie"]
+    assert reports[0]["kpis"] == ["orderingang", "rorelsemarginal", "nettoomsattning", "resultat-per-aktie",
+                                  "justerat-resultat-per-aktie"]
     assert reports[1]["kpis"][0] == "forvaltningsresultat-per-aktie"
 
 
@@ -297,6 +298,63 @@ def test_bolagshandelse_och_cent_mot_forvantan(tmp_path, monkeypatch):
     k = kpi("resultat-per-aktie", 16.6, "Euro cent", -1.6, None, "kvartal", "Resultatet per aktie uppgick till 16,6 Euro cent (-1,6)")
     cmp = results.compare(k, euro)
     assert (cmp["actual"], cmp["currency"], cmp["surprise_pct"], cmp["verdict"]) == (0.166, "EUR", 125.6, "kontrollera")
+
+
+def test_justerat_resultat_per_aktie_mot_forvantan():
+    """Justerat resultat per aktie jämförs med förväntan när rapporten anger ett (Hexagon 2026-10-23:
+    redovisat 16,6, justerat 8,2 eurocent mot förväntan 0,0736 EUR), annars det redovisade."""
+    from validate_results import eps_for_comparison
+
+    text = _normalize_ws("Juli - september 2026\nResultatet per aktie uppgick till 16,6 Euro cent (-1,6)\n"
+                         "Justerat resultat per aktie uppgick till 8,2 Euro cent (6,9)\n")
+    rep = kpi("resultat-per-aktie", 16.6, "Euro cent", -1.6, None, "kvartal",
+              "Resultatet per aktie uppgick till 16,6 Euro cent (-1,6)")
+    adj = kpi("justerat-resultat-per-aktie", 8.2, "Euro cent", 6.9, None, "kvartal",
+              "Justerat resultat per aktie uppgick till 8,2 Euro cent (6,9)")
+    r = Result()
+    check_kpi(adj, "per_aktie", text, "t", r)
+    assert r.errors == []
+    # Ett "justerat" nyckeltal vars citat inte säger att det är justerat underkänns.
+    r = Result()
+    check_kpi({**rep, "id": "justerat-resultat-per-aktie"}, "per_aktie", text, "t", r)
+    assert any("justerat" in e for e in r.errors)
+
+    assert eps_for_comparison({"resultat-per-aktie": rep, "justerat-resultat-per-aktie": adj}, "EUR") == (adj, "justerat")
+    assert eps_for_comparison({"resultat-per-aktie": rep}, "EUR") == (rep, "redovisat")
+    assert eps_for_comparison({"resultat-per-aktie": rep, "justerat-resultat-per-aktie": {**adj, "period_kind": "delår"}},
+                              "EUR") == (rep, "redovisat")  # bara kvartalets justerade värde
+    euro = {"avg": 0.07357, "low": None, "high": None, "analysts": 6, "year_ago": 0.096, "currency": "EUR"}
+    cmp = results.compare(adj, euro)
+    assert (cmp["actual"], cmp["surprise_pct"], cmp["verdict"]) == (0.082, 11.5, "över")
+
+
+def test_jamforelsen_anger_justerat_eller_redovisat(tmp_path):
+    raw = make_raw(tmp_path)
+    alfa_text = ALFA_TEXT.replace("* Resultat per aktie ökade med 25 % till 2,50 SEK (2,00)\n",
+                                  "* Resultat per aktie ökade med 25 % till 2,50 SEK (2,00)\n"
+                                  "* Justerat resultat per aktie uppgick till 2,60 SEK (2,10)\n")
+    (raw / WEEK / "mfn" / "alfa.txt").write_text(alfa_text, encoding="utf-8")
+    adj = kpi("justerat-resultat-per-aktie", 2.6, "SEK", 2.1, None, "kvartal",
+              "Justerat resultat per aktie uppgick till 2,60 SEK (2,10)")
+    results_dir, cons_dir = tmp_path / "results", tmp_path / "consensus"
+    (results_dir / WEEK).mkdir(parents=True)
+    (results_dir / WEEK / "omgang-1.json").write_text(json.dumps(batch([alfa(GOOD_KPIS + [adj]), beta()])),
+                                                      encoding="utf-8")
+    cons_dir.mkdir()
+    est = lambda avg: {"avg": avg, "low": None, "high": None, "analysts": 4, "year_ago": None, "currency": "SEK"}  # noqa: E731
+    (cons_dir / "2026-10-21.json").write_text(json.dumps({"date": "2026-10-21", "companies": [
+        {"ticker": "ALFA", "eps": est(2.5), "revenue": est(1.5e9), "next_report_date": "2026-10-22"}]}), encoding="utf-8")
+    data, problems = results.build(WEEK, INSTRUMENTS, NOW, raw, results_dir, cons_dir)
+    assert problems == []
+    a = next(r for r in data["reports"] if r["ticker"] == "ALFA")
+    eps = a["vs_consensus"]["eps"]
+    assert (eps["basis"], eps["actual"], eps["surprise_pct"], eps["verdict"]) == ("justerat", 2.6, 4.0, "över")
+    # Förändringen mot fjolåret för resultat per aktie är fortfarande det redovisade nyckeltalets.
+    rep = next(k for k in a["kpis"] if k["id"] == "resultat-per-aktie")
+    assert (rep["value"], rep["yoy_pct"]) == (2.5, 25)
+    assert validate_results(data, WEEK, INSTRUMENTS, raw, consensus_dir=cons_dir).errors == []
+    eps["basis"] = "redovisat"
+    assert any("ska använda justerat" in e for e in validate_results(data, WEEK, INSTRUMENTS, raw, consensus_dir=cons_dir).errors)
 
 
 def test_saknad_omgang_listas(tmp_path):

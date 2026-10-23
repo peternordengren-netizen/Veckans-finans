@@ -5,7 +5,7 @@
  * validerats mot rapporttexten.
  */
 import { shortDate } from "../lib/format";
-import { expectedText, kpiValue, surpriseText, yoyText, type ReportResult } from "../lib/results";
+import { epsLabel, expectedText, kpiValue, surpriseText, yoyText, type ReportResult } from "../lib/results";
 
 interface Props {
   results: { reports: ReportResult[]; missingBatches: number[] };
@@ -92,7 +92,7 @@ const periodLabel = { kvartal: "", delår: " (året hittills)", helår: " (helå
           <ul class="vs">
             {r.vs_consensus.eps && (
               <li>
-                <span>Resultat per aktie mot förväntan {expectedText(r.vs_consensus.eps, true)}
+                <span>{epsLabel(r.vs_consensus.eps)} mot förväntan {expectedText(r.vs_consensus.eps, true)}
                   {r.vs_consensus.eps.analysts !== null && ` (${r.vs_consensus.eps.analysts} analytiker)`}</span>
                 <span class:list={["verdict", r.vs_consensus.eps.verdict.replace(" ", "-")]}>{surpriseText(r.vs_consensus.eps)}</span>
               </li>
@@ -131,7 +131,8 @@ const periodLabel = { kvartal: "", delår: " (året hittills)", helår: " (helå
     en förändring över ±50 % mot fjol från färre än 3 analytiker står det "osäker konsensus" i stället för över/under. Vid
     en känd bolagshändelse under året (nyemission, avknoppning …) visas ingen procent. Byter utfall och förväntan tecken,
     eller är det ena värdet nära noll, visas båda värdena, och en avvikelse över ±50 % utan förklaring markeras
-    "kontrollera". Yahoos vinst per aktie kan vara justerad och skilja sig från bolagets redovisade resultat per aktie.
+    "kontrollera". Yahoos vinst per aktie är oftast justerad: anger rapporten ett justerat resultat per aktie jämförs det,
+    annars det redovisade, och det står vilket. Förändringen mot fjolåret gäller det redovisade.
   </p>
 </div>
 

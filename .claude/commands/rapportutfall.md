@@ -23,7 +23,12 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
    `nr | omgång | ticker | bolag | sektor | nyckeltal | publicerad | text | raw_file | sökväg | rubrik`. Det är exakt
    de rapporter du ska ta med – alla, och inga andra.
 2. Läs nyckeltalens namn och typer i `data/sectors.json` (`kpis`). Utöver sektorns nyckeltal finns för alla bolag
-   `nettoomsattning` (belopp) och `resultat-per-aktie` (per aktie).
+   `nettoomsattning` (belopp), `resultat-per-aktie` (per aktie) och `justerat-resultat-per-aktie` (per aktie):
+   - `resultat-per-aktie` är alltid det **redovisade** resultatet per aktie, aldrig ett justerat.
+   - `justerat-resultat-per-aktie` tar du med **bara** om rapporten anger ett justerat resultat per aktie för
+     kvartalet ("justerat", "underliggande", "exklusive/före jämförelsestörande poster", "exklusive engångsposter",
+     "adjusted", "underlying" o.d.). Citatet ska innehålla det ordet. Anger rapporten båda, tar du med båda med var
+     sitt citat.
 3. För varje rapport: läs filen i kolumnen `sökväg` med Read, **högst de första 400 raderna** (rapportens
    sammanfattning och nyckeltalstabell står först). Läs inga andra filer.
 4. Ta för varje nyckeltal i radens lista fram **kvartalets** värde och föregående års värde för samma kvartal, om

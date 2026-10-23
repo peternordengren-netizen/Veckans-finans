@@ -109,11 +109,22 @@ def _in_quote(value: float, numbers, percent: bool = False) -> bool:
     return any(abs(n.value) == v and (n.percent or not percent) for n in numbers)
 
 
+# Justerat resultat per aktie: citatet ska säga att måttet är justerat.
+ADJUSTED_KPI = "justerat-resultat-per-aktie"
+ADJUSTED_RE = re.compile(
+    r"justera|underliggande|jämförelsestörande|engångspost|exklusive|exkl\.|rensat|"
+    r"adjusted|underlying|items affecting comparability|excluding|non-recurring",
+    re.IGNORECASE,
+)
+
+
 def check_kpi(k: dict, kind: str, raw_text: str, where: str, res: Result) -> None:
     """Kontrollerar ett nyckeltal mot rapporttexten (raw_text: normaliserade mellanslag)."""
     quote = _normalize_ws(k["quote"])
     if len(quote.split()) > MAX_QUOTE_WORDS:
         res.errors.append(f"{where}: citatet har fler än {MAX_QUOTE_WORDS} ord")
+    if k["id"] == ADJUSTED_KPI and not ADJUSTED_RE.search(quote):
+        res.errors.append(f"{where}: citatet säger inte att resultatet per aktie är justerat")
     pos = raw_text.find(quote)
     if pos < 0:
         res.errors.append(f"{where}: citatet finns inte i rapporttexten: {k['quote']!r}")
@@ -361,6 +372,15 @@ def comparison_verdict(actual: float, expected: float, surprise: float, uncertai
     return verdict(surprise)
 
 
+def eps_for_comparison(by_id: dict[str, dict], currency: str | None) -> tuple[dict | None, str]:
+    """Resultat per aktie som jämförs med förväntan: det justerade när rapporten anger ett för
+    kvartalet i förväntans valuta, annars det redovisade. Returnerar (nyckeltal, "justerat"/"redovisat")."""
+    adj = by_id.get(ADJUSTED_KPI)
+    if adj and adj["period_kind"] == "kvartal" and (unit_factor(adj["unit"]) or (None, None))[1] == (currency or ""):
+        return adj, "justerat"
+    return by_id.get("resultat-per-aktie"), "redovisat"
+
+
 def _check_comparison(r: dict, where: str, res: Result, consensus_dir: Path | None) -> None:
     """Utfall mot förväntan: räknas om ur nyckeltalet och den sparade konsensusen. Osäker
     konsensus kontrolleras mot konsensusfilen när den finns lokalt."""
@@ -382,7 +402,13 @@ def _check_comparison(r: dict, where: str, res: Result, consensus_dir: Path | No
         c = cmp.get(key)
         if not c:
             continue
-        k = by_id.get(kpi_id)
+        if key == "eps":
+            k, basis = eps_for_comparison(by_id, c["currency"])
+            kpi_id = k["id"] if k else kpi_id
+            if c.get("basis", "redovisat") != basis:
+                res.errors.append(f"{where}: eps jämförs med {c.get('basis', 'redovisat')} men ska använda {basis}")
+        else:
+            k = by_id.get(kpi_id)
         if k is None or k["period_kind"] != "kvartal":
             res.errors.append(f"{where}: jämförelse {key} utan kvartalsvärde för {kpi_id}")
             continue
