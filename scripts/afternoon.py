@@ -16,6 +16,8 @@ rapportutfallen för dagens uppdateringsfönster tagits fram.
 Användning:
     python scripts/afternoon.py                  # i dag
     python scripts/afternoon.py --handelsdag     # bara kontrollen: exit 0 = handelsdag, 3 = inte
+    python scripts/afternoon.py --date 2026-10-22  # en tidigare dag (stängningskurser)
+    python scripts/afternoon.py --forra-om-saknas  # förra handelsdagen om dess fil saknas (morgonflödet)
 Exit-kod: 0 = filen skriven (eller ingen handelsdag), 1 = valideringen underkände, 3 = se ovan.
 """
 
@@ -99,9 +101,17 @@ def main(argv: list[str] | None = None, fetch: BarFetcher = yahoo_bars, now: dat
         stream.reconfigure(encoding="utf-8")
     p = argparse.ArgumentParser()
     p.add_argument("--handelsdag", action="store_true", help="kontrollera bara om i dag är en handelsdag")
+    p.add_argument("--date", type=date.fromisoformat, help="en tidigare handelsdag (stängningskurser)")
+    p.add_argument("--forra-om-saknas", action="store_true",
+                   help="förra handelsdagen, bara om dess fil saknas (morgonflödet, när eftermiddagen missades)")
     args = p.parse_args(argv)
     now = now or datetime.now(STOCKHOLM)
-    today = now.date()
+    today = args.date or now.date()
+    if args.forra_om_saknas:
+        today = previous_business_day(now.date())
+        if (AFTERNOON_DIR / f"{today}.json").exists():
+            print(f"Kursreaktion {today} finns redan.")
+            return 0
     if args.handelsdag:
         return 0 if is_business_day(today) else 3
     if not is_business_day(today):

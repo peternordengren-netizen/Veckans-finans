@@ -84,14 +84,50 @@ export interface AfternoonReport {
   errors: string[];
 }
 
+function afternoonDays(): string[] {
+  if (!existsSync(AFTERNOON_DIR)) return [];
+  return readdirSync(AFTERNOON_DIR)
+    .filter((f) => f.endsWith(".json") && DATE_RE.test(f.slice(0, -5)))
+    .map((f) => f.slice(0, -5))
+    .sort();
+}
+
 /** Senaste eftermiddagsuppdateringen, eller null. Valfri fil; en trasig fil visas inte. */
 export function loadLatestAfternoon(): AfternoonReport | null {
-  if (!existsSync(AFTERNOON_DIR)) return null;
-  const days = readdirSync(AFTERNOON_DIR)
-    .filter((f) => f.endsWith(".json") && DATE_RE.test(f.slice(0, -5)))
-    .sort();
-  if (days.length === 0) return null;
-  const path = join(AFTERNOON_DIR, days[days.length - 1]);
+  const days = afternoonDays();
+  return days.length > 0 ? loadAfternoon(days[days.length - 1]) : null;
+}
+
+/** Senaste eftermiddagsuppdateringen före ett datum, högst fyra dagar bakåt (förra handelsdagen
+ * även över en helg och en helgdag) – morgonrapportens kursreaktion – eller null. */
+export function loadAfternoonBefore(day: string): AfternoonReport | null {
+  const earliest = new Date(`${day}T12:00:00Z`);
+  earliest.setUTCDate(earliest.getUTCDate() - 4);
+  const from = earliest.toISOString().slice(0, 10);
+  const days = afternoonDays().filter((d) => d < day && d >= from);
+  return days.length > 0 ? loadAfternoon(days[days.length - 1]) : null;
+}
+
+/**
+ * Rapportutfallen för kursreaktionens bolag, per ticker: ur körningen bolaget listades i
+ * (morgon eller uppdatering), annars ur veckans fil (måndagens uppsamling).
+ */
+export function loadReactionOutcomes(report: AfternoonReport): Map<string, ReportResult> {
+  const out = new Map<string, ReportResult>();
+  const scopes = [...new Set(report.companies.map((c) => c.scope))];
+  const weeks = [...new Set(report.companies.map((c) => {
+    const [y, m, d] = c.scope.slice(0, 10).split("-").map(Number);
+    return isoWeek(y, m, d);
+  }))];
+  for (const scope of [...scopes, ...weeks]) {
+    for (const r of loadResults(scope)?.reports ?? []) if (!out.has(r.ticker)) out.set(r.ticker, r);
+  }
+  return out;
+}
+
+function loadAfternoon(day: string): AfternoonReport | null {
+  const path = join(AFTERNOON_DIR, `${day}.json`);
+  if (!existsSync(path)) return null;
   try {
     return readJson<AfternoonReport>(path);
   } catch (err) {

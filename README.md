@@ -391,9 +391,16 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
   1. Lokal hämtning till `data/morning/raw/`.
   2. Rapportutfall för rapporterna sedan förra körningens fönster, i läget `<datum>T<hhmm>` under
      `data/results/updates/`. Claude körs bara om fönstret innehåller rapporter.
-  3. Dagens kursreaktion för de rapporterande bolagen med `scripts/afternoon.py`: kurs i dag och mot index, i
-     `data/afternoon/<datum>.json`.
+  3. Dagens kursreaktion för de rapporterande bolagen med `scripts/afternoon.py`, i `data/afternoon/<datum>.json`.
   4. Bygget av sidan.
+
+  Tabellen "Kursreaktion" har kolumnerna kurs, dagens förändring, vinst per aktie mot förväntan och vinst per aktie
+  mot samma kvartal i fjol. Förväntan visas med samma regler och texter som i rapportutfallen, och visar om det
+  justerade resultatet jämfördes. Utfallen hämtas när sidan byggs, ur körningens rapportutfall och annars ur veckans
+  fil. Indexets utveckling står i texten ovanför. Rader där utfallet var över förväntan men kursen föll, eller under
+  förväntan men kursen steg, markeras med ⚑. Tabellen visas som "Kursreaktion i dag" i eftermiddagen. Morgonrapporten
+  visar förra handelsdagens tabell med stängningskurser. Missades eftermiddagen tar morgonflödet fram den med
+  `afternoon.py --forra-om-saknas`.
 
   Uppdateringen visas som **Eftermiddag** överst på startsidan, ovanför morgonrapporten, tills nästa morgonrapport
   finns. Varje fönster börjar där det senast slutande fönstret slutade, morgon eller uppdatering, så att ingen rapport

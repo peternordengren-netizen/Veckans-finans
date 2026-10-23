@@ -91,6 +91,9 @@ if (-not (Test-Path $Consensus)) {
     $ran = $true
 }
 
+# 2b. Förra handelsdagens kursreaktion ("Kursreaktion" i morgonrapporten), om eftermiddagen missades.
+& cmd.exe /c ".venv\Scripts\python.exe scripts\afternoon.py --forra-om-saknas 2>&1" | ForEach-Object { Log "  $_" }
+
 # 3. Rapportutfall sedan förra morgonen. Fel här får aldrig stoppa bygget.
 if ($needResults) {
     Log "Startar rapportutfall"

@@ -98,3 +98,12 @@ def test_kursfel_stoppar_inte_uppdateringen(tmp_path):
     data = afternoon.build(TODAY, NOW, INSTRUMENTS, broken, results_dir(tmp_path), list_fn)
     assert data["errors"] == ["kursdata: Yahoo svarar inte"]
     assert validate_afternoon(data, "2026-10-22", INSTRUMENTS).errors == []
+
+
+def test_forra_handelsdagen_bara_om_filen_saknas(tmp_path, monkeypatch, capsys):
+    """Morgonflödet: förra handelsdagens kursreaktion tas fram bara om eftermiddagen missades."""
+    monkeypatch.setattr(afternoon, "AFTERNOON_DIR", tmp_path)
+    (tmp_path / "2026-10-23.json").write_text("{}", encoding="utf-8")  # fredag finns redan
+    monday = datetime(2026, 10, 26, 8, 10, tzinfo=TZ)
+    assert afternoon.main(["--forra-om-saknas"], fetch=lambda *a: {}, now=monday) == 0
+    assert "2026-10-23 finns redan" in capsys.readouterr().out

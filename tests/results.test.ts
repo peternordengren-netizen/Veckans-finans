@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { epsLabel, expectedText, kpiValue, surpriseText, yoyText } from "../src/lib/results.ts";
+import { epsLabel, expectedText, kpiValue, reactionOutcome, surpriseText, yoyText } from "../src/lib/results.ts";
 
 const MINUS = "−";
 const NBSP = " ";
@@ -48,4 +48,29 @@ test("utfall mot förväntan", () => {
   assert.equal(expectedText(c, true), "2,4 kr");
   assert.equal(expectedText({ ...c, expected: 1.6e9 }, false), "1,6 mdr kr");
   assert.equal(expectedText({ ...c, expected: 950e6 }, false), "950 mn kr");
+});
+
+test("kursreaktion: mot förväntan, mot fjol och kurs mot utfallet", () => {
+  const eps = (verdict: string, surprise_pct: number) =>
+    ({ actual: 2.5, expected: 2.4, analysts: 4, currency: "SEK", surprise_pct, verdict, basis: "justerat" }) as const;
+  const report = (verdict: string, surprise_pct: number) => ({
+    ticker: "ALFA", name: "Alfaverken", sector: null, published: "", url: "", source_name: "", period: "Q3 2026",
+    note: null,
+    kpis: [{ id: "resultat-per-aktie", name: "Resultat per aktie", value: 2.5, unit: "SEK", previous_value: 2.0,
+      change_pct: 25, yoy_pct: 25, period_kind: "kvartal" as const, quote: "" }],
+    vs_consensus: { consensus_date: "2026-10-22", eps: eps(verdict, surprise_pct) as never, revenue: null },
+  });
+  const over = reactionOutcome(-3.1, report("över", 4.2));
+  assert.equal(over.vsExpected?.text, "+4,2 % mot förväntan");
+  assert.equal(over.vsExpected?.basis, "justerat");
+  assert.equal(over.vsLastYear, "+25 %");
+  assert.equal(over.divergent, true); // över förväntan men kursen föll
+  assert.equal(reactionOutcome(2.0, report("över", 4.2)).divergent, false);
+  assert.equal(reactionOutcome(1.5, report("under", -6.0)).divergent, true); // under förväntan men kursen steg
+  assert.equal(reactionOutcome(1.5, report("i linje", 1.0)).divergent, false);
+  assert.equal(reactionOutcome(-9, report("kontrollera", 80)).divergent, false); // bara över/under markeras
+  assert.equal(reactionOutcome(-9, report("bolagshändelse", 80)).vsExpected?.text, "bolagshändelse påverkar jämförelsen");
+  assert.equal(reactionOutcome(null, report("över", 4.2)).divergent, false);
+  const none = reactionOutcome(2.0, undefined);
+  assert.deepEqual(none, { vsExpected: null, vsLastYear: "–", divergent: false });
 });

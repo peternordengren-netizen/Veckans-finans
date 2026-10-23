@@ -26,6 +26,29 @@ export interface Comparison {
   basis?: "justerat" | "redovisat";
 }
 
+/** Kolumnerna "Mot förväntan" och "Mot fjol" i kursreaktionen, och om kursen gick mot utfallet. */
+export interface ReactionOutcome {
+  /** Vinst per aktie mot förväntan med samma texter som i rapportutfallen, eller null. */
+  vsExpected: { text: string; verdict: Comparison["verdict"]; basis: "justerat" | "redovisat" } | null;
+  /** Redovisat resultat per aktie mot samma kvartal i fjol ("+12 %", "från vinst till förlust", "–"). */
+  vsLastYear: string;
+  /** Över förväntan men kursen föll, eller under förväntan men kursen steg. */
+  divergent: boolean;
+}
+
+export function reactionOutcome(changePct: number | null, report: ReportResult | undefined): ReactionOutcome {
+  const eps = report?.vs_consensus?.eps ?? null;
+  const yoy = report?.kpis.find((k) => k.id === "resultat-per-aktie" && k.period_kind === "kvartal");
+  const divergent =
+    eps !== null && changePct !== null &&
+    ((eps.verdict === "över" && changePct < 0) || (eps.verdict === "under" && changePct > 0));
+  return {
+    vsExpected: eps ? { text: surpriseText(eps, true), verdict: eps.verdict, basis: eps.basis ?? "redovisat" } : null,
+    vsLastYear: yoy ? yoyText(yoy) : "–",
+    divergent,
+  };
+}
+
 /** Rubriken för jämförelsen av resultat per aktie: "Justerat resultat per aktie" eller "Resultat per aktie". */
 export function epsLabel(c: Pick<Comparison, "basis">): string {
   return c.basis === "justerat" ? "Justerat resultat per aktie" : "Resultat per aktie";

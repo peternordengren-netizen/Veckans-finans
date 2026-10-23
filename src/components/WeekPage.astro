@@ -16,6 +16,7 @@ import AfternoonReportView from "./AfternoonReport.astro";
 import {
   formatDate,
   listMorningDates,
+  loadAfternoonBefore,
   loadResults,
   loadUpdateResults,
   weekLabel,
@@ -100,6 +101,7 @@ const morningTime = morning
               report={morning}
               level={3}
               results={loadResults(morning.date)}
+              reaction={loadAfternoonBefore(morning.date)}
               after={{ href: "#vecka", label: `${weekLabel(view.week)} ↓` }}
             />
           </div>

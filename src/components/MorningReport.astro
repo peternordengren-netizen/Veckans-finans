@@ -9,6 +9,8 @@ import type { MorningReport } from "../lib/data";
 import { shortDate } from "../lib/format";
 import { ratio, sek, signedPct } from "../lib/signals";
 import type { ReportResult } from "../lib/results";
+import { loadReactionOutcomes, type AfternoonReport } from "../lib/data";
+import ReactionTable from "./ReactionTable.astro";
 import ResultsPanel from "./ResultsPanel.astro";
 
 interface Props {
@@ -19,8 +21,10 @@ interface Props {
   after?: { href: string; label: string };
   /** Rapportutfall sedan förra morgonen (data/results/morning/<datum>.json), visas överst. */
   results?: { reports: ReportResult[]; missingBatches: number[] } | null;
+  /** Förra handelsdagens kursreaktion (data/afternoon/<datum>.json före rapportens datum). */
+  reaction?: AfternoonReport | null;
 }
-const { report, level = 2, after, results = null } = Astro.props;
+const { report, level = 2, after, results = null, reaction = null } = Astro.props;
 const H = level === 2 ? "h2" : "h3";
 const Sub = level === 2 ? "h3" : "h4";
 const time = (iso: string) =>
@@ -36,6 +40,7 @@ const meetings = report.reports_today.filter((e) => e.kind === "stämma");
 <div class:list={["morning", `level-${level}`]}>
   <nav class="toc" aria-label="Morgonrapportens innehåll">
     {results && <a href="#utfall">Utfall <span class="n">{results.reports.length}</span></a>}
+    {reaction && <a href="#kursreaktion">Kursreaktion <span class="n">{reaction.companies.length}</span></a>}
     <a href="#rapporter">Rapporter i dag <span class="n">{reports.length}</span></a>
     <a href="#nyheter">Nyheter <span class="n">{newsCount}</span></a>
     <a href="#insyn">Insyn <span class="n">{report.insider.companies.length}</span></a>
@@ -50,6 +55,15 @@ const meetings = report.reports_today.filter((e) => e.kind === "stämma");
         <H>Utfall i rapporterna</H>
         <ResultsPanel results={results} context="morning" />
       </section>
+    )
+  }
+
+  {
+    reaction && (
+      <div id="kursreaktion" class="block">
+        <ReactionTable report={reaction} outcomes={loadReactionOutcomes(reaction)} mode="previous"
+          headingId="kursreaktion-rubrik" level={level} />
+      </div>
     )
   }
 
