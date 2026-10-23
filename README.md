@@ -202,12 +202,21 @@ Sektorernas nyckeltal att bevaka finns under `kpis` i `data/sectors.json` och l�
 Veckokörningen tar fram nyckeltal ur veckans rapporter med `scripts/run_results.ps1`. Veckans sida visar dem under
 fliken **Rapporterade bolag**.
 
-1. `report_list.py <vecka>` listar veckans rapporter för bolag i listan, en per bolag. Inbjudningar och datumbesked
-   ("…publicerar rapport den 21 oktober") räknas inte. Rapporterna delas in i omgångar om 20, med sektorns nyckeltal
-   plus nettoomsättning och resultat per aktie.
+1. `report_list.py <vecka>` listar veckans rapporter för bolag i listan, en per bolag. Den läser både Actions- och
+   morgonrådatan. Ett meddelande räknas som rapport om något av följande gäller:
+   - Rubriken säger det: "delårsrapport", "Q3-rapport", "resultat för tredje kvartalet" och liknande.
+   - Kalenderregeln uppfylls, för rubriker som bara är en rubrikmening ("Saabs resultat Kv3 2026: …"). Bolaget står i
+     kalendern samma dag, enligt dagens morgonrapport eller veckans kalender. Meddelandet kommer från bolaget självt
+     (MFN- eller Cision-avsändaren, aldrig en analytiker). Texten nämner minst två rapportnyckeltal och
+     rapportperioden.
+
+   En post med rapportrubrik går före en kalenderträff samma dag. Inbjudningar, datumbesked ("…publicerar rapport den
+   21 oktober"), preliminära siffror och resultatvarningar räknas aldrig. Rapporterna delas in i omgångar om 20, med
+   sektorns nyckeltal plus nettoomsättning och resultat per aktie.
 2. `/rapportutfall <vecka> <omgång>` körs med Claude Code (`--model sonnet`) i läget `dontAsk`. Det får bara läsa,
    skriva i `data/results/` och köra `report_list.py` och `validate.py`. Resultatet hamnar i
-   `data/results/<vecka>/omgang-<N>.json`. En godkänd omgång körs inte om.
+   `data/results/<vecka>/omgang-<N>.json`. En godkänd omgång körs inte om. En underkänd omgång körs om en gång direkt.
+   Saknar morgonens resultatfil fortfarande en omgång, görs steget om vid nästa utlösare.
 3. Valideringen (`scripts/validate_results.py`) kontrollerar:
    - att citatet finns ordagrant i rapporten och har högst 25 ord
    - att årets och föregående års tal, och en eventuell procentsats, står i citatet

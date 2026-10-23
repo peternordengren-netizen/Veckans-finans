@@ -69,7 +69,8 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
    (`3,51` → `3.51`, `1 234` → `1234`). Negativa värden (förlust) med minustecken. `change_pct` bara om rapporten
    själv anger förändringen i procent; för procenttal (marginaler, belåningsgrad) är `change_pct` alltid `null`.
 3. **Enhet** (`unit`), som i citatet: belopp `SEK`, `TSEK`, `MSEK` eller `MDSEK` (mkr = MSEK, mdkr/Mdr kr = MDSEK),
-   motsvarande för `EUR`, `USD`, `DKK`, `NOK`; per aktie `SEK`/`EUR`/…; procenttal `procent`; volym `ton`, `kton`,
+   motsvarande för `EUR`, `USD`, `DKK`, `NOK`; per aktie `SEK`/`EUR`/…, eller i hundradelar som i citatet
+   (`Euro cent`, `US cent`, `öre`); procenttal `procent`; volym `ton`, `kton`,
    `st`, `MWh`, `GWh`, `boe` …; pris t.ex. `SEK/ton`.
 4. **Period:** `period_kind` är `kvartal` för det senaste kvartalet (t.ex. juli–september), `delår` för året hittills
    (t.ex. januari–september) och `helår` för hela året. **Ta kvartalets värde.** Rapporter visar ofta båda; citatet

@@ -40,10 +40,24 @@ UNIT_KINDS = {
 }
 
 
+# Per aktie i hundradelar, som rapporten skriver det: "Euro cent", "EUR cent", "US cent", "öre" …
+# (Hexagon 2026-10-23). Jämförs efter att mellanslag tagits bort och små bokstäver.
+CENT_UNITS = {"eurocent": "EUR", "eurocents": "EUR", "eurcent": "EUR", "eurcents": "EUR", "usdcent": "USD",
+              "usdcents": "USD", "uscent": "USD", "uscents": "USD", "öre": "SEK", "nokøre": "NOK", "dkkøre": "DKK"}
+
+
+def cent_currency(unit: str) -> str | None:
+    """'Euro cent' -> 'EUR', 'öre' -> 'SEK'; övriga -> None."""
+    return CENT_UNITS.get(re.sub(r"\s+", "", unit).casefold())
+
+
 def unit_factor(unit: str) -> tuple[Decimal, str] | None:
-    """'MSEK' -> (1 000 000, 'SEK'); 'SEK' -> (1, 'SEK'); övriga (procent, ton …) -> None."""
+    """'MSEK' -> (1 000 000, 'SEK'); 'SEK' -> (1, 'SEK'); 'Euro cent' -> (0,01, 'EUR');
+    övriga (procent, ton …) -> None."""
     if unit in CURRENCIES:
         return Decimal(1), unit
+    if cent_currency(unit):
+        return Decimal("0.01"), cent_currency(unit)
     for prefix in ("MD", "T", "M"):
         if unit.startswith(prefix) and unit[len(prefix):] in CURRENCIES:
             return SCALES[prefix], unit[len(prefix):]
@@ -120,7 +134,7 @@ def check_kpi(k: dict, kind: str, raw_text: str, where: str, res: Result) -> Non
             if abs(abs(computed) - abs(k["change_pct"])) > CHANGE_TOLERANCE_PP:
                 res.errors.append(f"{where}: förändringen {k['change_pct']} % stämmer inte med värdena "
                                   f"({computed:.1f} %)")
-    if k["unit"] not in UNIT_KINDS[kind]:
+    if k["unit"] not in UNIT_KINDS[kind] and not (kind == "per_aktie" and cent_currency(k["unit"])):
         res.errors.append(f"{where}: enheten {k['unit']!r} passar inte nyckeltalets typ {kind!r}")
     if pos >= 0:
         # Perioden avgörs av närmaste angivelse före värdet – även inne i citatet, t.ex.

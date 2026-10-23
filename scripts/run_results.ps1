@@ -65,27 +65,40 @@ $Allowed = @(
 $Disallowed = @("PowerShell", "WebFetch", "WebSearch")
 function Quote([string]$s) { '"' + ($s -replace '"', '\"') + '"' }
 
+function BatchApproved([string]$File) {
+    if (-not (Test-Path $File)) { return $false }
+    & cmd.exe /c ".venv\Scripts\python.exe scripts\validate.py $File > nul 2>&1"
+    return $LASTEXITCODE -eq 0
+}
+
+# Varje omgång får högst MaxAttempts Claude-körningar i samma körning: underkänns den första görs
+# ett nytt försök direkt (Claude ser valideringsfelen när den kör validate.py). Loggarna för
+# försök 2 heter -rapportutfall-<N>-2.json/.err, så att första försökets logg finns kvar.
+$MaxAttempts = 2
 for ($n = 1; $n -le $Batches; $n++) {
     $BatchFile = "$BatchDir\omgang-$n.json"
-    if (Test-Path $BatchFile) {
-        & cmd.exe /c ".venv\Scripts\python.exe scripts\validate.py $BatchFile > nul 2>&1"
-        if ($LASTEXITCODE -eq 0) { Log "omgång ${n}: finns redan och är godkänd - hoppar över"; continue }
-    }
-    $ArgList = @("-p", (Quote "/rapportutfall $Week $n"), "--model", "sonnet", "--permission-mode", "dontAsk",
-        "--allowedTools") + ($Allowed | ForEach-Object { Quote $_ }) +
-        @("--disallowedTools") + ($Disallowed | ForEach-Object { Quote $_ }) +
-        @("--strict-mcp-config", "--no-session-persistence", "--output-format", "json")
-    $JsonOut = Join-Path $LogDir "$Week-rapportutfall-$n.json"
-    $ErrOut = Join-Path $LogDir "$Week-rapportutfall-$n.err"
-    Log "omgång ${n}: startar Claude Code (Sonnet)"
-    try {
-        $proc = Start-Process -FilePath $Claude -ArgumentList $ArgList -NoNewWindow -PassThru -Wait `
-            -RedirectStandardOutput $JsonOut -RedirectStandardError $ErrOut
-        $r = Get-Content $JsonOut -Raw -Encoding UTF8 | ConvertFrom-Json
-        Log ("omgång ${n}: exit $($proc.ExitCode), turer $($r.num_turns), " +
-            "$([math]::Round($r.duration_ms / 60000, 1)) min, nekade anrop $(@($r.permission_denials).Count)")
-    } catch {
-        Log "omgång ${n}: Claude-steget fallerade: $_"
+    if (BatchApproved $BatchFile) { Log "omgång ${n}: finns redan och är godkänd - hoppar över"; continue }
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        $ArgList = @("-p", (Quote "/rapportutfall $Week $n"), "--model", "sonnet", "--permission-mode", "dontAsk",
+            "--allowedTools") + ($Allowed | ForEach-Object { Quote $_ }) +
+            @("--disallowedTools") + ($Disallowed | ForEach-Object { Quote $_ }) +
+            @("--strict-mcp-config", "--no-session-persistence", "--output-format", "json")
+        $Suffix = if ($attempt -gt 1) { "-$attempt" } else { "" }
+        $JsonOut = Join-Path $LogDir "$Week-rapportutfall-$n$Suffix.json"
+        $ErrOut = Join-Path $LogDir "$Week-rapportutfall-$n$Suffix.err"
+        Log "omgång ${n}: startar Claude Code (Sonnet), försök $attempt"
+        try {
+            $proc = Start-Process -FilePath $Claude -ArgumentList $ArgList -NoNewWindow -PassThru -Wait `
+                -RedirectStandardOutput $JsonOut -RedirectStandardError $ErrOut
+            $r = Get-Content $JsonOut -Raw -Encoding UTF8 | ConvertFrom-Json
+            Log ("omgång ${n}: exit $($proc.ExitCode), turer $($r.num_turns), " +
+                "$([math]::Round($r.duration_ms / 60000, 1)) min, nekade anrop $(@($r.permission_denials).Count)")
+        } catch {
+            Log "omgång ${n}: Claude-steget fallerade: $_"
+        }
+        if (BatchApproved $BatchFile) { Log "omgång ${n}: godkänd (försök $attempt)"; break }
+        $first = (& cmd.exe /c ".venv\Scripts\python.exe scripts\validate.py $BatchFile 2>&1" | Select-String '^\s+fel:' | Select-Object -First 1)
+        Log "omgång ${n}: underkänd efter försök $attempt$(if ($first) { ': ' + $first.Line.Trim() })"
     }
 }
 

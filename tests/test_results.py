@@ -359,6 +359,104 @@ def test_uppdateringar_och_morgnar_kedjas_utan_overlapp(tmp_path):
     assert (d / "updates" / "2026-10-22T1745" / "window.json").exists()
 
 
+REPORT_BODY = ("Juli – september 2026\n* Nettoomsättningen ökade till 1 500 MSEK (1 400)\n"
+               "* Rörelseresultatet uppgick till 160 MSEK (140)\n* Resultat per aktie 2,50 SEK (2,00)\n")
+# Rubrikformerna som missades vecka 43 (påhittade bolag): bara en rubrikmening, "Kv3", "Q3",
+# "Delårsredogörelse", "rapporterar resultatet", versaler.
+HEADLINE_REPORTS = [
+    "Alfaverken Kv3 2026: Förbättrad marginal och ökad efterfrågan i vissa segment",
+    "Organisk tillväxt i orderingång samt marginalförbättring inom samtliga affärsområden",
+    "DRIVA VÄRDE GENOM LÖNSAMHET OCH KASSAKONVERTERING, TREDJE KVARTALET 2026",
+    "Alfaverken: Fortsatt volymtillväxt i en dynamisk marknad",
+    "Alfaverken AB: Delårsredogörelse januari - september 2026",
+    "Alfaverken rapporterar resultatet för tredje kvartalet och niomånadersperioden 2026",
+    "Disciplin i ett svagt kvartal och en utmanande marknad",
+    "Tredje kvartalet 2026",
+    "Stärkt balansräkning, fortsatt press på intäkterna",
+    "Stärkt lönsamhet och ökad takt i omställningen",
+    "Stark tillväxt; justerad EBITA ökade med 30 %",
+    "Alfaverken AB: Kraftig ordertillväxt med fortsatta framsteg",
+    "Alfaverken AB: Ökad tillväxt och stärkt resultat i portföljen",
+    "Alfaverkens resultat Kv3 2026: Positionerade för ökad efterfrågan",
+    "Alfakoncernen - det tredje kvartalet 2026",
+    "Alfaverken Q3 2026: vidtar åtgärder i en utmanande omvärld",
+]
+
+
+def test_kalenderregeln_rubrikmeningar_och_undantag():
+    from report_list import is_calendar_report
+
+    d = date(2026, 10, 23)
+    for title in HEADLINE_REPORTS:
+        assert is_calendar_report(title, REPORT_BODY, d), title
+    # Resultatvarning (som MilDef 2026-10-15), preliminära siffror, inbjudan, datumbesked.
+    assert not is_calendar_report("Alfaverken bedömer att omsättning och resultat för tredje kvartalet 2026 "
+                                  "väsentligt överstiger marknadens förväntningar", REPORT_BODY, d)
+    assert not is_calendar_report("Alfaverken lämnar preliminärt resultat för tredje kvartalet", REPORT_BODY, d)
+    assert not is_calendar_report("Alfaverken: Information", "Preliminära siffror för tredje kvartalet. " + REPORT_BODY, d)
+    assert not is_calendar_report("Inbjudan till presentation av Alfaverkens tredje kvartal", REPORT_BODY, d)
+    # Förvärv samma dag: nyckeltal men ingen rapportperiod (som Indutrade 2026-10-23).
+    assert not is_calendar_report("Alfaverken förvärvar Gammateknik",
+                                  "Gammateknik har en omsättning om 100 MSEK och EBITA om 20 MSEK.", d)
+    # För få nyckeltal.
+    assert not is_calendar_report("Tredje kvartalet 2026", "Juli – september 2026. Vi växer.", d)
+
+
+def test_kalenderregeln_i_listan(tmp_path):
+    """Bolaget står i kalendern samma dag och meddelandet kommer från bolaget: rapporten listas.
+    En post med rapportrubrik samma dag går före; utan kalenderrad listas ingenting."""
+    from report_list import list_scope
+
+    raw = tmp_path / "raw"
+    (raw / WEEK / "mfn").mkdir(parents=True)
+    texts = {"forvarv.txt": "Rubrik: x\n---\nGammateknik har en omsättning om 100 MSEK och EBITA om 20 MSEK.\n",
+             "kv3.txt": "Rubrik: x\n---\n" + REPORT_BODY, "warn.txt": "Rubrik: x\n---\n" + REPORT_BODY}
+    for name, text in texts.items():
+        (raw / WEEK / "mfn" / name).write_text(text, encoding="utf-8")
+    item = lambda t, title, company, path: {"source": "mfn", "source_name": "MFN", "id": path + t,  # noqa: E731
+                                           "url": f"https://mfn.example/{path}", "published": f"2026-10-23T{t}:00+02:00",
+                                           "title": title, "company": company, "path": f"mfn/{path}", "text_kind": "fulltext"}
+    items = [item("06:30", "Alfaverken förvärvar Gammateknik", "alfaverken", "forvarv.txt"),
+             item("07:00", "Stark tillväxt; justerad EBITA ökade med 30 %", "alfaverken", "kv3.txt"),
+             item("07:05", "Alfaverken: Strong Q3 – initial take", "analyshuset", "kv3.txt"),
+             item("07:30", "Betabolaget bedömer att omsättning och resultat för tredje kvartalet 2026 överstiger "
+                           "marknadens förväntningar", "betabolaget", "warn.txt")]
+    (raw / WEEK / "index.json").write_text(json.dumps({"items": items}), encoding="utf-8")
+    data = tmp_path / "data"
+    (data / "morning").mkdir(parents=True)
+    morning = {"reports_today": [{"ticker": "ALFA", "kind": "rapport"}, {"ticker": "BETA", "kind": "rapport"}]}
+    (data / "morning" / "2026-10-23.json").write_text(json.dumps(morning), encoding="utf-8")
+
+    listed = list_scope(WEEK, INSTRUMENTS, load_sector_kpis(), raw, None, None, data)
+    assert [(r["ticker"], r["published"][11:16], r["basis"]) for r in listed] == [("ALFA", "07:00", "kalender")]
+    assert list_scope(WEEK, INSTRUMENTS, load_sector_kpis(), raw, None, None, tmp_path / "tom") == []
+    # En rapportrubrik senare samma dag går före kalenderträffen.
+    (raw / WEEK / "mfn" / "q3.txt").write_text("Rubrik: x\n---\n" + REPORT_BODY, encoding="utf-8")
+    items.append(item("08:00", "Alfaverken delårsrapport januari–september 2026", "alfaverken", "q3.txt"))
+    (raw / WEEK / "index.json").write_text(json.dumps({"items": items}), encoding="utf-8")
+    listed = list_scope(WEEK, INSTRUMENTS, load_sector_kpis(), raw, None, None, data)
+    assert [(r["ticker"], r["published"][11:16], r["basis"]) for r in listed] == [("ALFA", "08:00", "rubrik")]
+
+
+def test_per_aktie_i_cent_och_ore():
+    from decimal import Decimal
+
+    from validate_results import unit_factor
+
+    assert unit_factor("Euro cent") == (Decimal("0.01"), "EUR")
+    assert unit_factor("US cent") == (Decimal("0.01"), "USD")
+    assert unit_factor("öre") == (Decimal("0.01"), "SEK")
+    text = _normalize_ws("Juli - september 2026\nResultat per aktie 27,1 Euro cent (24,0)\n")
+    r = Result()
+    check_kpi(kpi("resultat-per-aktie", 27.1, "Euro cent", 24.0, None, "kvartal",
+                  "Resultat per aktie 27,1 Euro cent (24,0)"), "per_aktie", text, "t", r)
+    assert r.errors == []
+    r = Result()
+    check_kpi(kpi("nettoomsattning", 27.1, "Euro cent", 24.0, None, "kvartal",
+                  "Resultat per aktie 27,1 Euro cent (24,0)"), "belopp", text, "t", r)
+    assert any("enheten" in e for e in r.errors)  # cent bara per aktie
+
+
 def test_omskickad_rapport_far_inget_andra_utfall(tmp_path):
     """Samma rapport publicerad igen (ny adress) efter morgonens fönster: uppdateringen hoppar över bolaget."""
     from report_list import create_window, list_scope

@@ -15,8 +15,10 @@ handelsdagen 08:10, och slutar när körningen startar. Därmed räknas ingen ra
 oavsett i vilken ordning körningarna sker. Bolag som redan fått ett godkänt utfall i en annan
 körning från förra handelsdagen till och med dagen hoppas över (en rapport som publiceras om).
 
-En rapport per bolag: den första icke-rutinmässiga MFN/Cision-posten vars rubrik är en rapport
-(inte en inbjudan eller ett datumbesked). Avsändaren avgörs som i rapportkalendern
+En rapport per bolag: den första MFN/Cision-posten som är en rapport – antingen på rubriken
+(inte en inbjudan, ett datumbesked, preliminära siffror eller en resultatvarning), eller enligt
+kalenderregeln: bolaget står i kalendern samma dag, posten kommer från bolaget självt och texten
+nämner minst två rapportnyckeltal (se KPI_TERMS). Avsändaren avgörs som i rapportkalendern
 (scripts/report_calendar.match_company). Varje rad visar vilka nyckeltal som ska tas fram:
 sektorns nyckeltal ur data/sectors.json plus omsättning och resultat per aktie, och sökvägen
 till rapporttexten.
@@ -109,17 +111,95 @@ PRELIM_RE = re.compile(
 )
 # "Rapport för tredje kvartalet och inbjudan till telefonkonferens" är själva rapporten.
 REPORT_AND_INVITE_RE = re.compile(r"\boch inbjudan|\band invitation", re.IGNORECASE)
+# Vinst- och resultatvarningar är ingen rapport ("MilDef bedömer att omsättning och resultat för
+# tredje kvartalet väsentligt överstiger marknadens förväntningar", 2026-10-15).
+WARNING_RE = re.compile(
+    r"vinstvarning|resultatvarning|profit warning|bedömer att|"
+    r"(över|under)stig\w* marknadens förväntningar|(above|below|exceed\w*) (the )?market('s)? expectations",
+    re.IGNORECASE,
+)
+
+# Kalenderregeln: många rapporter har bara en rubrikmening ("Saabs resultat Kv3 2026: …",
+# "Tredje kvartalet 2026", "Stark tillväxt; justerad EBITA ökade med 30 %"). Ett meddelande från
+# bolaget självt (MFN/Cision-avsändare) räknas som rapporten om bolaget står i kalendern samma dag
+# och texten nämner minst MIN_KPI_TERMS olika rapportnyckeltal. Ingressen (rubrik och början av
+# texten) får inte tala om preliminära siffror eller en resultatvarning.
+KPI_TERMS = [
+    re.compile(p, re.IGNORECASE) for p in (
+        r"nettoomsättning|net sales",
+        r"\bomsättning|\bintäkter|\brevenue",
+        r"rörelseresultat|operating (profit|income|result)|\bebita?\b|\bebitda",
+        r"resultat per aktie|earnings per share",
+        r"förvaltningsresultat|income from property management",
+        r"räntenetto|net interest income",
+        r"orderingång|order intake",
+        r"resultat (före|efter) skatt|profit (before|after) tax|periodens resultat|net profit",
+    )
+]
+MIN_KPI_TERMS = 2
+# ... och rapportperioden ska nämnas: ett förvärvsmeddelande samma dag nämner ofta det köpta bolagets
+# omsättning och EBITA (Indutrade 2026-10-23 07:30), men inte "tredje kvartalet" eller "juli–september".
+REPORT_PERIOD_RE = re.compile(
+    r"(första|andra|tredje|fjärde) kvartalet|\bkvartal(et)? [1-4]\b|\bq[1-4]\b|\bkv ?[1-4]\b|"
+    r"(first|second|third|fourth) quarter|niomånaders|nio månader|första halvåret|helåret|"
+    r"\b(januari|april|juli|oktober|january|july|october)\s*[-–—]\s*(mars|juni|september|december|march|june)\b",
+    re.IGNORECASE,
+)
+LEAD_CHARS = 400  # ingressen som kontrolleras mot preliminära siffror och resultatvarningar
+TEXT_CHARS = 8000  # så mycket av texten som söks efter nyckeltal
 
 
 def is_report_title(title: str, published: date) -> bool:
     """Sant om rubriken är själva rapporten. "… publicerar rapport för tredje kvartalet den 21
     oktober" (ett framtida datum i rubriken) är ett datumbesked, ingen rapport. "Preliminärt
-    resultat för tredje kvartalet" är preliminära siffror, ingen rapport."""
-    if not REPORT_RE.search(title) or PRELIM_RE.search(title):
+    resultat för tredje kvartalet" är preliminära siffror och en resultatvarning är ingen rapport."""
+    if not REPORT_RE.search(title) or PRELIM_RE.search(title) or WARNING_RE.search(title):
         return False
     if any(d > published for _, d in find_dates(title, published)):
         return False
     return not INVITE_RE.search(title) or bool(REPORT_AND_INVITE_RE.search(title))
+
+
+def report_body(path: Path) -> str:
+    """Rapporttexten utan rubrikhuvudet (allt efter första raden '---'), tom om filen saknas."""
+    if not path.is_file():
+        return ""
+    text = path.read_text(encoding="utf-8")
+    head, sep, body = text.partition("\n---\n")
+    return body if sep else text
+
+
+def kpi_terms(text: str) -> int:
+    """Antal olika rapportnyckeltal (KPI_TERMS) som nämns i texten."""
+    return sum(bool(rx.search(text)) for rx in KPI_TERMS)
+
+
+def is_calendar_report(title: str, body: str, published: date) -> bool:
+    """Kalenderregeln för ett meddelande från ett bolag som rapporterar samma dag (se KPI_TERMS)."""
+    lead = f"{title} {body[:LEAD_CHARS]}"
+    if PRELIM_RE.search(lead) or WARNING_RE.search(lead):
+        return False
+    if INVITE_RE.search(title) and not REPORT_AND_INVITE_RE.search(title):
+        return False
+    if any(d > published for _, d in find_dates(title, published)):
+        return False
+    text = body[:TEXT_CHARS]
+    return kpi_terms(text) >= MIN_KPI_TERMS and bool(REPORT_PERIOD_RE.search(f"{title} {text}"))
+
+
+def calendar_reporters(day: date, data_dir: Path = DATA_DIR) -> set[str]:
+    """Bolag med rapport day enligt dagens morgonrapport (reports_today, kalendern så som den såg
+    ut den morgonen) och veckans rapportkalender (Yahoos eller MFN:s datum)."""
+    out: set[str] = set()
+    morning = data_dir / "morning" / f"{day.isoformat()}.json"
+    if morning.exists():
+        out |= {e["ticker"] for e in json.loads(morning.read_text(encoding="utf-8")).get("reports_today", [])
+                if e.get("kind") == "rapport"}
+    cal = data_dir / "calendar" / f"{_iso_week(day)}.json"
+    if cal.exists():
+        out |= {e["ticker"] for e in json.loads(cal.read_text(encoding="utf-8")).get("events", [])
+                if e.get("kind") == "rapport" and day.isoformat() in (e.get("yahoo_date"), e.get("mfn_date"))}
+    return out
 
 
 def kpis_for(inst: Instrument, sector_kpis: dict[str, list[dict]]) -> list[dict]:
@@ -234,10 +314,12 @@ def _morning_tickers(week: str, results_dir: Path) -> set[str]:
 
 def list_scope(scope: str, instruments: dict[str, Instrument], sector_kpis: dict[str, list[dict]],
                raw_dir: Path = RAW_DIR, morning_raw: Path | None = MORNING_RAW,
-               results_dir: Path | None = RESULTS_DIR) -> list[dict]:
-    """Rapporterna för en vecka eller en körning (se modulens beskrivning), en per bolag."""
+               results_dir: Path | None = RESULTS_DIR, calendar_dir: Path | None = DATA_DIR) -> list[dict]:
+    """Rapporterna för en vecka eller en körning (se modulens beskrivning), en per bolag.
+    calendar_dir: data-katalogen för kalenderregeln (None stänger av den)."""
     if WEEK_RE.match(scope):
-        bases = [raw_dir / scope]
+        # Även morgonens lokala rådata: Actions-hämtningarna kan ha luckor på flera timmar.
+        bases = [b / scope for b in (raw_dir, morning_raw) if b is not None]
         window = None
         skip = _morning_tickers(scope, results_dir) if results_dir else set()
     elif is_run(scope):
@@ -249,12 +331,13 @@ def list_scope(scope: str, instruments: dict[str, Instrument], sector_kpis: dict
         skip = _recent_run_tickers(scope, results_dir)
     else:
         raise ValueError(f"ogiltig vecka eller dag: {scope!r}")
-    return _list(bases, window, skip, instruments, sector_kpis)
+    return _list(bases, window, skip, instruments, sector_kpis, is_report_title, calendar_dir)
 
 
 def list_window(since: datetime, until: datetime, instruments: dict[str, Instrument],
                 sector_kpis: dict[str, list[dict]], raw_dir: Path = RAW_DIR,
-                morning_raw: Path | None = MORNING_RAW, prelim: bool = False) -> list[dict]:
+                morning_raw: Path | None = MORNING_RAW, prelim: bool = False,
+                calendar_dir: Path | None = DATA_DIR) -> list[dict]:
     """Rapporter publicerade i (since, until] ur båda rådatamapparna, utan sparat fönster
     (används t.ex. för att se vilka bolag som rapporterat före en konsensusbild).
     prelim=True: preliminära siffror i stället för rapporter."""
@@ -263,13 +346,25 @@ def list_window(since: datetime, until: datetime, instruments: dict[str, Instrum
         weeks.add(_iso_week(d))
         d += timedelta(days=1)
     bases = [b / w for w in sorted(weeks) for b in (raw_dir, morning_raw) if b is not None]
-    title_ok = (lambda title, _day: bool(PRELIM_RE.search(title))) if prelim else is_report_title
-    return _list(bases, (since, until), set(), instruments, sector_kpis, title_ok)
+    if prelim:
+        return _list(bases, (since, until), set(), instruments, sector_kpis,
+                     lambda title, _day: bool(PRELIM_RE.search(title)), None)
+    return _list(bases, (since, until), set(), instruments, sector_kpis, is_report_title, calendar_dir)
 
 
 def _list(bases: list[Path], window: tuple[datetime, datetime] | None, skip: set[str],
           instruments: dict[str, Instrument], sector_kpis: dict[str, list[dict]],
-          title_ok=is_report_title) -> list[dict]:
+          title_ok=is_report_title, calendar_dir: Path | None = DATA_DIR) -> list[dict]:
+    """calendar_dir: data-katalogen för kalenderregeln (morning/ och calendar/); None stänger av den."""
+    calendars: dict[date, set[str]] = {}
+
+    def in_calendar(ticker: str, day: date) -> bool:
+        if calendar_dir is None:
+            return False
+        if day not in calendars:
+            calendars[day] = calendar_reporters(day, calendar_dir)
+        return ticker in calendars[day]
+
     patterns = name_patterns(instruments)
     candidates: list[tuple[Path, dict]] = []
     seen_ids: set[str] = set()
@@ -284,18 +379,26 @@ def _list(bases: list[Path], window: tuple[datetime, datetime] | None, skip: set
             seen_ids.add(key)
             candidates.append((base, it))
 
-    seen: set[str] = set()
-    out = []
+    # Per bolag: första posten med rapportrubrik, annars första posten enligt kalenderregeln.
+    chosen: dict[str, tuple[str, Path, dict]] = {}
     for base, it in sorted(candidates, key=lambda c: c[1]["published"]):
         published = datetime.fromisoformat(it["published"])
         if window and not window[0] < published <= window[1]:
             continue
-        if it.get("source") not in ("mfn", "cision") or not title_ok(it.get("title", ""), published.date()):
+        if it.get("source") not in ("mfn", "cision"):
             continue
         ticker = match_company(it, instruments, patterns)
-        if ticker is None or ticker in seen or ticker in skip:
+        if ticker is None or ticker in skip or (ticker in chosen and chosen[ticker][0] == "rubrik"):
             continue
-        seen.add(ticker)
+        title, day = it.get("title", ""), published.date()
+        if title_ok(title, day):
+            chosen[ticker] = ("rubrik", base, it)
+        elif ticker not in chosen and it.get("company") and in_calendar(ticker, day) and \
+                is_calendar_report(title, report_body(base / it["path"]), day):
+            chosen[ticker] = ("kalender", base, it)  # bara bolagets egen avsändare, inte en analytikers kommentar
+
+    out = []
+    for ticker, (basis, base, it) in sorted(chosen.items(), key=lambda c: c[1][2]["published"]):
         inst = instruments[ticker]
         out.append({
             "ticker": ticker,
@@ -310,6 +413,7 @@ def _list(bases: list[Path], window: tuple[datetime, datetime] | None, skip: set
             "source_name": it.get("source_name") or it["source"],
             "text_kind": it.get("text_kind"),
             "title": it["title"],
+            "basis": basis,
         })
     for n, r in enumerate(out):
         r["batch"] = n // BATCH_SIZE + 1

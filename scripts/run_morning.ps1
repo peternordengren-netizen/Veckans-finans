@@ -9,7 +9,9 @@
 # Stegen körs bara om deras fil saknas, så skriptet kan köras om och tar då bara det som fattas:
 #   1. data/morning/<datum>.json        morning.py (ingen handelsdag: avslutar utan fil)
 #   2. data/consensus/<datum>.json      consensus.py --backup (märker bolag som redan rapporterat)
-#   3. data/results/morning/<datum>.json run_results.ps1 <datum>; fallerar Claude byggs sidan ändå
+#   3. data/results/morning/<datum>.json run_results.ps1 <datum>; fallerar Claude byggs sidan ändå.
+#      Saknar filen en omgång (underkänd två gånger i run_results.ps1) görs steget om vid nästa
+#      utlösare, inom gränsen för försök nedan.
 #   4. npm run build                    om något steg kördes
 # - Högst två försök per steg och dag (räknas i loggen), så att ett fel inte ger nya hämtningar
 #   eller Claude-körningar vid varje upplåsning.
@@ -51,8 +53,14 @@ function Log([string]$Text) {
     Write-Output $line
 }
 
+function ResultsComplete {
+    # Resultatfilen finns och saknar inga omgångar (en underkänd omgång gör att den skrivs utan den).
+    if (-not (Test-Path $Results)) { return $false }
+    try { return @((Get-Content $Results -Raw -Encoding UTF8 | ConvertFrom-Json).missing_batches).Count -eq 0 }
+    catch { return $false }
+}
 $needReport = -not (Test-Path $Report) -and (Attempts "Startar morning.py") -lt $MaxAttempts
-$needResults = -not (Test-Path $Results) -and (Attempts "Startar rapportutfall") -lt $MaxAttempts
+$needResults = -not (ResultsComplete) -and (Attempts "Startar rapportutfall") -lt $MaxAttempts
 if (-not $needReport -and (Test-Path $Report) -and (Test-Path $Consensus) -and -not $needResults) {
     Write-Output "Dagens morgonkörning är klar (eller har gjort sina försök) - inget att göra."
     exit 0
