@@ -44,7 +44,8 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
   <H id={headingId}>{title}</H>
   <p class="note">
     Bolag som rapporterat sedan förra handelsdagens stängning: kursen {beforeClose ? `kl. ${time(report.generated_at)}` : "vid stängning"}{" "}
-    mot förra handelsdagens stängning, och vinst per aktie mot förväntan och mot samma kvartal i fjol.
+    mot förra handelsdagens stängning, och vinst per aktie mot förväntan och mot samma kvartal i fjol (för
+    fastighetsbolag förvaltningsresultat per aktie när rapporten anger det; perioden syns när du håller över värdet).
     {report.index.change_pct !== null && ` ${report.index.name}: ${signedPct(report.index.change_pct, 2)}.`}
     {report.price_day === null && reacted.length > 0 && " Yahoo har inga kurser för dagen ännu."}
     {divergent > 0 && <> <span class="flag" aria-hidden="true">⚑</span> = kursen gick mot utfallet ({divergent}).</>}
@@ -94,7 +95,10 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
                     <span class="muted">–</span>
                   )}
                 </td>
-                <td class="num">{c.outcome.vsLastYear}</td>
+                <td class="num" title={c.outcome.vsLastYearTitle ?? undefined}>
+                  {c.outcome.vsLastYear}
+                  {c.outcome.vsLastYearTitle && <span class="sr-only"> ({c.outcome.vsLastYearTitle})</span>}
+                </td>
               </tr>
             ))}
           </tbody>

@@ -395,7 +395,12 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
   4. Bygget av sidan.
 
   Tabellen "Kursreaktion" har kolumnerna kurs, dagens förändring, vinst per aktie mot förväntan och vinst per aktie
-  mot samma kvartal i fjol. Förväntan visas med samma regler och texter som i rapportutfallen, och visar om det
+  mot samma kvartal i fjol. "Mot fjol" har följande regler:
+  - Bara kvartalsvärden visas. Valideringen kräver en kvartalsangivelse ("juli–september", "tredje kvartalet" o.d.)
+    före citatet för värden per aktie.
+  - Fastighetsbolag visar förvaltningsresultat per aktie när rapporten anger det.
+  - Vid över ±200 %, nära noll eller teckenbyte visas båda värdena i stället för procent, som i "Kommande vecka".
+  - Perioden ("Q3 2026 mot Q3 2025") och nyckeltalet syns som tooltip. Förväntan visas med samma regler och texter som i rapportutfallen, och visar om det
   justerade resultatet jämfördes. Utfallen hämtas när sidan byggs, ur körningens rapportutfall och annars ur veckans
   fil. Indexets utveckling står i texten ovanför. Rader där utfallet var över förväntan men kursen föll, eller under
   förväntan men kursen steg, markeras med ⚑. Tabellen visas som "Kursreaktion i dag" i eftermiddagen. Morgonrapporten

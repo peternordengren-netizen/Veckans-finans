@@ -30,21 +30,57 @@ export interface Comparison {
 export interface ReactionOutcome {
   /** Vinst per aktie mot förväntan med samma texter som i rapportutfallen, eller null. */
   vsExpected: { text: string; verdict: Comparison["verdict"]; basis: "justerat" | "redovisat" } | null;
-  /** Redovisat resultat per aktie mot samma kvartal i fjol ("+12 %", "från vinst till förlust", "–"). */
+  /** Redovisat resultat per aktie (fastighetsbolag: förvaltningsresultat per aktie) mot samma kvartal i fjol:
+   * "+12 %", eller båda värdena vid teckenbyte, nära noll eller över ±200 %, eller "–". */
   vsLastYear: string;
+  /** Tooltip: perioderna och nyckeltalet, t.ex. "Q3 2026 mot Q3 2025 · Resultat per aktie", eller null. */
+  vsLastYearTitle: string | null;
   /** Över förväntan men kursen föll, eller under förväntan men kursen steg. */
   divergent: boolean;
 }
 
+/** Över så stor förändring (±procent) visas båda värdena, som i "Kommande vecka" (consensus.ts MAX_SHOWN_PCT). */
+export const MAX_YOY_PCT = 200;
+/** Är det ena värdet mindre än så stor andel av det andra räknas det som nära noll (samma som i jämförelsen med förväntan). */
+export const NEAR_ZERO_RATIO = 0.1;
+
+/**
+ * Nyckeltalet för "Mot fjol": för fastighetsbolag förvaltningsresultat per aktie när rapporten anger det,
+ * annars redovisat resultat per aktie. Bara kvartalsvärden (valideringen kräver en kvartalsangivelse).
+ */
+export function lastYearKpi(report: ReportResult): ResultKpi | undefined {
+  const q = (id: string) => report.kpis.find((k) => k.id === id && k.period_kind === "kvartal");
+  return (report.sector === "fastigheter" ? q("forvaltningsresultat-per-aktie") : undefined) ?? q("resultat-per-aktie");
+}
+
+/** "+12 %", eller båda värdena ("9,38 kr, i fjol 1,77 kr") vid teckenbyte, nära noll eller över ±200 %. */
+export function lastYearText(k: Pick<ResultKpi, "value" | "previous_value" | "yoy_pct" | "unit">): string {
+  const prev = k.previous_value;
+  if (prev === null) return k.yoy_pct === null ? "–" : `${signed(k.yoy_pct, 0)} %`;
+  const both = `${kpiValue(k.value, k.unit)}, i fjol ${kpiValue(prev, k.unit)}`;
+  const [small, big] = [Math.abs(k.value), Math.abs(prev)].sort((a, b) => a - b);
+  const signChange = k.value !== 0 && prev !== 0 && Math.sign(k.value) !== Math.sign(prev);
+  if (signChange || (big > 0 && small < NEAR_ZERO_RATIO * big)) return both;
+  const pct = k.yoy_pct ?? ((k.value - prev) / Math.abs(prev)) * 100;
+  return Math.abs(pct) > MAX_YOY_PCT ? both : `${signed(pct, 0)} %`;
+}
+
+/** "Q3 2026" -> "Q3 2026 mot Q3 2025"; annars perioden som den är. */
+export function periodVsLastYear(period: string): string {
+  const m = /^(Q[1-4]|H[12]|FY)\s+(\d{4})$/.exec(period.trim());
+  return m ? `${m[1]} ${m[2]} mot ${m[1]} ${Number(m[2]) - 1}` : period;
+}
+
 export function reactionOutcome(changePct: number | null, report: ReportResult | undefined): ReactionOutcome {
   const eps = report?.vs_consensus?.eps ?? null;
-  const yoy = report?.kpis.find((k) => k.id === "resultat-per-aktie" && k.period_kind === "kvartal");
+  const yoy = report ? lastYearKpi(report) : undefined;
   const divergent =
     eps !== null && changePct !== null &&
     ((eps.verdict === "över" && changePct < 0) || (eps.verdict === "under" && changePct > 0));
   return {
     vsExpected: eps ? { text: surpriseText(eps, true), verdict: eps.verdict, basis: eps.basis ?? "redovisat" } : null,
-    vsLastYear: yoy ? yoyText(yoy) : "–",
+    vsLastYear: yoy ? lastYearText(yoy) : "–",
+    vsLastYearTitle: yoy && report ? `${periodVsLastYear(report.period)} · ${yoy.name}` : null,
     divergent,
   };
 }

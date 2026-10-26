@@ -357,6 +357,29 @@ def test_jamforelsen_anger_justerat_eller_redovisat(tmp_path):
     assert any("ska använda justerat" in e for e in validate_results(data, WEEK, INSTRUMENTS, raw, consensus_dir=cons_dir).errors)
 
 
+def test_per_aktie_kraver_kvartalsangivelse():
+    """"Mot fjol" visar per aktie mot samma kvartal i fjol: utan kvartalsangivelse före citatet underkänns
+    värdet, och en angivelse för årets första nio månader underkänns som kvartal."""
+    no_period = _normalize_ws("Sammanfattning\nResultat per aktie uppgick till 2,50 SEK (2,00).\n"
+                              "Nettoomsättningen uppgick till 1 500 MSEK (1 400).\n")
+    eps = kpi("resultat-per-aktie", 2.5, "SEK", 2.0, None, "kvartal", "Resultat per aktie uppgick till 2,50 SEK (2,00).")
+    r = Result()
+    check_kpi(eps, "per_aktie", no_period, "t", r)
+    assert any("kvartalsangivelse" in e for e in r.errors)
+    r = Result()  # belopp utan angivelse: bara en varning, som tidigare
+    check_kpi(kpi("nettoomsattning", 1500, "MSEK", 1400, None, "kvartal",
+                  "Nettoomsättningen uppgick till 1 500 MSEK (1 400)."), "belopp", no_period, "t", r)
+    assert r.errors == [] and r.warnings
+    nine = _normalize_ws("Januari – september 2026\nResultat per aktie uppgick till 2,50 SEK (2,00).\n")
+    r = Result()
+    check_kpi(eps, "per_aktie", nine, "t", r)
+    assert any("delårsangivelse" in e for e in r.errors)
+    q3 = _normalize_ws("Juli – september 2026\nResultat per aktie uppgick till 2,50 SEK (2,00).\n")
+    r = Result()
+    check_kpi(eps, "per_aktie", q3, "t", r)
+    assert r.errors == []
+
+
 def test_saknad_omgang_listas(tmp_path):
     raw = make_raw(tmp_path)
     data, problems = results.build(WEEK, INSTRUMENTS, NOW, raw, tmp_path / "results", tmp_path / "consensus")

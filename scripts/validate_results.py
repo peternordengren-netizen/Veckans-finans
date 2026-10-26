@@ -153,7 +153,12 @@ def check_kpi(k: dict, kind: str, raw_text: str, where: str, res: Result) -> Non
         value_at = next((quote.find(n.raw) for n in numbers
                          if abs(n.value) == abs(Decimal(str(k["value"]))) and quote.find(n.raw) >= 0), 0)
         found = period_before(raw_text, pos + value_at)
-        if found is None:
+        if found is None and kind == "per_aktie" and k["period_kind"] == "kvartal":
+            # Per aktie visas mot samma kvartal i fjol ("Mot fjol"): perioden måste vara belagd som kvartalet,
+            # så att årets första nio månader aldrig jämförs som ett kvartal.
+            res.errors.append(f"{where}: ingen kvartalsangivelse (t.ex. \"juli–september\", \"tredje kvartalet\") "
+                              "före citatet")
+        elif found is None:
             res.warnings.append(f"{where}: ingen periodangivelse hittades före citatet")
         elif found != k["period_kind"]:
             res.errors.append(f"{where}: citatet står under en {found}sangivelse men anges som {k['period_kind']}")

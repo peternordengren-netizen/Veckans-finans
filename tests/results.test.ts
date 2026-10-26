@@ -2,7 +2,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { epsLabel, expectedText, kpiValue, reactionOutcome, surpriseText, yoyText } from "../src/lib/results.ts";
+import {
+  epsLabel,
+  expectedText,
+  kpiValue,
+  lastYearKpi,
+  lastYearText,
+  periodVsLastYear,
+  reactionOutcome,
+  surpriseText,
+  yoyText,
+} from "../src/lib/results.ts";
 
 const MINUS = "−";
 const NBSP = " ";
@@ -71,6 +81,39 @@ test("kursreaktion: mot förväntan, mot fjol och kurs mot utfallet", () => {
   assert.equal(reactionOutcome(-9, report("kontrollera", 80)).divergent, false); // bara över/under markeras
   assert.equal(reactionOutcome(-9, report("bolagshändelse", 80)).vsExpected?.text, "bolagshändelse påverkar jämförelsen");
   assert.equal(reactionOutcome(null, report("över", 4.2)).divergent, false);
+  assert.equal(over.vsLastYearTitle, "Q3 2026 mot Q3 2025 · Resultat per aktie");
   const none = reactionOutcome(2.0, undefined);
-  assert.deepEqual(none, { vsExpected: null, vsLastYear: "–", divergent: false });
+  assert.deepEqual(none, { vsExpected: null, vsLastYear: "–", vsLastYearTitle: null, divergent: false });
+});
+
+test("mot fjol: båda värdena vid teckenbyte, nära noll och över ±200 %", () => {
+  const k = (value: number, previous_value: number | null, yoy_pct: number | null) =>
+    ({ value, previous_value, yoy_pct, unit: "SEK" });
+  assert.equal(lastYearText(k(2.42, 5.19, -53.4)), `${MINUS}53 %`);
+  assert.equal(lastYearText(k(4.05, 3.0, 35)), "+35 %");
+  assert.equal(lastYearText(k(9.38, 1.77, 429.9)), "9,38 kr, i fjol 1,77 kr"); // över +200 %
+  assert.equal(lastYearText(k(-0.46, 0.39, null)), `${MINUS}0,46 kr, i fjol 0,39 kr`); // teckenbyte
+  assert.equal(lastYearText(k(0.02, 0.85, -97.6)), "0,02 kr, i fjol 0,85 kr"); // nära noll
+  assert.equal(lastYearText(k(2.0, 2.0, 0)), "0 %");
+  assert.equal(lastYearText(k(2.5, null, 30)), "+30 %"); // bara rapportens egen procentsats
+  assert.equal(lastYearText(k(2.5, null, null)), "–");
+  assert.equal(periodVsLastYear("Q3 2026"), "Q3 2026 mot Q3 2025");
+  assert.equal(periodVsLastYear("januari–september"), "januari–september");
+});
+
+test("mot fjol för fastighetsbolag: förvaltningsresultat per aktie när det finns", () => {
+  const kpi = (id: string, name: string, value: number, prev: number, period_kind = "kvartal" as const) =>
+    ({ id, name, value, unit: "SEK", previous_value: prev, change_pct: null, yoy_pct: null, period_kind, quote: "" });
+  const base = { ticker: "BETA", name: "Betabolaget", published: "", url: "", source_name: "", period: "Q3 2026",
+    note: null, vs_consensus: null };
+  const eps = kpi("resultat-per-aktie", "Resultat per aktie", 9.38, 1.77);
+  const fr = kpi("forvaltningsresultat-per-aktie", "Förvaltningsresultat per aktie", 2.1, 1.9);
+  const prop = reactionOutcome(1, { ...base, sector: "fastigheter", kpis: [eps, fr] });
+  assert.equal(prop.vsLastYear, "+11 %");
+  assert.equal(prop.vsLastYearTitle, "Q3 2026 mot Q3 2025 · Förvaltningsresultat per aktie");
+  // Utan förvaltningsresultat per aktie för kvartalet: resultat per aktie.
+  const noFr = reactionOutcome(1, { ...base, sector: "fastigheter", kpis: [eps, { ...fr, period_kind: "delår" as never }] });
+  assert.equal(noFr.vsLastYear, "9,38 kr, i fjol 1,77 kr");
+  // Andra sektorer använder alltid resultat per aktie.
+  assert.equal(lastYearKpi({ ...base, sector: "industri", kpis: [eps, fr] })?.id, "resultat-per-aktie");
 });
