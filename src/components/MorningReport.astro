@@ -6,7 +6,8 @@
  */
 import { statusText, weekdayDate } from "../lib/calendar";
 import type { MorningReport } from "../lib/data";
-import { shortDate } from "../lib/format";
+import { direction, shortChange, shortDate } from "../lib/format";
+import { groupByCompany, holderName } from "../lib/short";
 import { ratio, sek, signedPct } from "../lib/signals";
 import type { ReportResult } from "../lib/results";
 import { loadReactionOutcomes, type AfternoonReport } from "../lib/data";
@@ -34,6 +35,11 @@ const dayTime = (iso: string) =>
 const signalLabel = { omsättning: "Hög omsättning", "52v-högsta": "Nära 52 v högsta", "52v-lägsta": "Nära 52 v lägsta" };
 const newsCount = report.news.reduce((n, c) => n + c.items.length, 0);
 const reports = report.reports_today.filter((e) => e.kind === "rapport");
+// Blankning per bolag: bolagsnamn (instruments.csv) som rubrik med total förändring, innehavarna under
+// sorterade efter positionens storlek, bolagen efter största totala förändring.
+const shortGroups = groupByCompany(report.short.positions.map((p) => ({ ...p, holder: p.holder ?? "" })));
+const pp = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" });
+const signedPp = (v: number) => `${pp.format(v)} procentenheter`;
 const meetings = report.reports_today.filter((e) => e.kind === "stämma");
 ---
 
@@ -156,34 +162,48 @@ const meetings = report.reports_today.filter((e) => e.kind === "stämma");
             Ändringar i Finansinspektionens register mellan {shortDate(report.short.from_as_of!)} och{" "}
             {shortDate(report.short.to_as_of!)}.
           </p>
-          <Sub class="sub">Enskilda positioner över 0,5 %</Sub>
-          {report.short.positions.length === 0 && <p class="empty">Inga ändringar.</p>}
-          <ul class="rows">
-            {report.short.positions.map((p) => (
+          <Sub class="sub">Enskilda positioner över 0,5 %, per bolag</Sub>
+          {shortGroups.length === 0 && <p class="empty">Inga ändringar.</p>}
+          <ul class="rows short-groups">
+            {shortGroups.map((c) => (
               <li>
-                <span>
-                  <strong>{p.name}</strong> <span class="muted">{p.holder}</span>
-                </span>
-                <span class="num">
-                  {p.start_pct ? `${p.start_pct.toLocaleString("sv-SE")} %` : "under 0,5 %"} →{" "}
-                  {p.end_pct ? `${p.end_pct.toLocaleString("sv-SE")} %` : "under 0,5 %"}
-                </span>
+                <div class="short-head">
+                  <span>
+                    <strong>{c.name}</strong> <span class="muted">{c.ticker}</span>
+                  </span>
+                  <span class:list={["num", "chg", c.change_pp > 0 ? "up" : "down"]}>
+                    <span class="dir">{direction(c.change_pp)}</span> {signedPp(c.change_pp)}
+                  </span>
+                </div>
+                <ul class="holders">
+                  {c.holders.map((h) => {
+                    const s = shortChange(h.start_pct, h.end_pct, h.change_pp, { threshold: 0.5, newHolder: true });
+                    return (
+                      <li>
+                        {holderName(h.holder)}: <span class="dir">{s.dir}</span> {s.text}
+                      </li>
+                    );
+                  })}
+                </ul>
               </li>
             ))}
           </ul>
           <Sub class="sub">Sammanlagd blankning, ändrad minst 0,2 procentenheter</Sub>
           {report.short.aggregate.length === 0 && <p class="empty">Inga ändringar.</p>}
           <ul class="rows">
-            {report.short.aggregate.map((c) => (
-              <li>
-                <span>
-                  <strong>{c.name}</strong> <span class="muted">{c.ticker}</span>
-                </span>
-                <span class="num">
-                  {c.start_pct.toLocaleString("sv-SE")} % → {c.end_pct.toLocaleString("sv-SE")} % av aktierna
-                </span>
-              </li>
-            ))}
+            {report.short.aggregate.map((c) => {
+              const s = shortChange(c.start_pct, c.end_pct, c.change_pp, { threshold: 0.1 });
+              return (
+                <li>
+                  <span>
+                    <strong>{c.name}</strong> <span class="muted">{c.ticker}</span>
+                  </span>
+                  <span class:list={["num", "chg", c.change_pp > 0 ? "up" : "down"]}>
+                    <span class="dir">{s.dir}</span> {s.text}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </>
       )
@@ -332,6 +352,42 @@ const meetings = report.reports_today.filter((e) => e.kind === "stämma");
   .num {
     font-variant-numeric: tabular-nums;
     text-align: right;
+  }
+  /* Blankning per bolag: rubrikrad med total förändring, innehavarna under. */
+  .short-groups li {
+    display: block;
+  }
+  .short-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 2px 12px;
+  }
+  ul.holders {
+    list-style: none;
+    margin: 2px 0 0;
+    padding: 0;
+  }
+  ul.holders li {
+    display: block;
+    padding: 1px 0;
+    border: 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .chg {
+    font-weight: 600;
+  }
+  .chg.up {
+    color: var(--neg); /* mer blankning */
+  }
+  .chg.down {
+    color: var(--pos);
+  }
+  .dir {
+    font-weight: 600;
+    white-space: nowrap;
   }
   .kind {
     margin-left: 6px;

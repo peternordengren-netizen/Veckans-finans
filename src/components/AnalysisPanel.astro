@@ -5,6 +5,7 @@
  */
 import type { Analysis, ShortBlock } from "../lib/data";
 import { dateRange, shortChange, shortDate } from "../lib/format";
+import { holderName, sortBySize } from "../lib/short";
 
 interface Props {
   analysis: Analysis;
@@ -37,7 +38,9 @@ const ins = analysis.insider;
 {
   analysis.short_positions.available ? (
     <>
-      <p class="period">{period(analysis.short_positions)}. Innehavare som ändrat sin position visas under bolaget.</p>
+      <p class="period">
+        {period(analysis.short_positions)}. Innehavare som ändrat sin position visas under bolaget, största position först.
+      </p>
       <div class="two-col">
         {[["Ökade mest", positions.up], ["Minskade mest", positions.down]].map(([title, list]) => (
           <section class="list-block">
@@ -62,11 +65,11 @@ const ins = analysis.insider;
                     })()}
                     {c.holders && c.holders.length > 0 && (
                       <ul class="holders">
-                        {c.holders.map((h) => {
+                        {sortBySize(c.holders).map((h) => {
                           const s = shortChange(h.start_pct, h.end_pct, h.change_pp, { threshold: 0.5, newHolder: true });
                           return (
                             <li>
-                              {h.holder}: <span class="dir">{s.dir}</span> {s.text}
+                              {holderName(h.holder)}: <span class="dir">{s.dir}</span> {s.text}
                               {h.date && <span class="when-pos"> · ändrad {shortDate(h.date)}</span>}
                             </li>
                           );
