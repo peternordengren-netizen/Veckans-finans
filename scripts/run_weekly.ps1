@@ -3,7 +3,10 @@
 # Körs av den schemalagda uppgiften VeckansFinansVeckosammanfattning varje måndag 08:30 (efter att
 # Claudes kvot återställts 08:00 och efter morgonrapporten 08:10), samt fem minuter efter inloggning
 # och upplåsning för att ta igen en missad körning.
-# - Claude-modell: Sonnet (-Model för annan; W42 kördes med Opus).
+# - Claude-modell: Opus (-Model för annan). W43 med Sonnet utelämnade stora rapporter och hela
+#   telekomsektorn; rapportutfallen (run_results.ps1) körs med Sonnet.
+# - Före Claude kompletteras veckans rådata med morgonflödets lokala hämtning
+#   (scripts/merge_morning_raw.py), eftersom Actions-hämtningen har luckor.
 # - Högst två automatiska försök per vecka (räknas i <vecka>-run.log); -Week kringgår gränsen.
 #   Ett stopp på grund av Claudes användningsgräns räknas inte: återställningstiden loggas, sidan
 #   visar "Claudes användningsgräns nådd – försöker igen efter <tid>" och en engångsuppgift
@@ -23,7 +26,7 @@
 param(
     [string]$Week = "",
     [switch]$DryRun,
-    [string]$Model = "sonnet"
+    [string]$Model = "opus"
 )
 
 $ErrorActionPreference = "Stop"
@@ -89,6 +92,12 @@ foreach ($name in @(Get-ChildItem env: | Where-Object { $_.Name -match '^(CLAUDE
 # Via cmd så att gits stderr inte blir ett avbrytande PowerShell-fel; ett misslyckat pull loggas bara.
 & cmd.exe /c "git -C data/raw pull -q 2>&1" | ForEach-Object { Log "git pull: $_" }
 Log "git -C data/raw pull: exit $LASTEXITCODE"
+
+# Komplettera med morgonflödets lokala hämtning (rapporter som Actions missade). Fel här stoppar inte.
+if (-not $DryRun) {
+    & cmd.exe /c ".venv\Scripts\python.exe scripts\merge_morning_raw.py $Week 2>&1" | ForEach-Object { Log "komplettering: $_" }
+    Log "merge_morning_raw.py: exit $LASTEXITCODE"
+}
 
 # Uttömmande lista. Edit-regeln gäller även Write. Bash-regler med :* är prefix; kedjade
 # kommandon (&&, ;, |) kontrolleras del för del och nekas om någon del saknas här.

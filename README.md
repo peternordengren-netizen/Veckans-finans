@@ -381,8 +381,13 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
   igen, till exempel när datorn låg i viloläge till disk. Varje vecka får högst två automatiska försök. Fler försök
   kör du manuellt med `-Week`. Om senaste veckan saknas visar sidan en varning överst.
 
-  Skriptet kör `/sammanfatta-veckan` för förra veckan med den fristående Claude Code-CLI:n, med Sonnet (`-Model`),
-  i läget `dontAsk` och med en uttömmande lista över tillåtna verktyg.
+  Skriptet kompletterar först veckans rådata med morgonflödets lokala hämtning (`scripts/merge_morning_raw.py`).
+  Actions-hämtningen har haft luckor: vecka 43 saknades 46 av 68 Large Cap-rapporter. Därefter kör det
+  `/sammanfatta-veckan` för förra veckan med den fristående Claude Code-CLI:n, med Opus (`-Model`), i läget `dontAsk`
+  och med en uttömmande lista över tillåtna verktyg. Rapportutfallen körs med Sonnet.
+
+  Indexöversiktens första sida listar veckans Large Cap-rapporter (`data/large_cap.json`, från Nasdaqs Large
+  Cap-lista). Valideringen underkänner en tom sektor där ett Large Cap-bolag har rapporterat.
 
   **Claudes användningsgräns:** stoppas ett Claude-steg av `usage_limit_reached` räknas det inte som försök. Det
   gäller veckosammanfattningen och rapportutfallen.

@@ -53,7 +53,8 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
   {report.companies.length === 0 && <p class="empty">Inga rapporter från bolag i bevakningslistan sedan förra handelsdagens stängning.</p>}
   {
     reacted.length > 0 && (
-      <div class="table-wrap">
+      <div class="table-outer" data-table-outer>
+      <div class="table-wrap" data-table-wrap>
         <table>
           <thead>
             <tr>
@@ -85,17 +86,17 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
                 </td>
                 <td class="num">{price(c.close)}</td>
                 <td class:list={["num", tone(c.change_pct)]}>{signedPct(c.change_pct)}</td>
-                <td>
+                <td class="wrap" title={c.outcome.vsExpected?.title}>
                   {c.outcome.vsExpected ? (
                     <span class:list={["verdict", c.outcome.vsExpected.verdict.replace(" ", "-")]}>
                       {c.outcome.vsExpected.text}
-                      {c.outcome.vsExpected.basis === "justerat" && <span class="basis"> (justerat)</span>}
+                      {c.outcome.vsExpected.basis === "justerat" && <span class="basis"> (just.)</span>}
                     </span>
                   ) : (
                     <span class="muted">–</span>
                   )}
                 </td>
-                <td class="num" title={c.outcome.vsLastYearTitle ?? undefined}>
+                <td class="num wrap" title={c.outcome.vsLastYearTitle ?? undefined}>
                   {c.outcome.vsLastYear}
                   {c.outcome.vsLastYearTitle && <span class="sr-only"> ({c.outcome.vsLastYearTitle})</span>}
                 </td>
@@ -103,6 +104,7 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
             ))}
           </tbody>
         </table>
+      </div>
       </div>
     )
   }
@@ -123,6 +125,13 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
     )
   }
 </section>
+
+<script>
+  import { setupFullWidth } from "../lib/tableClient";
+
+  // Full fönsterbredd och kantskugga, som signaltabellen. Tabellen finns både i eftermiddagen och i morgonrapporten.
+  document.querySelectorAll<HTMLElement>(".reaction").forEach((root) => setupFullWidth(root));
+</script>
 
 <style>
   .reaction {
@@ -149,11 +158,44 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
   .empty {
     margin: 0 0 8px;
   }
+  /* Tabellen bryter ut ur textspalten och använder fönstrets bredd (16 px marginal per sida), som
+     signaltabellen. --sbw = rullningslistens bredd, sätts av tableClient.setupFullWidth. */
+  .table-outer {
+    --full: calc(100vw - var(--sbw, 0px) - 32px);
+    position: relative;
+    isolation: isolate;
+    width: var(--full);
+    margin-left: calc((100% - var(--full)) / 2);
+  }
+  /* Skugga vid högerkanten när tabellen ändå är bredare än fönstret och går att rulla. */
+  .table-outer::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    bottom: 1px;
+    width: 32px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    background: linear-gradient(to left, var(--scroll-shadow), transparent);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 3;
+  }
+  .table-outer.more-right::after {
+    opacity: 1;
+  }
   .table-wrap {
     overflow-x: auto;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface);
+  }
+  /* Mot förväntan och Mot fjol får radbrytas ("kontrollera: 0,166 EUR (förv. 0,074)"). */
+  td.wrap {
+    white-space: normal;
+    min-width: 9ch;
+    max-width: 26ch;
   }
   table {
     border-collapse: collapse;

@@ -28,8 +28,9 @@ export interface Comparison {
 
 /** Kolumnerna "Mot förväntan" och "Mot fjol" i kursreaktionen, och om kursen gick mot utfallet. */
 export interface ReactionOutcome {
-  /** Vinst per aktie mot förväntan med samma texter som i rapportutfallen, eller null. */
-  vsExpected: { text: string; verdict: Comparison["verdict"]; basis: "justerat" | "redovisat" } | null;
+  /** Vinst per aktie mot förväntan: kort text för tabellen (surpriseShort), hela texten från rapportutfallen
+   * som tooltip, eller null. */
+  vsExpected: { text: string; title: string; verdict: Comparison["verdict"]; basis: "justerat" | "redovisat" } | null;
   /** Redovisat resultat per aktie (fastighetsbolag: förvaltningsresultat per aktie) mot samma kvartal i fjol:
    * "+12 %", eller båda värdena vid teckenbyte, nära noll eller över ±200 %, eller "–". */
   vsLastYear: string;
@@ -53,11 +54,11 @@ export function lastYearKpi(report: ReportResult): ResultKpi | undefined {
   return (report.sector === "fastigheter" ? q("forvaltningsresultat-per-aktie") : undefined) ?? q("resultat-per-aktie");
 }
 
-/** "+12 %", eller båda värdena ("9,38 kr, i fjol 1,77 kr") vid teckenbyte, nära noll eller över ±200 %. */
+/** "+12 %", eller båda värdena kort ("9,38 kr (1,77)") vid teckenbyte, nära noll eller över ±200 %. */
 export function lastYearText(k: Pick<ResultKpi, "value" | "previous_value" | "yoy_pct" | "unit">): string {
   const prev = k.previous_value;
   if (prev === null) return k.yoy_pct === null ? "–" : `${signed(k.yoy_pct, 0)} %`;
-  const both = `${kpiValue(k.value, k.unit)}, i fjol ${kpiValue(prev, k.unit)}`;
+  const both = `${kpiValue(k.value, k.unit)} (${nf.format(prev)})`;
   const [small, big] = [Math.abs(k.value), Math.abs(prev)].sort((a, b) => a - b);
   const signChange = k.value !== 0 && prev !== 0 && Math.sign(k.value) !== Math.sign(prev);
   if (signChange || (big > 0 && small < NEAR_ZERO_RATIO * big)) return both;
@@ -78,7 +79,9 @@ export function reactionOutcome(changePct: number | null, report: ReportResult |
     eps !== null && changePct !== null &&
     ((eps.verdict === "över" && changePct < 0) || (eps.verdict === "under" && changePct > 0));
   return {
-    vsExpected: eps ? { text: surpriseText(eps, true), verdict: eps.verdict, basis: eps.basis ?? "redovisat" } : null,
+    vsExpected: eps
+      ? { text: surpriseShort(eps), title: surpriseText(eps, true), verdict: eps.verdict, basis: eps.basis ?? "redovisat" }
+      : null,
     vsLastYear: yoy ? lastYearText(yoy) : "–",
     vsLastYearTitle: yoy && report ? `${periodVsLastYear(report.period)} · ${yoy.name}` : null,
     divergent,
@@ -160,6 +163,29 @@ export function surpriseText(c: Comparison, perShare = true): string {
       return "i linje med förväntan";
     default:
       return `${signed(c.surprise_pct, 1)} % mot förväntan`;
+  }
+}
+
+/**
+ * Kort form av utfall mot förväntan för kursreaktionstabellen, med samma regler som surpriseText:
+ * "+4,2 %", "i linje", "osäker konsensus", "bolagshändelse", och båda värdena som
+ * "−0,26 kr (förv. 0,707)" vid teckenbyte och nära noll, med "kontrollera: " före vid över ±50 %.
+ */
+export function surpriseShort(c: Comparison, perShare = true): string {
+  const both = `${amountText(c.actual, c.currency, perShare)} (förv. ${amountText(c.expected, c.currency, perShare).replace(/ \S+$/, "")})`;
+  switch (c.verdict) {
+    case "osäker konsensus":
+    case "bolagshändelse":
+      return c.verdict;
+    case "teckenbyte":
+    case "nära noll":
+      return both;
+    case "kontrollera":
+      return `kontrollera: ${both}`;
+    case "i linje":
+      return "i linje";
+    default:
+      return `${signed(c.surprise_pct, 1)} %`;
   }
 }
 

@@ -3,7 +3,7 @@
 # - VeckansFinansServer: vid inloggning, dolt (conhost --headless), kör scripts\serve.ps1.
 #   Ingen tidsgräns. Omstart vid krasch sker i serve.ps1 (conhost --headless returnerar alltid 0,
 #   så Schemaläggarens egen omstart nedan slår bara till om uppgiften inte går att starta).
-# - VeckansFinansVeckosammanfattning: måndagar 08:30, kör scripts\run_weekly.ps1 (Sonnet).
+# - VeckansFinansVeckosammanfattning: måndagar 08:30, kör scripts\run_weekly.ps1 (Opus).
 #   Väcker datorn (kräver nätström – väckningstimers är avstängda på batteri), körs i
 #   efterhand om datorn var avstängd, högst 2 timmar. Startas också fem minuter efter inloggning
 #   och upplåsning, så att en missad måndag tas igen (skriptet gör inget om veckan redan finns).

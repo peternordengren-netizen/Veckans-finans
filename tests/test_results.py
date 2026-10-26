@@ -380,6 +380,34 @@ def test_per_aktie_kraver_kvartalsangivelse():
     assert r.errors == []
 
 
+def test_urvalskontroll_large_cap(tmp_path, monkeypatch):
+    """En sektor får inte vara tom om ett Large Cap-bolag i sektorn rapporterat under veckan (W43 med
+    Sonnet: telekom tom trots Tele2 och Telia). Bolag utanför Large Cap kräver ingen sektor."""
+    import validate
+
+    raw = make_raw(tmp_path)  # Alfaverken (industri) och Betabolaget (fastigheter) rapporterar vecka 43
+    inst = {
+        "ALFA": Instrument("Alfaverken", (), "ALFA", "ALFA.ST", "Stockholm", mfn_slug="alfaverken", sektor="industri",
+                           isin=("SE0000000001",)),
+        "BETA": Instrument("Betabolaget", (), "BETA", "BETA.ST", "Stockholm", sektor="fastigheter",
+                           isin=("SE0000000002",)),
+    }
+    lc = tmp_path / "large_cap.json"
+    lc.write_text(json.dumps({"isins": ["SE0000000001"]}), encoding="utf-8")  # bara Alfaverken är Large Cap
+    monkeypatch.setattr(validate, "LARGE_CAP_PATH", lc)
+    assert validate.load_large_cap(inst) == {"ALFA"}
+
+    def check(sectors):
+        res = Result()
+        validate._check_selection({"sectors": sectors}, WEEK, inst, raw, res)
+        return res.errors
+
+    errors = check([{"id": "fastigheter", "items": [{}]}])
+    assert errors == ["sektorn industri är tom, men Large Cap-bolag i sektorn rapporterade under veckan: Alfaverken"]
+    assert check([{"id": "industri", "items": []}])  # sektorn finns men saknar nyheter
+    assert check([{"id": "industri", "items": [{}]}]) == []  # fastigheter tom går bra: Betabolaget är inte Large Cap
+
+
 def test_saknad_omgang_listas(tmp_path):
     raw = make_raw(tmp_path)
     data, problems = results.build(WEEK, INSTRUMENTS, NOW, raw, tmp_path / "results", tmp_path / "consensus")

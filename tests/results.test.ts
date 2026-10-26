@@ -10,6 +10,7 @@ import {
   lastYearText,
   periodVsLastYear,
   reactionOutcome,
+  surpriseShort,
   surpriseText,
   yoyText,
 } from "../src/lib/results.ts";
@@ -71,7 +72,7 @@ test("kursreaktion: mot förväntan, mot fjol och kurs mot utfallet", () => {
     vs_consensus: { consensus_date: "2026-10-22", eps: eps(verdict, surprise_pct) as never, revenue: null },
   });
   const over = reactionOutcome(-3.1, report("över", 4.2));
-  assert.equal(over.vsExpected?.text, "+4,2 % mot förväntan");
+  assert.equal(over.vsExpected?.text, "+4,2 %");
   assert.equal(over.vsExpected?.basis, "justerat");
   assert.equal(over.vsLastYear, "+25 %");
   assert.equal(over.divergent, true); // över förväntan men kursen föll
@@ -79,7 +80,7 @@ test("kursreaktion: mot förväntan, mot fjol och kurs mot utfallet", () => {
   assert.equal(reactionOutcome(1.5, report("under", -6.0)).divergent, true); // under förväntan men kursen steg
   assert.equal(reactionOutcome(1.5, report("i linje", 1.0)).divergent, false);
   assert.equal(reactionOutcome(-9, report("kontrollera", 80)).divergent, false); // bara över/under markeras
-  assert.equal(reactionOutcome(-9, report("bolagshändelse", 80)).vsExpected?.text, "bolagshändelse påverkar jämförelsen");
+  assert.equal(reactionOutcome(-9, report("bolagshändelse", 80)).vsExpected?.text, "bolagshändelse");
   assert.equal(reactionOutcome(null, report("över", 4.2)).divergent, false);
   assert.equal(over.vsLastYearTitle, "Q3 2026 mot Q3 2025 · Resultat per aktie");
   const none = reactionOutcome(2.0, undefined);
@@ -91,9 +92,9 @@ test("mot fjol: båda värdena vid teckenbyte, nära noll och över ±200 %", ()
     ({ value, previous_value, yoy_pct, unit: "SEK" });
   assert.equal(lastYearText(k(2.42, 5.19, -53.4)), `${MINUS}53 %`);
   assert.equal(lastYearText(k(4.05, 3.0, 35)), "+35 %");
-  assert.equal(lastYearText(k(9.38, 1.77, 429.9)), "9,38 kr, i fjol 1,77 kr"); // över +200 %
-  assert.equal(lastYearText(k(-0.46, 0.39, null)), `${MINUS}0,46 kr, i fjol 0,39 kr`); // teckenbyte
-  assert.equal(lastYearText(k(0.02, 0.85, -97.6)), "0,02 kr, i fjol 0,85 kr"); // nära noll
+  assert.equal(lastYearText(k(9.38, 1.77, 429.9)), "9,38 kr (1,77)"); // över +200 %
+  assert.equal(lastYearText(k(-0.46, 0.39, null)), `${MINUS}0,46 kr (0,39)`); // teckenbyte
+  assert.equal(lastYearText(k(0.02, 0.85, -97.6)), "0,02 kr (0,85)"); // nära noll
   assert.equal(lastYearText(k(2.0, 2.0, 0)), "0 %");
   assert.equal(lastYearText(k(2.5, null, 30)), "+30 %"); // bara rapportens egen procentsats
   assert.equal(lastYearText(k(2.5, null, null)), "–");
@@ -113,7 +114,22 @@ test("mot fjol för fastighetsbolag: förvaltningsresultat per aktie när det fi
   assert.equal(prop.vsLastYearTitle, "Q3 2026 mot Q3 2025 · Förvaltningsresultat per aktie");
   // Utan förvaltningsresultat per aktie för kvartalet: resultat per aktie.
   const noFr = reactionOutcome(1, { ...base, sector: "fastigheter", kpis: [eps, { ...fr, period_kind: "delår" as never }] });
-  assert.equal(noFr.vsLastYear, "9,38 kr, i fjol 1,77 kr");
+  assert.equal(noFr.vsLastYear, "9,38 kr (1,77)");
   // Andra sektorer använder alltid resultat per aktie.
   assert.equal(lastYearKpi({ ...base, sector: "industri", kpis: [eps, fr] })?.id, "resultat-per-aktie");
+});
+
+test("kort form mot förväntan i kursreaktionen", () => {
+  const c = { actual: 2.5, expected: 2.4, analysts: 4, currency: "SEK", surprise_pct: 4.2, verdict: "över" as const };
+  assert.equal(surpriseShort(c), "+4,2 %");
+  assert.equal(surpriseShort({ ...c, verdict: "i linje" }), "i linje");
+  assert.equal(surpriseShort({ ...c, verdict: "bolagshändelse" }), "bolagshändelse");
+  assert.equal(surpriseShort({ ...c, actual: -0.26, expected: 0.70712, surprise_pct: -136.8, verdict: "teckenbyte" }),
+    `${MINUS}0,26 kr (förv. 0,707)`);
+  assert.equal(surpriseShort({ ...c, actual: -1.63, expected: -0.14, verdict: "nära noll" }), `${MINUS}1,63 kr (förv. ${MINUS}0,14)`);
+  assert.equal(
+    surpriseShort({ ...c, actual: 0.166, expected: 0.07357, currency: "EUR", surprise_pct: 125.6, verdict: "kontrollera" }),
+    "kontrollera: 0,166 EUR (förv. 0,074)",
+  );
+  assert.equal(surpriseShort({ ...c, actual: 1.5e9, expected: 4e9, verdict: "kontrollera" }, false), "kontrollera: 1,5 mdr kr (förv. 4 mdr)");
 });

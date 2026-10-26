@@ -464,7 +464,43 @@ def validate_week(
         if conflicts:
             res.errors.append(f"{sid}: sektorsammanfattningens riktning motsäger evidence: {conflicts}")
 
+    if raw_available:
+        _check_selection(data, week, instruments, raw_dir, res)
     return res
+
+
+LARGE_CAP_PATH = DATA_DIR / "large_cap.json"
+
+
+def load_large_cap(instruments: dict[str, Instrument], path: Path | None = None) -> set[str]:
+    """Bolag i Nasdaq Stockholms Large Cap: de vars ISIN finns i data/large_cap.json."""
+    path = path or LARGE_CAP_PATH
+    if not path.exists():
+        return set()
+    isins = set(json.loads(path.read_text(encoding="utf-8"))["isins"])
+    return {t for t, inst in instruments.items() if isins & set(inst.isin or ())}
+
+
+def _check_selection(data: dict, week: str, instruments: dict[str, Instrument], raw_dir: Path, res: Result) -> None:
+    """Urvalskontroll: en sektor får inte vara tom om ett Large Cap-bolag i sektorn rapporterat under veckan
+    (W43 med Sonnet: telekom tom trots Tele2 och Telia). Rapporterna listas som för rapportutfallen
+    (scripts/report_list.py)."""
+    from report_list import list_scope  # sent: report_list importerar den här modulen
+
+    large = load_large_cap(instruments)
+    if not large:
+        res.warnings.append("data/large_cap.json saknas – urvalskontrollen gjordes inte")
+        return
+    reported: dict[str, list[str]] = {}
+    # Bara rådatan i data/raw/<vecka>/: det är den veckosammanfattningen får citera.
+    for r in list_scope(week, instruments, load_sector_kpis(), raw_dir=raw_dir, morning_raw=None, results_dir=None):
+        if r["ticker"] in large and r["sector"]:
+            reported.setdefault(r["sector"], []).append(r["name"])
+    non_empty = {s["id"] for s in data["sectors"] if s["items"]}
+    for sector, names in sorted(reported.items()):
+        if sector not in non_empty:
+            res.errors.append(f"sektorn {sector} är tom, men Large Cap-bolag i sektorn rapporterade under veckan: "
+                              f"{', '.join(sorted(names))}")
 
 
 def _load_raw_index(week_raw: Path, res: Result) -> dict[str, dict] | None:

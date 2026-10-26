@@ -40,9 +40,16 @@ Veckan har typiskt flera hundra poster. Läs dem inte alla.
    - `also_in` visar att samma pressmeddelande även fanns hos en annan källa. Använd posten som den är.
 2. **Välj 5–8 nyheter per sektor** utifrån rubrik, bolag och taggar. Välj färre om sektorn inte har så många relevanta
    nyheter, och ta inte med sektorer som saknar relevanta nyheter. Prioritera i den här ordningen:
-   1. **Bevakade bolag:** MFN-poster (`source: "mfn"`) vars `company` exakt matchar ett `mfn_slug` i `instruments.csv`,
+   1. **Large Cap-rapporter:** översiktens första sida listar veckans rapporter från Large Cap-bolag ("Large
+      Cap-rapporter i veckan", med sektor och `path`). De går före allt annat i sin sektor. Är det fler än 8 i en
+      sektor väljer du de största och mest kurspåverkande, och nämner de övriga kort i sektorsammanfattningen om de
+      kan beläggas med citat. **En sektor där ett Large Cap-bolag rapporterat får aldrig vara tom.** Valideringen
+      underkänner det.
+   2. **Bevakade bolag:** MFN-poster (`source: "mfn"`) vars `company` exakt matchar ett `mfn_slug` i `instruments.csv`,
       om de inte är rutin. Det är bolagen jag valt att bevaka.
-   2. Övriga kurspåverkande nyheter: rapporter, order, förvärv, vinstvarningar och ledningsbyten i större bolag, samt makro.
+   3. Övriga kurspåverkande nyheter: andra rapporter, order, vinstvarningar och ledningsbyten i större bolag, samt
+      makro. **Småförvärv** (ett mindre eller onoterat bolag köps upp) kommer sist och tas bara med om sektorn har plats
+      kvar efter rapporterna.
 
    `mfn_slug` påverkar bara urvalet. En slug-träff betyder att posten är *utgiven av* bolaget på den raden, men övriga
    bolag i texten matchas fortfarande på `namn`/`alias` enligt regel 7. Cision-postens `company` är Cisions egen slug
