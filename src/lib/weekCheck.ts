@@ -38,3 +38,19 @@ export function missingWeekWarning(latest: string | null, now: Date): string | n
   if (latest !== null && latest >= expected) return null;
   return `Vecka ${Number(expected.split("-W")[1])} saknas – se logs/weekly/`;
 }
+
+/**
+ * Varning när ett Claude-steg stoppats av användningsgränsen (data/status/claude-limit.json):
+ * "Claudes användningsgräns nådd – försöker igen efter 08:00", med datum om återställningen inte är i dag.
+ * resetAt null: tiden gick inte att läsa ut ur Claudes svar.
+ */
+export function claudeLimitWarning(resetAt: string | null, now: Date): string {
+  if (resetAt === null) return "Claudes användningsgräns nådd – försöker igen efter återställningen";
+  const fmt = (d: Date, opts: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm", ...opts }).format(d);
+  const reset = new Date(resetAt);
+  const time = fmt(reset, { hour: "2-digit", minute: "2-digit" });
+  const sameDay = fmt(reset, { dateStyle: "short" }) === fmt(now, { dateStyle: "short" });
+  const when = sameDay ? time : `${fmt(reset, { day: "numeric", month: "short" })} ${time}`;
+  return `Claudes användningsgräns nådd – försöker igen efter ${when}`;
+}

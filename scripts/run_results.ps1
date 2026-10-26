@@ -6,7 +6,10 @@
 #   -Week 2026-10-20 morgonkörningen (anropas av run_morning.ps1): rapporter sedan förra körningen;
 #                    tidsfönstret skapas och sparas först
 #   -Week 2026-10-20T1745 uppdateringen (anropas av run_update.ps1), som morgonkörningen.
-# Claude körs bara om fönstret innehåller rapporter.
+# Claude körs bara om fönstret innehåller rapporter. Nås Claudes användningsgräns avbryts omgångarna,
+# raden "Rapportutfall: räknas inte som försök …" loggas (anroparen räknar då inte försöket) och en
+# engångsuppgift kör "run_results.ps1 -Week <läge> -Build" fem minuter efter återställningen.
+# -Build: bygg om sidan efteråt (används av det nya försöket).
 # - En omgång vars fil redan finns och klarar valideringen körs inte om (går att återuppta).
 # - Claude körs i läget dontAsk med samma sorts begränsade lista som veckokörningen: läsa,
 #   skriva bara i data/results/, och bara report_list.py och validate.py.
@@ -15,10 +18,12 @@
 # Exit-kod 0 även om Claude-steget fallerar; anroparen bygger sidan ändå.
 
 param(
-    [Parameter(Mandatory = $true)][string]$Week
+    [Parameter(Mandatory = $true)][string]$Week,
+    [switch]$Build
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "claude_limit.ps1")
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -75,7 +80,8 @@ function BatchApproved([string]$File) {
 # ett nytt försök direkt (Claude ser valideringsfelen när den kör validate.py). Loggarna för
 # försök 2 heter -rapportutfall-<N>-2.json/.err, så att första försökets logg finns kvar.
 $MaxAttempts = 2
-for ($n = 1; $n -le $Batches; $n++) {
+$stopForLimit = $false
+for ($n = 1; $n -le $Batches -and -not $stopForLimit; $n++) {
     $BatchFile = "$BatchDir\omgang-$n.json"
     if (BatchApproved $BatchFile) { Log "omgång ${n}: finns redan och är godkänd - hoppar över"; continue }
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
@@ -96,6 +102,16 @@ for ($n = 1; $n -le $Batches; $n++) {
         } catch {
             Log "omgång ${n}: Claude-steget fallerade: $_"
         }
+        $limit = Test-ClaudeLimit $JsonOut "rapportutfall $Week omgång $n"
+        if ($limit.Limit) {
+            # Inga fler omgångar nu; anroparen schemalägger ett nytt försök efter återställningen.
+            $limit.Lines | ForEach-Object { Log "omgång ${n}: $_" }
+            Log "Rapportutfall: $LimitMarkerSuffix"
+            Log (Register-ClaudeRetry ("VeckansFinansOmforsok-" + ($Week -replace '[^0-9A-Za-z-]', '')) `
+                "scripts\run_results.ps1" "-Week $Week -Build" $limit.ResetAt)
+            $stopForLimit = $true
+            break
+        }
         if (BatchApproved $BatchFile) { Log "omgång ${n}: godkänd (försök $attempt)"; break }
         $first = (& cmd.exe /c ".venv\Scripts\python.exe scripts\validate.py $BatchFile 2>&1" | Select-String '^\s+fel:' | Select-Object -First 1)
         Log "omgång ${n}: underkänd efter försök $attempt$(if ($first) { ': ' + $first.Line.Trim() })"
@@ -109,6 +125,11 @@ $code = $LASTEXITCODE
 Log "results.py: exit $code"
 if ($code -eq 0 -and -not $IsDay) {
     & cmd.exe /c ".venv\Scripts\python.exe scripts\backup_week.py $Week 2>&1" | Select-Object -Last 1 | ForEach-Object { Log "  $_" }
+}
+if ($Build) {
+    $BuildLog = Join-Path $LogDir "$Week-rapportutfall-build.log"
+    & cmd.exe /c "npm run build > `"$BuildLog`" 2>&1"
+    Log "npm run build: exit $LASTEXITCODE (logg: $BuildLog)"
 }
 Log "Klart"
 exit 0

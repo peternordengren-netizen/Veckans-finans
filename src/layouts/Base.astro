@@ -3,7 +3,7 @@
  * Grundlayout: färgtokens för ljust/mörkt läge, typografi, varning om saknad vecka och sidfot
  * med ansvarsfriskrivning.
  */
-import { listWeeks } from "../lib/data";
+import { listWeeks, loadClaudeLimit } from "../lib/data";
 
 interface Props {
   title: string;
@@ -12,6 +12,8 @@ interface Props {
 const { title, description = "Veckans finansnyheter sammanfattade per sektor och kopplade till noterade aktier." } = Astro.props;
 // Senaste veckan vid bygget; jämförelsen mot dagens datum görs i webbläsaren. Inte i mockläge.
 const latestWeek = import.meta.env.MODE === "mock" ? undefined : (listWeeks()[0] ?? "");
+// Claudes användningsgräns nådd i en körning (data/status/claude-limit.json): varningen säger det i stället.
+const claudeLimit = import.meta.env.MODE === "mock" ? null : loadClaudeLimit();
 ---
 
 <!doctype html>
@@ -27,7 +29,8 @@ const latestWeek = import.meta.env.MODE === "mock" ? undefined : (listWeeks()[0]
   <body>
     {
       latestWeek !== undefined && (
-        <div class="missing-week" role="alert" data-latest-week={latestWeek} hidden>
+        <div class="missing-week" role="alert" data-latest-week={latestWeek}
+          data-claude-limit={claudeLimit ? (claudeLimit.resetAt ?? "") : undefined} hidden>
           <div class="wrap" />
         </div>
       )
@@ -48,11 +51,15 @@ const latestWeek = import.meta.env.MODE === "mock" ? undefined : (listWeeks()[0]
 </html>
 
 <script>
-  import { missingWeekWarning } from "../lib/weekCheck";
+  import { claudeLimitWarning, missingWeekWarning } from "../lib/weekCheck";
 
   const banner = document.querySelector<HTMLElement>(".missing-week");
   if (banner) {
-    const warning = missingWeekWarning(banner.dataset.latestWeek || null, new Date());
+    const limit = banner.dataset.claudeLimit;
+    const warning =
+      limit !== undefined
+        ? claudeLimitWarning(limit || null, new Date())
+        : missingWeekWarning(banner.dataset.latestWeek || null, new Date());
     if (warning) {
       banner.querySelector(".wrap")!.textContent = warning;
       banner.hidden = false;

@@ -60,7 +60,10 @@ function ResultsComplete {
     catch { return $false }
 }
 $needReport = -not (Test-Path $Report) -and (Attempts "Startar morning.py") -lt $MaxAttempts
-$needResults = -not (ResultsComplete) -and (Attempts "Startar rapportutfall") -lt $MaxAttempts
+# Ett stopp på grund av Claudes användningsgräns räknas inte (run_results.ps1 schemalägger då själv
+# ett nytt försök efter återställningen).
+$needResults = -not (ResultsComplete) -and
+    ((Attempts "Startar rapportutfall") - (Attempts "Rapportutfall: räknas inte som försök")) -lt $MaxAttempts
 if (-not $needReport -and (Test-Path $Report) -and (Test-Path $Consensus) -and -not $needResults) {
     Write-Output "Dagens morgonkörning är klar (eller har gjort sina försök) - inget att göra."
     exit 0

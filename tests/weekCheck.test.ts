@@ -2,7 +2,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { isoWeek, missingWeekWarning, previousWeek } from "../src/lib/weekCheck.ts";
+import { claudeLimitWarning, isoWeek, missingWeekWarning, previousWeek } from "../src/lib/weekCheck.ts";
+
+test("varning när Claudes användningsgräns nåtts", () => {
+  const monday = new Date("2026-10-26T06:31:00Z"); // 07:31 svensk tid (vintertid)
+  assert.equal(claudeLimitWarning("2026-10-26T08:00+01:00", monday), "Claudes användningsgräns nådd – försöker igen efter 08:00");
+  assert.equal(claudeLimitWarning("2026-10-27T08:00+01:00", monday), "Claudes användningsgräns nådd – försöker igen efter 27 okt. 08:00");
+  assert.equal(claudeLimitWarning(null, monday), "Claudes användningsgräns nådd – försöker igen efter återställningen");
+});
 
 test("isoWeek hanterar årsskiften", () => {
   assert.equal(isoWeek(2026, 10, 12), "2026-W42");

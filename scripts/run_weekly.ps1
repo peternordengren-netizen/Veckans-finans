@@ -1,8 +1,13 @@
 ﻿# Kör /sammanfatta-veckan för förra ISO-veckan med Claude Code utan interaktion och bygger om sidan.
 #
-# Körs av den schemalagda uppgiften VeckansFinansVeckosammanfattning varje måndag 07:30, samt
-# fem minuter efter inloggning och upplåsning för att ta igen en missad körning.
+# Körs av den schemalagda uppgiften VeckansFinansVeckosammanfattning varje måndag 08:30 (efter att
+# Claudes kvot återställts 08:00 och efter morgonrapporten 08:10), samt fem minuter efter inloggning
+# och upplåsning för att ta igen en missad körning.
+# - Claude-modell: Sonnet (-Model för annan; W42 kördes med Opus).
 # - Högst två automatiska försök per vecka (räknas i <vecka>-run.log); -Week kringgår gränsen.
+#   Ett stopp på grund av Claudes användningsgräns räknas inte: återställningstiden loggas, sidan
+#   visar "Claudes användningsgräns nådd – försöker igen efter <tid>" och en engångsuppgift
+#   (VeckansFinansOmforsokVecka) kör skriptet igen fem minuter efter återställningen.
 # - Veckan räknas fram i Europe/Stockholm (förra veckan) om -Week inte anges.
 # - Finns data/weeks/<vecka>.json redan avbryts körningen: en färdig vecka skrivs aldrig över.
 # - Claude körs i läget dontAsk med en uttömmande lista över tillåtna verktyg (se $Allowed);
@@ -17,10 +22,12 @@
 
 param(
     [string]$Week = "",
-    [switch]$DryRun
+    [switch]$DryRun,
+    [string]$Model = "sonnet"
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "claude_limit.ps1")
 $Root = Split-Path -Parent $PSScriptRoot
 $LogDir = Join-Path $Root "logs\weekly"
 New-Item -ItemType Directory -Force $LogDir | Out-Null
@@ -55,7 +62,11 @@ if ((Test-Path $WeekFile) -and -not $DryRun) {
 # Högst MaxAttempts riktiga försök per vecka, så att ett återkommande fel (t.ex. utloggad CLI)
 # inte startar en ny Claude-körning vid varje upplåsning. Fler försök: kör skriptet manuellt med -Week.
 $MaxAttempts = 2
-$attempts = if (Test-Path $RunLog) { @(Select-String -Path $RunLog -SimpleMatch "Startar Claude Code: /sammanfatta-veckan").Count } else { 0 }
+$LimitMarker = "Veckosammanfattning: $LimitMarkerSuffix"
+$attempts = if (Test-Path $RunLog) {
+    @(Select-String -Path $RunLog -SimpleMatch "Startar Claude Code: /sammanfatta-veckan").Count -
+    @(Select-String -Path $RunLog -SimpleMatch $LimitMarker).Count
+} else { 0 }
 if ($attempts -ge $MaxAttempts -and -not $DryRun -and -not $PSBoundParameters.ContainsKey("Week")) {
     Write-Output "Redan $attempts försök för $Week - avbryter. Se $RunLog."
     exit 0
@@ -100,17 +111,27 @@ $Prompt = if ($DryRun) {
 }
 
 function Quote([string]$s) { '"' + ($s -replace '"', '\"') + '"' }
-$ArgList = @("-p", (Quote $Prompt), "--permission-mode", "dontAsk", "--allowedTools") +
+$ArgList = @("-p", (Quote $Prompt), "--model", $Model, "--permission-mode", "dontAsk", "--allowedTools") +
     ($Allowed | ForEach-Object { Quote $_ }) +
     @("--disallowedTools") + ($Disallowed | ForEach-Object { Quote $_ }) +
     @("--strict-mcp-config", "--no-session-persistence", "--output-format", "json")
 
 $JsonOut = Join-Path $LogDir "$LogName.json"
 $ErrOut = Join-Path $LogDir "$LogName.err"
-Log "Startar Claude Code: $Prompt"
+Log "Startar Claude Code: $Prompt (modell $Model)"
 $proc = Start-Process -FilePath $Claude -ArgumentList $ArgList -NoNewWindow -PassThru -Wait `
     -RedirectStandardOutput $JsonOut -RedirectStandardError $ErrOut
 Log "Claude Code klar: exit $($proc.ExitCode)"
+
+# Användningsgränsen: räknas inte som försök; nytt försök schemaläggs efter återställningen.
+if (-not $DryRun) {
+    $limit = Test-ClaudeLimit $JsonOut "veckosammanfattning $Week"
+    if ($limit.Limit) {
+        $limit.Lines | ForEach-Object { Log $_ }
+        Log $LimitMarker
+        Log (Register-ClaudeRetry "VeckansFinansOmforsokVecka" "scripts\run_weekly.ps1" "" $limit.ResetAt)
+    }
+}
 
 $Report = Join-Path $LogDir "$LogName-slutrapport.md"
 try {

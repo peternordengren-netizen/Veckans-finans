@@ -375,11 +375,22 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
   http://localhost:4321/veckans-finans/. Utskrifterna hamnar i `logs/server.log`. Om Node kraschar startar
   `serve.ps1` om servern efter en minut, högst tre gånger i följd. Omstarten ligger i skriptet eftersom
   `conhost --headless` alltid ger Schemaläggaren felkod 0.
-- **VeckansFinansVeckosammanfattning** kör `scripts/run_weekly.ps1` måndagar 07:30 lokal tid och väcker datorn om
-  den är ansluten till ström. Uppgiften startar också fem minuter efter inloggning och upplåsning, så att en missad
-  måndag tas igen, till exempel när datorn låg i viloläge till disk. Varje vecka får högst två automatiska försök.
-  Fler försök kör du manuellt med `-Week`. Om senaste veckan saknas visar sidan en varning överst. Skriptet kör `/sammanfatta-veckan` för förra veckan med den fristående Claude Code-CLI:n i
-  läget `dontAsk`, med en uttömmande lista över tillåtna verktyg. Därefter bygger det om sidan. Finns veckofilen redan
+- **VeckansFinansVeckosammanfattning** kör `scripts/run_weekly.ps1` måndagar 08:30 lokal tid och väcker datorn om
+  den är ansluten till ström. 08:30 ligger efter att Claudes veckokvot återställts kl. 08:00 och efter
+  morgonrapporten. Uppgiften startar också fem minuter efter inloggning och upplåsning, så att en missad måndag tas
+  igen, till exempel när datorn låg i viloläge till disk. Varje vecka får högst två automatiska försök. Fler försök
+  kör du manuellt med `-Week`. Om senaste veckan saknas visar sidan en varning överst.
+
+  Skriptet kör `/sammanfatta-veckan` för förra veckan med den fristående Claude Code-CLI:n, med Sonnet (`-Model`),
+  i läget `dontAsk` och med en uttömmande lista över tillåtna verktyg.
+
+  **Claudes användningsgräns:** stoppas ett Claude-steg av `usage_limit_reached` räknas det inte som försök. Det
+  gäller veckosammanfattningen och rapportutfallen.
+  - Återställningstiden loggas, och sidans varning säger "Claudes användningsgräns nådd – försöker igen efter
+    <tid>" (`data/status/claude-limit.json`).
+  - En engångsuppgift (`VeckansFinansOmforsok…`) kör steget igen fem minuter efter återställningen och tas sedan bort
+    automatiskt.
+  - `python scripts/health_check.py` visar kvotens status tillsammans med uppgifterna. Därefter bygger det om sidan. Finns veckofilen redan
   avbryts körningen. Loggarna och slutrapporten (`<vecka>-slutrapport.md`) hamnar i `logs/weekly/`.
 - **VeckansFinansMorgonrapport** kör `scripts/run_morning.ps1` vardagar 08:10, så att rapporter som släpps
   07:00–08:00 kommer med före börsöppning. Den väcks och tas igen vid inloggning och upplåsning på samma sätt som

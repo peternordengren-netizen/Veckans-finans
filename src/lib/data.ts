@@ -45,6 +45,21 @@ export interface MorningReport {
   errors: string[];
 }
 
+/**
+ * Claudes användningsgräns nådd i en schemalagd körning (scripts/claude_status.py skriver
+ * data/status/claude-limit.json och tar bort den när Claude kört igen), eller null.
+ */
+export function loadClaudeLimit(): { resetAt: string | null; source: string } | null {
+  const path = join(DATA, "status", "claude-limit.json");
+  if (!existsSync(path)) return null;
+  try {
+    const raw = readJson<{ reset_at: string | null; source: string }>(path);
+    return { resetAt: raw.reset_at ?? null, source: raw.source };
+  } catch {
+    return null;
+  }
+}
+
 /** Datum med morgonrapport, nyast först. */
 export function listMorningDates(): string[] {
   if (!existsSync(MORNING_DIR)) return [];
