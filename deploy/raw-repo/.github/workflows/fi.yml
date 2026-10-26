@@ -62,8 +62,22 @@ jobs:
             echo "Inga ändringar."
           else
             git commit -q -m "FI-register $(date -u +%Y-%m-%dT%H:%MZ)"
-            git pull --rebase -q
-            git push
+            # Pushkonflikt (en säkerhetskopia, hämtningsjobbet eller kompletteringen från morgonflödet kan
+            # ha pushat emellan): pull --rebase och nytt försök, högst tre gånger. En rebase som krockar
+            # avbryts före nästa försök.
+            for attempt in 1 2 3; do
+              if git pull --rebase -q && git push -q; then
+                echo "Pushad (försök $attempt)."
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
+              if [ "$attempt" = 3 ]; then
+                echo "::error::push misslyckades efter 3 försök (pull --rebase och push)."
+                exit 1
+              fi
+              echo "::warning::push misslyckades (försök $attempt av 3) – nytt försök om $((attempt * 10)) s."
+              sleep $((attempt * 10))
+            done
           fi
 
       # Röd körning bara om allt misslyckades; delvisa fel syns som ::warning::.
