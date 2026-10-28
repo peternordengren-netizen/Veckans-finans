@@ -123,7 +123,7 @@ const verdictClass = { "kursen före vinsten": "up", "vinsten före kursen": "do
 </div>
 
 <script>
-  import { setupFullWidth, setupSortable } from "../lib/tableClient";
+  import { setupFullWidth, setupSortable, setupStickyHeader } from "../lib/tableClient";
 
   for (const root of document.querySelectorAll<HTMLElement>("[data-valuation]")) {
     const rows = Array.from(root.querySelectorAll<HTMLTableRowElement>("tbody tr"));
@@ -140,6 +140,7 @@ const verdictClass = { "kursen före vinsten": "up", "vinsten före kursen": "do
     applyFilter();
     setupFullWidth(root);
     setupSortable(root);
+    setupStickyHeader(root);
   }
 </script>
 

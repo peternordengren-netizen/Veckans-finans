@@ -127,10 +127,14 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
 </section>
 
 <script>
-  import { setupFullWidth } from "../lib/tableClient";
+  import { setupFullWidth, setupStickyHeader } from "../lib/tableClient";
 
-  // Full fönsterbredd och kantskugga, som signaltabellen. Tabellen finns både i eftermiddagen och i morgonrapporten.
-  document.querySelectorAll<HTMLElement>(".reaction").forEach((root) => setupFullWidth(root));
+  // Full fönsterbredd, kantskugga och fast rubrikrad, som signaltabellen. Tabellen finns både i eftermiddagen
+  // och i morgonrapporten.
+  document.querySelectorAll<HTMLElement>(".reaction").forEach((root) => {
+    setupFullWidth(root);
+    setupStickyHeader(root);
+  });
 </script>
 
 <style>

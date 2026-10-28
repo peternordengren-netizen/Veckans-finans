@@ -159,7 +159,7 @@ const DEFAULT_SORT = "count";
 </div>
 
 <script>
-  import { setupFullWidth, setupSortable } from "../lib/tableClient";
+  import { setupFullWidth, setupSortable, setupStickyHeader } from "../lib/tableClient";
 
   for (const root of document.querySelectorAll<HTMLElement>("[data-signals]")) {
     const rows = Array.from(root.querySelectorAll<HTMLTableRowElement>("tbody tr"));
@@ -177,6 +177,7 @@ const DEFAULT_SORT = "count";
     applyFilter();
     setupFullWidth(root);
     setupSortable(root);
+    setupStickyHeader(root);
   }
 </script>
 
