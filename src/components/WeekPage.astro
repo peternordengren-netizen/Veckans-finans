@@ -353,7 +353,7 @@ const morningTime = morning
         view.signals && (
           <section class="sector" id="sektor-signaler" role="tabpanel" aria-labelledby="tab-signaler" tabindex="0">
             <h2>Signaler</h2>
-            <SignalsPanel signals={view.signals} />
+            <SignalsPanel signals={view.signals} reported={(view.results?.reports ?? []).map((r) => r.ticker)} />
           </section>
         )
       }

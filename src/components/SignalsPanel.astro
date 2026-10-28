@@ -1,18 +1,22 @@
 ---
 /**
- * Signalöversikt per bolag i en sorterbar tabell. Filtret "bara bolag med signal" är
- * förvalt; utan JavaScript visas alla bolag i filens ordning.
+ * Signalöversikt per bolag i en sorterbar tabell. Filtret har tre lägen: "Alla", "Med signal" och
+ * "Starka signaler" (förvalt, src/lib/signals.isStrong); utan JavaScript visas alla bolag i filens ordning.
  */
 import type { SignalsView } from "../lib/data";
-import { defaultOrder, ratio, sek, shortChange, signalChip, signedPct } from "../lib/signals";
+import { defaultOrder, isStrong, ratio, sek, shortChange, signalChip, signedPct } from "../lib/signals";
 
 interface Props {
   signals: SignalsView;
+  /** Bolag som rapporterat under veckan (rapportutfallen): deras stora kursrörelse räknas inte som stark. */
+  reported?: string[];
 }
-const { signals } = Astro.props;
+const { signals, reported = [] } = Astro.props;
+const reportedSet = new Set(reported);
 // Förvald sortering: kolumnen "Antal", flest först (se DEFAULT_SORT nedan).
 const rows = defaultOrder(signals.rows);
 const flagged = rows.filter((r) => r.signals.length > 0).length;
+const strong = rows.filter((r) => isStrong(r.signals, reportedSet.has(r.ticker))).length;
 const t = signals.thresholds;
 const n = (v: number) => new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 }).format(v);
 const toneOrder = { positiv: 3, blandad: 2, neutral: 1, negativ: 0 };
@@ -48,8 +52,10 @@ const DEFAULT_SORT = "count";
         veckan; etiketten följer nettot (står det bara "Insyn" tar köp och försäljningar ut varandra).
       </li>
       <li>
-        <strong>Blankning:</strong> en enskild position över 0,5 % har ändrats, eller den sammanlagda blankningen har
-        ändrats med minst {n(t.short_aggregate_pp)} procentenheter.
+        <strong>Blankning:</strong>{" "}
+        {t.short_only_aggregate
+          ? `den sammanlagda blankningen har ändrats med minst ${n(t.short_aggregate_pp)} procentenheter.`
+          : `en enskild position över 0,5 % har ändrats, eller den sammanlagda blankningen har ändrats med minst ${n(t.short_aggregate_pp)} procentenheter.`}
       </li>
       <li><strong>Avviker mot index:</strong> nyhetens ton och kursen mot index går åt olika håll.</li>
       <li>
@@ -69,15 +75,22 @@ const DEFAULT_SORT = "count";
         eller lägsta kurs.
       </li>
     </ul>
+    <p>
+      <strong>Starka signaler</strong> (förvalt): minst två signaler, eller minst en av insyn, blankning, avviker mot
+      index, nära 52 v högsta/lägsta och P/E +30 % i år. För ett bolag som rapporterat under veckan räknas en stor
+      rörelse mot index inte – det är rapportreaktionen, som visas under Rapporterade bolag.
+    </p>
     <p>Signalerna är mekaniska och säger inget om varför något hänt. De är inga köp- eller säljsignaler.</p>
   </details>
 
   <div class="controls">
-    <label>
-      <input type="checkbox" data-only-flagged checked />
-      Bara bolag med signal denna vecka
-    </label>
-    <span class="shown" data-shown aria-live="polite">{flagged} av {rows.length} bolag har en signal</span>
+    <fieldset class="filter" data-filter>
+      <legend class="sr-only">Visa</legend>
+      <label><input type="radio" name="signal-filter" value="all" /> Alla ({rows.length})</label>
+      <label><input type="radio" name="signal-filter" value="flagged" /> Med signal ({flagged})</label>
+      <label><input type="radio" name="signal-filter" value="strong" checked /> Starka signaler ({strong})</label>
+    </fieldset>
+    <span class="shown" data-shown aria-live="polite">{strong} av {rows.length} bolag har starka signaler</span>
   </div>
 
   <div class="table-outer" data-table-outer>
@@ -106,7 +119,10 @@ const DEFAULT_SORT = "count";
             const s = shortChange(r);
             const chips = r.signals.map((sig) => signalChip(sig, r));
             return (
-              <tr data-flagged={r.signals.length > 0 ? "1" : "0"}>
+              <tr
+                data-flagged={r.signals.length > 0 ? "1" : "0"}
+                data-strong={isStrong(r.signals, reportedSet.has(r.ticker)) ? "1" : "0"}
+              >
                 <th scope="row" data-v={r.name}>
                   <span class="name">{r.name}</span> <span class="ticker">{r.ticker}</span>
                 </th>
@@ -163,17 +179,25 @@ const DEFAULT_SORT = "count";
 
   for (const root of document.querySelectorAll<HTMLElement>("[data-signals]")) {
     const rows = Array.from(root.querySelectorAll<HTMLTableRowElement>("tbody tr"));
-    const checkbox = root.querySelector<HTMLInputElement>("[data-only-flagged]")!;
+    const filter = root.querySelector<HTMLElement>("[data-filter]")!;
     const shown = root.querySelector<HTMLElement>("[data-shown]")!;
-    const flagged = rows.filter((r) => r.dataset.flagged === "1").length;
+    const count = (attr: "flagged" | "strong") => rows.filter((r) => r.dataset[attr] === "1").length;
+    const flagged = count("flagged");
+    const strong = count("strong");
 
     const applyFilter = () => {
-      for (const r of rows) r.hidden = checkbox.checked && r.dataset.flagged !== "1";
-      shown.textContent = checkbox.checked
-        ? `Visar ${flagged} bolag med signal av ${rows.length}`
-        : `Visar alla ${rows.length} bolag, varav ${flagged} med signal`;
+      const mode = filter.querySelector<HTMLInputElement>("input:checked")?.value ?? "strong";
+      for (const r of rows) {
+        r.hidden = mode === "flagged" ? r.dataset.flagged !== "1" : mode === "strong" ? r.dataset.strong !== "1" : false;
+      }
+      shown.textContent =
+        mode === "strong"
+          ? `Visar ${strong} bolag med starka signaler av ${rows.length}`
+          : mode === "flagged"
+            ? `Visar ${flagged} bolag med signal av ${rows.length}`
+            : `Visar alla ${rows.length} bolag, varav ${flagged} med signal och ${strong} med starka signaler`;
     };
-    checkbox.addEventListener("change", applyFilter);
+    filter.addEventListener("change", applyFilter);
     applyFilter();
     setupFullWidth(root);
     setupSortable(root);
@@ -219,6 +243,23 @@ const DEFAULT_SORT = "count";
   .shown {
     color: var(--muted);
     font-size: 0.875rem;
+  }
+  /* Filtret: tre lägen i en rad (Alla, Med signal, Starka signaler). */
+  .filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
   /* Tabellen bryter ut ur textspalten och använder fönstrets bredd (16 px marginal per sida).
      --sbw = rullningslistens bredd, sätts av skriptet. */

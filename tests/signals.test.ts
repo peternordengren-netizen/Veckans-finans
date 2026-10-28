@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { compareValues, defaultOrder, ratio, sek, shortChange, signalChip, signedPct } from "../src/lib/signals.ts";
+import { compareValues, defaultOrder, isStrong, ratio, sek, shortChange, signalChip, signedPct } from "../src/lib/signals.ts";
 
 test("insynsetiketten följer nettot", () => {
   assert.deepEqual(signalChip("insyn", { insider_net_sek: 5_642_500 }), { label: "Insynsköp", cls: "insyn-kop" });
@@ -53,4 +53,18 @@ test("sortering: saknade värden sist i båda riktningarna, svensk textordning",
   assert.deepEqual([...nums].sort((a, b) => compareValues(a, b, false)), [10, 3, -1, null]);
   const names = ["Ödla", "Alfa", "Ärla", "Zeta"];
   assert.deepEqual([...names].sort((a, b) => compareValues(a, b, true)), ["Alfa", "Zeta", "Ärla", "Ödla"]);
+});
+
+test("starka signaler: minst två, eller en stark; stor rörelse räknas inte för rapporterande bolag", () => {
+  assert.equal(isStrong([], false), false);
+  assert.equal(isStrong(["stor-rörelse"], false), false); // en ensam svag signal
+  assert.equal(isStrong(["omsättning"], false), false);
+  assert.equal(isStrong(["stor-rörelse", "omsättning"], false), true); // två signaler
+  for (const s of ["insyn", "avviker", "52v-högsta", "52v-lägsta", "pe-upp", "blankning"] as const) {
+    assert.equal(isStrong([s], false), true, s);
+  }
+  // Rapporterade i veckan: den stora rörelsen är rapportreaktionen och räknas inte.
+  assert.equal(isStrong(["stor-rörelse", "omsättning"], true), false);
+  assert.equal(isStrong(["stor-rörelse", "insyn"], true), true);
+  assert.equal(isStrong(["stor-rörelse", "omsättning", "52v-högsta"], true), true);
 });

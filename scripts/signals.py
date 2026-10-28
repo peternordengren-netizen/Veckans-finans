@@ -9,8 +9,8 @@ blankning ur analysfilen (scripts/registers.py). Båda är valfria.
 
 Signaler (trösklarna i THRESHOLDS, sparas i filen så att valideringen kan räkna om):
 - "insyn": insynstransaktioner över registers.py:s tröskel under veckan
-- "blankning": ändrad blankningsposition över 0,5 %, eller aggregatet ändrat minst
-  short_aggregate_pp procentenheter
+- "blankning": den sammanlagda blankningen ändrad minst short_aggregate_pp procentenheter
+  (short_only_aggregate; äldre filer räknade också varje ändrad enskild position över 0,5 %)
 - "avviker": nyhetens ton och kursen mot index går åt olika håll (samma regel som
   sidans "avviker mot index", src/lib/tone.ts)
 - "pe-upp": P/E har stigit minst pe_up_pct % i år (ur data/valuation/<vecka>.json, scripts/valuation.py;
@@ -53,7 +53,7 @@ from validate import DATA_DIR, Instrument, iso_week_period, load_instruments, va
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 THRESHOLDS = {"volume_ratio": 2.0, "near_52w_pct": 2.0, "short_aggregate_pp": 0.5, "big_move_pp": 5.0,
-              "pe_up_pct": 30.0}
+              "pe_up_pct": 30.0, "short_only_aggregate": True}
 VOLUME_BASE_DAYS = 20
 HISTORY_DAYS = 400  # 52 veckor plus marginal för omsättningssnittet före veckan
 SEK_SUFFIX = ".ST"
@@ -166,8 +166,12 @@ def signals_for(c: dict, thresholds: dict) -> list[str]:
     out = []
     if c["insider_net_sek"] is not None:
         out.append("insyn")
-    if c["short_positions_pp"] is not None or (
-            c["short_aggregate_pp"] is not None and abs(c["short_aggregate_pp"]) >= thresholds["short_aggregate_pp"]):
+    # Blankning: den sammanlagda blankningen har ändrats minst short_aggregate_pp. Äldre filer (utan
+    # short_only_aggregate) räknade också varje ändrad enskild position över 0,5 % – det gav vecka 43
+    # signal för 46 bolag mot 15 med en verklig förändring i den sammanlagda blankningen.
+    aggregate = c["short_aggregate_pp"] is not None and abs(c["short_aggregate_pp"]) >= thresholds["short_aggregate_pp"]
+    positions = c["short_positions_pp"] is not None and not thresholds.get("short_only_aggregate", False)
+    if aggregate or positions:
         out.append("blankning")
     if diverges(c["tone"], c["relative_pp"]):
         out.append("avviker")

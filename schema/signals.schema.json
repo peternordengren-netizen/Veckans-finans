@@ -31,7 +31,8 @@
         "near_52w_pct": { "type": "number", "minimum": 0 },
         "short_aggregate_pp": { "type": "number", "minimum": 0 },
         "big_move_pp": { "type": "number", "minimum": 0 },
-        "pe_up_pct": { "type": "number", "minimum": 0 }
+        "pe_up_pct": { "type": "number", "minimum": 0 },
+        "short_only_aggregate": { "type": "boolean", "description": "Blankningssignalen bara vid ändrad sammanlagd blankning (saknas i äldre filer = även ändrade enskilda positioner)." }
       }
     },
     "index": {

@@ -82,6 +82,21 @@ export function signalChip(signal: Signal, row: Pick<SignalRow, "insider_net_sek
   return { label: SIGNAL_LABELS[signal], cls: signal };
 }
 
+/** Signaler som ensamma räcker för "Starka signaler": de säger något utöver en rapportreaktion. */
+export const STRONG_SIGNALS: ReadonlySet<Signal> = new Set<Signal>([
+  "insyn", "avviker", "52v-högsta", "52v-lägsta", "pe-upp", "blankning",
+]);
+
+/**
+ * "Starka signaler": minst två signaler, eller minst en stark (STRONG_SIGNALS). För ett bolag som
+ * rapporterat under veckan räknas en stor kursrörelse inte – den är rapportreaktionen, som redan syns i
+ * kursreaktionen och rapportutfallen. Vecka 43: 163 bolag med signal, varav 102 med en enda.
+ */
+export function isStrong(signals: readonly Signal[], reportedThisWeek: boolean): boolean {
+  const counted = reportedThisWeek ? signals.filter((s) => s !== "stor-rörelse") : signals;
+  return counted.length >= 2 || counted.some((s) => STRONG_SIGNALS.has(s));
+}
+
 /** Tabellens förvalda ordning: flest signaler först, därefter bolagsnamn (svensk ordning). */
 export function defaultOrder<T extends { name: string; signals: unknown[] }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => b.signals.length - a.signals.length || a.name.localeCompare(b.name, "sv"));

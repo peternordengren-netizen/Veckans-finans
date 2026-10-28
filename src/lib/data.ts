@@ -274,7 +274,15 @@ export interface WeekView {
 
 export interface SignalsView {
   generatedAt: string;
-  thresholds: { volume_ratio: number; near_52w_pct: number; short_aggregate_pp: number; big_move_pp: number; pe_up_pct: number };
+  thresholds: {
+    volume_ratio: number;
+    near_52w_pct: number;
+    short_aggregate_pp: number;
+    big_move_pp: number;
+    pe_up_pct: number;
+    /** Blankningssignalen bara vid ändrad sammanlagd blankning (saknas i äldre filer). */
+    short_only_aggregate?: boolean;
+  };
   rows: SignalRow[];
 }
 

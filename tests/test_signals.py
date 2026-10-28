@@ -160,3 +160,18 @@ def test_pe_upp_fran_kurs_mot_vinst():
     assert "pe-upp" in c["GAMA"]["signals"] and "pe-upp" not in c["ALFA"]["signals"]
     assert c["BETA"]["pe_change_pct"] is None
     assert validate_signals(data, WEEK, INSTRUMENTS).errors == []
+
+
+def test_blankning_bara_vid_andrad_sammanlagd_blankning():
+    """Nya filer: blankningssignalen kräver att den sammanlagda blankningen ändrats minst 0,5 procentenheter.
+    Äldre filer (utan short_only_aggregate) räknade också en ändrad enskild position över 0,5 %."""
+    from signals import signals_for
+
+    base = {"insider_net_sek": None, "short_positions_pp": None, "short_aggregate_pp": None, "tone": None,
+            "volume_ratio": None, "from_high_pct": None, "from_low_pct": None, "relative_pp": None}
+    assert THRESHOLDS["short_only_aggregate"] is True
+    assert signals_for({**base, "short_positions_pp": 0.3, "short_aggregate_pp": 0.2}, THRESHOLDS) == []
+    assert signals_for({**base, "short_positions_pp": 0.3, "short_aggregate_pp": 0.5}, THRESHOLDS) == ["blankning"]
+    assert signals_for({**base, "short_aggregate_pp": -0.6}, THRESHOLDS) == ["blankning"]
+    old = {k: v for k, v in THRESHOLDS.items() if k != "short_only_aggregate"}
+    assert signals_for({**base, "short_positions_pp": 0.3, "short_aggregate_pp": 0.2}, old) == ["blankning"]
