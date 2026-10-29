@@ -18,7 +18,8 @@
 # - Loggar i logs/weekly/: <vecka>-run.log (förlopp), <vecka>.json (Claudes svar i JSON),
 #   <vecka>.err (stderr), <vecka>-slutrapport.md (slutrapporten) och <vecka>-build.log.
 # - Efter Claude skrivs signalöversikten (scripts/signals.py, säkerhetskopieras med
-#   backup_week.py) och rapportkalendern för veckan efter (scripts/report_calendar.py).
+#   backup_week.py), rapportkalendern för veckan efter (scripts/report_calendar.py) och
+#   swinghistoriken för fliken Swing (scripts/swing_history.py).
 #
 # Manuellt: powershell -NoProfile -File scripts\run_weekly.ps1 [-Week 2026-W42] [-DryRun]
 # -DryRun kör allt utom själva sammanfattningen (Claude får ett ofarligt testprompt i stället).
@@ -185,6 +186,14 @@ if ((Test-Path $WeekFile) -and -not $DryRun) {
 $NextWeek = & $Python -c "import sys; from datetime import date, timedelta; y, w = sys.argv[1].split('-W'); n = date.fromisocalendar(int(y), int(w), 1) + timedelta(weeks=1); c = n.isocalendar(); print(f'{c[0]}-W{c[1]:02d}')" $Week
 & cmd.exe /c ".venv\Scripts\python.exe scripts\report_calendar.py $NextWeek 2>&1" | ForEach-Object { Log "kalender: $_" }
 Log "report_calendar.py ${NextWeek}: exit $LASTEXITCODE"
+
+# Swinghistoriken (fliken Swing): räknas om på det senaste årets dagsdata, ett batchanrop till Yahoo.
+# Deterministiskt skript utanför Claude; fel här stoppar inte bygget.
+if (-not $DryRun) {
+    & cmd.exe /c ".venv\Scripts\python.exe scripts\swing_history.py 2>&1" |
+        Where-Object { $_ -match '^Swinghistorik' } | ForEach-Object { Log "swing: $_" }
+    Log "swing_history.py: exit $LASTEXITCODE"
+}
 
 $BuildLog = Join-Path $LogDir "$LogName-build.log"
 & cmd.exe /c "npm run build > `"$BuildLog`" 2>&1"

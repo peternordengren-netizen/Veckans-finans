@@ -371,7 +371,8 @@ index efter 2 och 5 handelsdagar, med antal fall och jämfört med alla aktie-da
 
 Testet 20 okt 2025 – 21 okt 2026 gav ingen etikett som klart slår alla dagar: utbrott med hög omsättning 49,3 % mot
 47,3 % efter 5 dagar, ± 3,6 procentenheter. Rapportetiketterna har för få fall, eftersom utfall mot förväntan bara
-finns sedan oktober 2026. Kör skriptet igen när mer historik finns.
+finns sedan oktober 2026. Historiken räknas om i måndagens veckokörning (`run_weekly.ps1`), så rapportetiketterna
+får fler fall efter hand.
 
 ## Sidan (Astro)
 
