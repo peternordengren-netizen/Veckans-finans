@@ -119,6 +119,24 @@ def test_intervall_ger_tva_positiva_tal():
     assert [n.value for n in validate.extract_numbers("2026–2027")] == [Decimal(2026), Decimal(2027)]
 
 
+def test_punkt_som_tusentalsavgransare_i_belopp():
+    vals = lambda t: [n.value for n in validate.extract_numbers(t)]  # noqa: E731
+    assert vals("Omsättningen ökade till 2.500 MSEK (2.342).") == [Decimal(2500), Decimal(2342)]
+    assert vals("Rörelseresultatet blev 1.204 Mkr") == [Decimal(1204)]
+    # Utan enhet, eller med procent, är punkten fortfarande decimaltecken.
+    assert vals("ökade 2.500 gånger") == [Decimal("2.500")]
+    assert vals("marginal 12.345 %") == [Decimal("12.345")]
+    assert vals("ökade 2.5 procent") == [Decimal("2.5")]
+
+
+def test_kolon_som_decimaltecken_men_inte_klockslag():
+    vals = lambda t: [n.value for n in validate.extract_numbers(t)]  # noqa: E731
+    assert vals("Resultat per aktie var 0:21 SEK (1:26).") == [Decimal("0.21"), Decimal("1.26")]
+    assert vals("Vinst per aktie 3:05 kr") == [Decimal("3.05")]
+    assert vals("Rapporten publiceras kl 08:00 och telefonkonferens 10:30.") == [
+        Decimal(8), Decimal(0), Decimal(10), Decimal(30)]
+
+
 def test_avrundad_siffra_i_sammanfattning_underkanns(week, instruments, sector_ids):
     # Citatet säger 2,1 procent – avrundat till 2 ska underkännas.
     item(week, "makro-statistikbyran-inflation")["summary"] = "Inflationen var cirka 2 procent."

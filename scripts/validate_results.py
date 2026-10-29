@@ -11,12 +11,15 @@ Samma princip som för nyheterna – Claude skriver, valideringen kontrollerar m
 - perioden: närmaste periodangivelse före citatet i rapporten ("juli–september",
   "tredje kvartalet", "januari–september" …) ska vara samma sorts period som uppgetts
   (kvartal, delår eller helår), så att kvartalets siffror inte blandas med årets hittills
+
+En omgång valideras per rapport (check_batch): en underkänd rapport underkänner inte de andra.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
@@ -207,33 +210,66 @@ def _dirs(raw_dir: Path, morning_raw: Path | None, results_dir: Path | None) -> 
     return {"raw_dir": raw_dir, "morning_raw": morning_raw, "results_dir": results_dir}
 
 
+@dataclass
+class BatchCheck:
+    """Valideringen av en omgångsfil uppdelad per rapport. Fel i `errors` gäller hela filen (schema, fel
+    omgång) och då går ingen rapport att använda; annars underkänns bara rapporterna i `rejected`
+    (ticker -> fel), och övriga rapporter i filen är godkända."""
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    rejected: dict[str, list[str]] = field(default_factory=dict)
+    listed: dict[str, dict] = field(default_factory=dict)
+
+    def result(self) -> Result:
+        res = Result()
+        res.errors = self.errors + [e for errs in self.rejected.values() for e in errs]
+        res.warnings = list(self.warnings)
+        return res
+
+
+def check_batch(data: dict, week: str, batch: int, instruments: dict[str, Instrument],
+                raw_dir: Path = RAW_DIR, morning_raw: Path | None = None,
+                results_dir: Path | None = None) -> BatchCheck:
+    """Som validate_batch, men med felen per rapport (se BatchCheck)."""
+    from report_list import MORNING_RAW, RESULTS_DIR
+
+    dirs = _dirs(raw_dir, morning_raw or MORNING_RAW, results_dir or RESULTS_DIR)
+    out = BatchCheck()
+    out.errors += _schema_errors(_schema_validator("results-batch.schema.json"), data)
+    if out.errors:
+        return out
+    if data["week"] != week or data["batch"] != batch:
+        out.errors.append(f"week/batch ({data['week']}, {data['batch']}) stämmer inte med filen ({week}, {batch})")
+        return out
+    out.listed = listed = {r["ticker"]: r for r in _listing(week, instruments, dirs) if r["batch"] == batch}
+    got = [r["ticker"] for r in data["reports"]]
+    for t in sorted(set(listed) - set(got)):
+        out.rejected[t] = [f"{t}: rapporten saknas i omgången"]
+    for t in sorted(set(got) - set(listed)):
+        # Ett bolag som inte står i listan tas aldrig med; övriga rapporter påverkas inte.
+        out.rejected[t] = [f"{t}: inte en rapport i omgång {batch} enligt report_list.py"]
+    for t in sorted({t for t in got if got.count(t) > 1} & set(listed)):
+        out.rejected[t] = [f"{t}: samma bolag förekommer flera gånger"]
+    kinds = _kpi_kinds(instruments)
+    for r in data["reports"]:
+        t = r["ticker"]
+        if t not in listed or t in out.rejected:
+            continue
+        res = Result()
+        _check_report(r, listed[t], kinds[t], t, res)
+        out.warnings += res.warnings
+        if res.errors:
+            out.rejected[t] = res.errors
+    return out
+
+
 def validate_batch(data: dict, week: str, batch: int, instruments: dict[str, Instrument],
                    raw_dir: Path = RAW_DIR, morning_raw: Path | None = None,
                    results_dir: Path | None = None) -> Result:
     """En omgångsfil från /rapportutfall: data/results/<vecka>/omgang-<N>.json eller
-    data/results/morning/<datum>/omgang-<N>.json (week är då datumet)."""
-    from report_list import MORNING_RAW, RESULTS_DIR
-
-    dirs = _dirs(raw_dir, morning_raw or MORNING_RAW, results_dir or RESULTS_DIR)
-    res = Result()
-    res.errors += _schema_errors(_schema_validator("results-batch.schema.json"), data)
-    if res.errors:
-        return res
-    if data["week"] != week or data["batch"] != batch:
-        res.errors.append(f"week/batch ({data['week']}, {data['batch']}) stämmer inte med filen ({week}, {batch})")
-    listed = {r["ticker"]: r for r in _listing(week, instruments, dirs) if r["batch"] == batch}
-    got = [r["ticker"] for r in data["reports"]]
-    for t in sorted(set(listed) - set(got)):
-        res.errors.append(f"{t}: rapporten saknas i omgången")
-    for t in sorted(set(got) - set(listed)):
-        res.errors.append(f"{t}: inte en rapport i omgång {batch} enligt report_list.py")
-    if len(set(got)) != len(got):
-        res.errors.append("samma bolag förekommer flera gånger")
-    kinds = _kpi_kinds(instruments)
-    for r in data["reports"]:
-        if r["ticker"] in listed:
-            _check_report(r, listed[r["ticker"]], kinds[r["ticker"]], r["ticker"], res)
-    return res
+    data/results/morning/<datum>/omgang-<N>.json (week är då datumet). Godkänd bara om alla
+    rapporter är godkända; results.py använder check_batch och tar med de godkända."""
+    return check_batch(data, week, batch, instruments, raw_dir, morning_raw, results_dir).result()
 
 
 def scope_period(scope: str) -> dict:
@@ -281,6 +317,10 @@ def validate_results(data: dict, week: str, instruments: dict[str, Instrument], 
         for k in r["kpis"]:
             _check_yoy(k, kinds[r["ticker"]].get(k["id"]), f"{where} {k['id']}", res)
         _check_comparison(r, where, res, consensus_dir)
+    approved = {(r["ticker"], r["scope"]) for r in data["reports"]}
+    for r in data.get("rejected", []):
+        if r["ticker"] not in instruments or (r["ticker"], r["scope"]) in approved:
+            res.errors.append(f"{r['ticker']} ({r['scope']}): underkänd men okänd eller också godkänd")
     return res
 
 
@@ -429,4 +469,32 @@ def _check_comparison(r: dict, where: str, res: Result, consensus_dir: Path | No
             res.errors.append(f"{where}: {key} avvikelse {c['surprise_pct']} % ≠ {surprise:.1f} %")
         if c["verdict"] != comparison_verdict(actual, c["expected"], c["surprise_pct"], uncertain, corporate):
             res.errors.append(f"{where}: {key} bedömningen {c['verdict']!r} stämmer inte med avvikelsen")
+
+
+def batch_status(path: Path, instruments: dict[str, Instrument]) -> str:
+    """Läget för en omgångsfil (data/results/…/<läge>/omgang-<N>.json), för run_results.ps1:
+    "godkänd", "hela" (saknas eller går inte att använda alls: gör om hela omgången) eller de
+    underkända rapporternas tickrar, kommaseparerade (gör om bara dem)."""
+    if not path.exists():
+        return "hela"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return "hela"
+    check = check_batch(data, path.parent.name, int(path.stem.split("-")[1]), instruments)
+    if check.errors:
+        return "hela"
+    return ",".join(sorted(check.rejected)) or "godkänd"
+
+
+if __name__ == "__main__":
+    import sys
+
+    from validate import load_instruments
+
+    sys.stdout.reconfigure(encoding="utf-8")
+    if len(sys.argv) != 3 or sys.argv[1] != "--status":
+        print("Användning: python scripts/validate_results.py --status <omgångsfil>", file=sys.stderr)
+        sys.exit(2)
+    print(batch_status(Path(sys.argv[2]), load_instruments()))
 

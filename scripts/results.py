@@ -8,8 +8,9 @@ Tre lägen (se scripts/report_list.py):
   morgon- och uppdateringsfiler -> data/results/<vecka>.json. Varje rapport har "scope" = körningen
   den kom från.
 
-- Omgångsfilerna valideras var för sig; en omgång som saknas eller underkänns tas inte med
-  (listas i "missing_batches").
+- Omgångsfilerna valideras var för sig och per rapport: en underkänd rapport listas i "rejected"
+  med orsaken, och omgångens övriga rapporter tas med. En omgång som saknas eller inte går att
+  läsa alls (schema, fel omgång) listas i "missing_batches".
 - Förändring mot föregående år (yoy_pct): rapportens egen procentsats, annars uträknad ur
   värdena (inte för procenttal, där jämförs värdena direkt).
 - Utfall mot förväntan: resultat per aktie och nettoomsättning för kvartalet jämförs med Yahoos
@@ -43,8 +44,8 @@ from report_list import (  # noqa: E402
 )
 from validate import DATA_DIR, RAW_DIR, Instrument, load_instruments, load_sector_kpis  # noqa: E402
 from validate_results import (  # noqa: E402
-    comparison_verdict, corporate_event_tickers, eps_for_comparison, scope_period, surprise_pct, uncertain_consensus, unit_factor,
-    validate_batch, validate_results,
+    check_batch, comparison_verdict, corporate_event_tickers, eps_for_comparison, scope_period, surprise_pct,
+    uncertain_consensus, unit_factor, validate_results,
 )
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
@@ -121,13 +122,14 @@ def yoy_pct(k: dict, kind: str) -> float | None:
 
 
 def _merge_batches(scope: str, instruments: dict[str, Instrument], dirs: dict, results_dir: Path,
-                   consensus_dir: Path) -> tuple[list[dict], list[int], list[str]]:
-    """Godkända omgångar för ett läge, som rapporter i den sammanslagna filens format."""
+                   consensus_dir: Path) -> tuple[list[dict], list[int], list[dict], list[str]]:
+    """Godkända rapporter ur omgångarna för ett läge, i den sammanslagna filens format, plus de
+    underkända rapporterna med orsak (en underkänd rapport underkänner inte resten av omgången)."""
     sector_kpis = load_sector_kpis()
     listed = list_scope(scope, instruments, sector_kpis, **dirs)
     by_ticker = {r["ticker"]: r for r in listed}
     n_batches = max((r["batch"] for r in listed), default=0)
-    reports, missing, problems = [], [], []
+    reports, missing, rejected, problems = [], [], [], []
     for n in range(1, n_batches + 1):
         path = batch_dir(scope, results_dir) / f"omgang-{n}.json"
         if not path.exists():
@@ -135,13 +137,21 @@ def _merge_batches(scope: str, instruments: dict[str, Instrument], dirs: dict, r
             problems.append(f"omgång {n} saknas")
             continue
         data = json.loads(path.read_text(encoding="utf-8"))
-        res = validate_batch(data, scope, n, instruments, dirs["raw_dir"], dirs["morning_raw"], results_dir)
-        if res.errors:
+        check = check_batch(data, scope, n, instruments, dirs["raw_dir"], dirs["morning_raw"], results_dir)
+        if check.errors:
             missing.append(n)
-            problems.append(f"omgång {n} underkänd: {res.errors[0]}"
-                            + (f" (+{len(res.errors) - 1})" if len(res.errors) > 1 else ""))
+            problems.append(f"omgång {n} underkänd: {check.errors[0]}"
+                            + (f" (+{len(check.errors) - 1})" if len(check.errors) > 1 else ""))
             continue
+        for t, errs in check.rejected.items():
+            problems.append(f"omgång {n}: {t} underkänd: {errs[0]}" + (f" (+{len(errs) - 1})" if len(errs) > 1 else ""))
+            if t in by_ticker:  # ett bolag som inte står i listan är ingen rapport att markera
+                rejected.append({"ticker": t, "name": instruments[t].namn, "scope": scope,
+                                 "published": by_ticker[t]["published"], "url": by_ticker[t]["url"],
+                                 "reason": _reason(errs[0], t)})
         for r in data["reports"]:
+            if r["ticker"] in check.rejected:
+                continue
             inst = instruments[r["ticker"]]
             kinds = {k["id"]: k for k in kpis_for(inst, sector_kpis)}
             listed_r = by_ticker[r["ticker"]]
@@ -159,22 +169,34 @@ def _merge_batches(scope: str, instruments: dict[str, Instrument], dirs: dict, r
             out["vs_consensus"] = vs_consensus(out, datetime.fromisoformat(listed_r["published"]).date(),
                                                consensus_dir)
             reports.append(out)
-    return reports, missing, problems
+    return reports, missing, rejected, problems
+
+
+def _reason(error: str, ticker: str) -> str:
+    """Valideringsfelet utan tickern först ("NOLA B nettoomsattning: …" -> "nettoomsattning: …")."""
+    return error[len(ticker) + 1:].lstrip(": ") if error.startswith(ticker + " ") or error.startswith(ticker + ":") \
+        else error
 
 
 def build(scope: str, instruments: dict[str, Instrument], now: datetime, raw_dir: Path = RAW_DIR,
           results_dir: Path = RESULTS_DIR, consensus_dir: Path = CONSENSUS_DIR,
           morning_raw: Path | None = MORNING_RAW) -> tuple[dict, list[str]]:
     dirs = {"raw_dir": raw_dir, "morning_raw": morning_raw, "results_dir": results_dir}
-    reports, missing, problems = _merge_batches(scope, instruments, dirs, results_dir, consensus_dir)
+    reports, missing, rejected, problems = _merge_batches(scope, instruments, dirs, results_dir, consensus_dir)
     if WEEK_RE.match(scope):
         # Veckans morgon- och uppdateringskörningar: redan godkända när de skrevs, valideras igen
-        # i validate_results.
+        # i validate_results. Deras underkända rapporter listas så länge veckan inte fått ett utfall.
         for p in week_run_files(scope, results_dir):
-            reports += json.loads(p.read_text(encoding="utf-8"))["reports"]
+            run = json.loads(p.read_text(encoding="utf-8"))
+            reports += run["reports"]
+            rejected += run.get("rejected", [])
+        done = {r["ticker"] for r in reports}
+        rejected = [r for r in rejected if r["ticker"] not in done]
     reports.sort(key=lambda r: (r["published"], r["name"]))
+    rejected.sort(key=lambda r: (r["published"], r["name"]))
     return ({"schema_version": 1, "week": scope, "period": scope_period(scope),
-             "generated_at": now.isoformat(timespec="seconds"), "reports": reports, "missing_batches": missing},
+             "generated_at": now.isoformat(timespec="seconds"), "reports": reports, "missing_batches": missing,
+             "rejected": rejected},
             problems)
 
 
@@ -193,7 +215,7 @@ def main(argv: list[str] | None = None, now: datetime | None = None) -> int:
     data, problems = build(args.scope, instruments, now or datetime.now(STOCKHOLM))
     for msg in problems:
         print(f"varning: {msg}")
-    if not data["reports"]:
+    if not data["reports"] and not data["rejected"]:
         print("Inga godkända rapportutfall – ingen fil skrivs.", file=sys.stderr)
         return 1
     res = validate_results(data, args.scope, instruments)
@@ -205,6 +227,7 @@ def main(argv: list[str] | None = None, now: datetime | None = None) -> int:
     out.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     with_cons = sum(r["vs_consensus"] is not None for r in data["reports"])
     print(f"Rapportutfall {args.scope}: {len(data['reports'])} rapporter, {with_cons} jämförda med förväntan, "
+          f"underkända: {', '.join(r['ticker'] for r in data['rejected']) or 'inga'}, "
           f"saknade omgångar: {data['missing_batches'] or 'inga'} -> {out}")
     if args.backup:
         from backup_week import commit_files

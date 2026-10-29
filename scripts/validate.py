@@ -71,8 +71,18 @@ _SPACE_CHARS = str.maketrans({c: " " for c in "    "})
 _NUMBER_RE = re.compile(
     r"(?<![\w.,])(?P<sign>[-–−](?=\d))?"
     r"(?<![\w.,])(?P<int>\d{1,3}(?: \d{3})+(?!\d)|\d+)"
-    r"(?:[.,](?P<frac>\d+))?"
+    r"(?:(?P<sep>[.,:])(?P<frac>\d+))?"
     r"(?P<pct> ?(?:%|procent(?!enhet)))?"
+)
+# Två skrivsätt i bolagens rapporter som tolkas särskilt, men bara i ett belopp eller värde per aktie:
+# en valutaenhet står efter talet, eller talet står inom parentes direkt efter ett tal med samma
+# skrivsätt ("2.500 MSEK (2.342)", "0:21 SEK (1:26)"). Annars tolkas de som förut.
+# - "2.500": punkt som tusentalsavgränsare (exakt tre siffror efter punkten) -> 2 500 (Nolato 2026-10-29)
+# - "0:21": kolon som decimaltecken (exakt två siffror efter kolon) -> 0,21 (Xano 2026-10-29); utan
+#   enhet efter är "08:00" ett klockslag och blir två tal som förut
+_AMOUNT_UNIT_RE = re.compile(
+    r"\s?(?:M?D?(?:SEK|EUR|USD|NOK|DKK)\b|T(?:SEK|EUR)\b|[Mm]d?kr\b|tkr\b|kr\b|kronor\b|miljoner\b|miljarder\b|"
+    r"[Mm]dr\b|Euro cent\b|öre\b)"
 )
 
 
@@ -139,26 +149,53 @@ class Number:
         return value_ok and unit_ok
 
 
+def _special_style(text: str, m: re.Match, prev_style: str | None, prev_end: int) -> str | None:
+    """"thousands" ("2.500") eller "colon" ("0:21") om talet ska tolkas så (se _AMOUNT_UNIT_RE), annars None."""
+    sep, frac = m["sep"], m["frac"]
+    if sep == "." and frac and len(frac) == 3 and " " not in m["int"] and len(m["int"]) <= 3 and not m["pct"]:
+        style = "thousands"
+    elif sep == ":" and frac and len(frac) == 2 and not m["pct"]:
+        style = "colon"
+    else:
+        return None
+    if _AMOUNT_UNIT_RE.match(text, m.end()):
+        return style
+    # Inom parentes direkt efter ett tal med samma skrivsätt: "2.500 MSEK (2.342)".
+    in_parens = text[:m.start()].rstrip().endswith("(") and text[m.end():].lstrip().startswith(")")
+    if in_parens and prev_style == style and "(" in text[prev_end:m.start()]:
+        return style
+    return None
+
+
 def extract_numbers(text: str) -> list[Number]:
-    """Plockar ut alla tal ur texten efter normalisering av mellanslag, decimaltecken och minus."""
+    """Plockar ut alla tal ur texten efter normalisering av mellanslag, decimaltecken och minus.
+    Används både av veckosammanfattningens och rapportutfallens validering (validate_results)."""
     text = text.translate(_SPACE_CHARS)
     out = []
     prev_end = 0
+    prev_style: str | None = None
     for m in _NUMBER_RE.finditer(text):
-        digits = m["int"].replace(" ", "") + ("." + m["frac"] if m["frac"] else "")
-        value = Decimal(digits)
-        if m["sign"]:
-            value = -value
+        style = _special_style(text, m, prev_style, prev_end)
         before = text[prev_end:m.start()]
         words = _WORD_RE.findall(before)
         level = bool(words) and words[-1].casefold() == "till" and before.rstrip().casefold().endswith("till")
-        out.append(Number(
-            value=value,
-            percent=bool(m["pct"]),
-            raw=m.group(0).strip(),
-            direction=_direction_before(before),
-            level=level,
-        ))
+        sign = -1 if m["sign"] else 1
+        if style == "thousands":
+            values = [Decimal(m["int"] + m["frac"])]
+        elif style is None and m["sep"] == ":":
+            # Klockslag och liknande ("08:00"): två tal, som innan kolon kunde vara ett skiljetecken i talet.
+            values = [Decimal(m["int"].replace(" ", "")), Decimal(m["frac"])]
+        else:
+            values = [Decimal(m["int"].replace(" ", "") + ("." + m["frac"] if m["frac"] else ""))]
+        for i, value in enumerate(values):
+            out.append(Number(
+                value=sign * value if i == 0 else value,
+                percent=bool(m["pct"]),
+                raw=m.group(0).strip(),
+                direction=_direction_before(before),
+                level=level,
+            ))
+        prev_style = style
         prev_end = m.end()
     return out
 

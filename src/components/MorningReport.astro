@@ -9,7 +9,7 @@ import type { MorningReport } from "../lib/data";
 import { direction, shortChange, shortDate } from "../lib/format";
 import { groupByCompany, holderName } from "../lib/short";
 import { ratio, sek, signedPct } from "../lib/signals";
-import type { ReportResult } from "../lib/results";
+import type { ResultsView } from "../lib/results";
 import { loadReactionOutcomes, type AfternoonReport } from "../lib/data";
 import ReactionTable from "./ReactionTable.astro";
 import ResultsPanel from "./ResultsPanel.astro";
@@ -21,7 +21,7 @@ interface Props {
   /** Extra länk sist i innehållsraden, t.ex. ner till veckan på startsidan. */
   after?: { href: string; label: string };
   /** Rapportutfall sedan förra morgonen (data/results/morning/<datum>.json), visas överst. */
-  results?: { reports: ReportResult[]; missingBatches: number[] } | null;
+  results?: ResultsView | null;
   /** Förra handelsdagens kursreaktion (data/afternoon/<datum>.json före rapportens datum). */
   reaction?: AfternoonReport | null;
 }

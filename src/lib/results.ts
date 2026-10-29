@@ -114,6 +114,24 @@ export interface ReportResult {
   } | null;
 }
 
+/** En rapport som underkändes av valideringen; omgångens övriga rapporter är med ändå. */
+export interface RejectedReport {
+  ticker: string;
+  name: string;
+  scope: string;
+  published: string;
+  url: string;
+  /** Första valideringsfelet, t.ex. "nettoomsattning: värdet 2500 finns inte i citatet". */
+  reason: string;
+}
+
+/** En sammanslagen rapportutfallsfil (scripts/results.py) som sidan visar. */
+export interface ResultsView {
+  reports: ReportResult[];
+  missingBatches: number[];
+  rejected: RejectedReport[];
+}
+
 const UNIT_LABELS: Record<string, string> = { SEK: "kr", TSEK: "tkr", MSEK: "mn kr", MDSEK: "mdr kr", procent: "%" };
 const nf = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
 const signed = (v: number, digits: number) =>

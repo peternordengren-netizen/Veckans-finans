@@ -145,6 +145,19 @@ def test_godkant_nyckeltal_och_fel():
         assert any(msg in e for e in errs), (msg, errs)
 
 
+def test_tusentalspunkt_och_decimalkolon_i_citat():
+    """Samma sifferfunktion som veckosammanfattningen: "2.500 MSEK (2.342)" och "0:21 SEK (1:26)"
+    (Nolato och Xano 2026-10-29 underkändes)."""
+    text = _normalize_ws("Juli - september 2026\nOmsättningen ökade till 2.500 MSEK (2.342).\n"
+                         "Resultat per aktie var 0:21 SEK (1:26).\n")
+    r = Result()
+    check_kpi(kpi("nettoomsattning", 2500, "MSEK", 2342, None, "kvartal",
+                  "Omsättningen ökade till 2.500 MSEK (2.342)."), "belopp", text, "t", r)
+    check_kpi(kpi("resultat-per-aktie", 0.21, "SEK", 1.26, None, "kvartal",
+                  "Resultat per aktie var 0:21 SEK (1:26)."), "per_aktie", text, "t", r)
+    assert r.errors == []
+
+
 def test_forandring_som_inte_stammer_med_vardena():
     text = "Juli - september 2026: Vinsten ökade med 40 % till 1 344 MSEK (1 200)"
     r = Result()
@@ -412,6 +425,42 @@ def test_saknad_omgang_listas(tmp_path):
     raw = make_raw(tmp_path)
     data, problems = results.build(WEEK, INSTRUMENTS, NOW, raw, tmp_path / "results", tmp_path / "consensus")
     assert data["missing_batches"] == [1] and problems == ["omgång 1 saknas"]
+
+
+def test_underkand_rapport_underkanner_inte_omgangen(tmp_path):
+    """En underkänd rapport markeras med orsaken; omgångens övriga rapporter tas med (2026-10-29 gick
+    hela morgonens omgång förlorad på ett enda citat)."""
+    from validate_results import batch_status, check_batch
+
+    raw = make_raw(tmp_path)
+    bad = alfa([{**GOOD_KPIS[0], "value": 1345}, *GOOD_KPIS[1:]])
+    check = check_batch(batch([bad, beta()]), WEEK, 1, INSTRUMENTS, raw)
+    assert check.errors == [] and list(check.rejected) == ["ALFA"]
+    assert validate_batch(batch([bad, beta()]), WEEK, 1, INSTRUMENTS, raw).errors  # hela filen är inte godkänd
+    # En saknad rapport underkänner bara den rapporten.
+    assert list(check_batch(batch([beta()]), WEEK, 1, INSTRUMENTS, raw).rejected) == ["ALFA"]
+    # Fel omgång i filen: inget går att använda.
+    assert check_batch({**batch([alfa(), beta()]), "batch": 2}, WEEK, 1, INSTRUMENTS, raw).errors
+
+    results_dir = tmp_path / "results"
+    (results_dir / WEEK).mkdir(parents=True)
+    path = results_dir / WEEK / "omgang-1.json"
+    path.write_text(json.dumps(batch([bad, beta()])), encoding="utf-8")
+    data, problems = results.build(WEEK, INSTRUMENTS, NOW, raw, results_dir, tmp_path / "consensus")
+    assert [r["ticker"] for r in data["reports"]] == ["BETA"] and data["missing_batches"] == []
+    assert [(r["ticker"], r["name"]) for r in data["rejected"]] == [("ALFA", "Alfaverken")]
+    assert data["rejected"][0]["reason"].startswith("orderingang: ") and "1345" in data["rejected"][0]["reason"]
+    assert any("ALFA underkänd" in p for p in problems)
+    assert validate_results(data, WEEK, INSTRUMENTS, raw).errors == []
+
+    import validate_results as vr
+    from unittest import mock
+
+    with mock.patch.object(vr, "check_batch", lambda d, w, n, i: check_batch(d, w, n, i, raw)):
+        assert batch_status(path, INSTRUMENTS) == "ALFA"
+        path.write_text(json.dumps(batch([alfa(), beta()])), encoding="utf-8")
+        assert batch_status(path, INSTRUMENTS) == "godkänd"
+        assert batch_status(path.with_name("omgang-9.json"), INSTRUMENTS) == "hela"
 
 
 def test_period_inne_i_citatet():

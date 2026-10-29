@@ -5,14 +5,14 @@
  * som kommit sedan morgonrapporten.
  */
 import { loadReactionOutcomes, type AfternoonReport } from "../lib/data";
-import type { ReportResult } from "../lib/results";
+import type { ResultsView } from "../lib/results";
 import ReactionTable from "./ReactionTable.astro";
 import ResultsPanel from "./ResultsPanel.astro";
 
 interface Props {
   report: AfternoonReport;
   /** Rapportutfall från dagens uppdateringar (data/results/updates/<datum>T*.json). */
-  results: { reports: ReportResult[]; missingBatches: number[] } | null;
+  results: ResultsView | null;
 }
 const { report, results } = Astro.props;
 ---

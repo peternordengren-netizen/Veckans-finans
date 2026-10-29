@@ -5,10 +5,10 @@
  * validerats mot rapporttexten.
  */
 import { shortDate } from "../lib/format";
-import { epsLabel, expectedText, kpiValue, surpriseText, yoyText, type ReportResult } from "../lib/results";
+import { epsLabel, expectedText, kpiValue, surpriseText, yoyText, type ResultsView } from "../lib/results";
 
 interface Props {
-  results: { reports: ReportResult[]; missingBatches: number[] };
+  results: ResultsView;
   /** "week": veckans flik; "morning": överst i morgonrapporten; "afternoon": i eftermiddagsuppdateringen. */
   context?: "week" | "morning" | "afternoon";
 }
@@ -45,6 +45,21 @@ const periodLabel = { kvartal: "", delår: " (året hittills)", helår: " (helå
         Alla rapporter kom inte med: omgång {results.missingBatches.join(", ")} saknas eller klarade inte valideringen.
         Se {context === "week" ? "logs/weekly/" : context === "afternoon" ? "logs/updates/" : "logs/morning/"}.
       </p>
+    )
+  }
+  {
+    results.rejected.length > 0 && (
+      <div class="warn-box">
+        <p>Underkända av valideringen (visas inte; omgångens övriga rapporter är med):</p>
+        <ul class="rejected">
+          {results.rejected.map((r) => (
+            <li>
+              <a href={r.url} rel="noopener noreferrer" target="_blank">{r.name}</a>{" "}
+              <span class="muted">{r.ticker}</span> – {r.reason}
+            </li>
+          ))}
+        </ul>
+      </div>
     )
   }
 

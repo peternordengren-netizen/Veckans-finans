@@ -33,6 +33,23 @@
     "generated_at": { "type": "string" },
     "mock": { "const": true },
     "missing_batches": { "type": "array", "items": { "type": "integer" } },
+    "rejected": {
+      "description": "Rapporter som underkändes av valideringen, med första felet som orsak; omgångens övriga rapporter är med i reports (saknas i äldre filer).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ticker", "name", "scope", "published", "url", "reason"],
+        "properties": {
+          "ticker": { "type": "string" },
+          "name": { "type": "string" },
+          "scope": { "type": "string" },
+          "published": { "type": "string" },
+          "url": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
     "reports": {
       "type": "array",
       "items": {

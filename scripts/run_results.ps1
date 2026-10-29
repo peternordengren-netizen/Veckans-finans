@@ -10,7 +10,8 @@
 # raden "Rapportutfall: räknas inte som försök …" loggas (anroparen räknar då inte försöket) och en
 # engångsuppgift kör "run_results.ps1 -Week <läge> -Build" fem minuter efter återställningen.
 # -Build: bygg om sidan efteråt (används av det nya försöket).
-# - En omgång vars fil redan finns och klarar valideringen körs inte om (går att återuppta).
+# - En omgång vars fil redan finns och klarar valideringen körs inte om (går att återuppta); är bara
+#   enskilda rapporter underkända görs bara de om.
 # - Claude körs i läget dontAsk med samma sorts begränsade lista som veckokörningen: läsa,
 #   skriva bara i data/results/, och bara report_list.py och validate.py.
 # - Loggar i logs/weekly/ (vecka) eller logs/morning/ (dag): <läge>-rapportutfall.log och
@@ -70,29 +71,35 @@ $Allowed = @(
 $Disallowed = @("PowerShell", "WebFetch", "WebSearch")
 function Quote([string]$s) { '"' + ($s -replace '"', '\"') + '"' }
 
-function BatchApproved([string]$File) {
-    if (-not (Test-Path $File)) { return $false }
-    & cmd.exe /c ".venv\Scripts\python.exe scripts\validate.py $File > nul 2>&1"
-    return $LASTEXITCODE -eq 0
+# "godkänd", "hela" (filen saknas eller går inte att använda) eller de underkända rapporternas
+# tickrar, kommaseparerade (scripts/validate_results.py --status).
+function BatchStatus([string]$File) {
+    $s = (& .venv\Scripts\python.exe scripts\validate_results.py --status $File 2>$null | Select-Object -Last 1)
+    if (-not $s) { return "hela" }
+    return $s.Trim()
 }
 
-# Varje omgång får högst MaxAttempts Claude-körningar i samma körning: underkänns den första görs
-# ett nytt försök direkt (Claude ser valideringsfelen när den kör validate.py). Loggarna för
-# försök 2 heter -rapportutfall-<N>-2.json/.err, så att första försökets logg finns kvar.
+# Varje omgång får högst MaxAttempts Claude-körningar i samma körning. Underkänns bara enskilda
+# rapporter görs nästa försök bara för dem ("/rapportutfall <läge> <N> endast <tickrar>"): Claude
+# ersätter de rapporterna i filen och rör inte de godkända. Är filen oanvändbar görs hela omgången om.
+# Det som fortfarande är underkänt efter sista försöket markeras med orsaken av results.py, och
+# omgångens godkända rapporter tas med ändå. Loggarna för försök 2 heter -rapportutfall-<N>-2.json/.err.
 $MaxAttempts = 2
 $stopForLimit = $false
 for ($n = 1; $n -le $Batches -and -not $stopForLimit; $n++) {
     $BatchFile = "$BatchDir\omgang-$n.json"
-    if (BatchApproved $BatchFile) { Log "omgång ${n}: finns redan och är godkänd - hoppar över"; continue }
+    $status = BatchStatus $BatchFile
+    if ($status -eq "godkänd") { Log "omgång ${n}: finns redan och är godkänd - hoppar över"; continue }
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-        $ArgList = @("-p", (Quote "/rapportutfall $Week $n"), "--model", "sonnet", "--permission-mode", "dontAsk",
+        $Prompt = if ($status -eq "hela") { "/rapportutfall $Week $n" } else { "/rapportutfall $Week $n endast $status" }
+        $ArgList = @("-p", (Quote $Prompt), "--model", "sonnet", "--permission-mode", "dontAsk",
             "--allowedTools") + ($Allowed | ForEach-Object { Quote $_ }) +
             @("--disallowedTools") + ($Disallowed | ForEach-Object { Quote $_ }) +
             @("--strict-mcp-config", "--no-session-persistence", "--output-format", "json")
         $Suffix = if ($attempt -gt 1) { "-$attempt" } else { "" }
         $JsonOut = Join-Path $LogDir "$Week-rapportutfall-$n$Suffix.json"
         $ErrOut = Join-Path $LogDir "$Week-rapportutfall-$n$Suffix.err"
-        Log "omgång ${n}: startar Claude Code (Sonnet), försök $attempt"
+        Log "omgång ${n}: startar Claude Code (Sonnet), försök $attempt$(if ($status -ne 'hela') { ', bara ' + $status })"
         try {
             $proc = Start-Process -FilePath $Claude -ArgumentList $ArgList -NoNewWindow -PassThru -Wait `
                 -RedirectStandardOutput $JsonOut -RedirectStandardError $ErrOut
@@ -112,9 +119,11 @@ for ($n = 1; $n -le $Batches -and -not $stopForLimit; $n++) {
             $stopForLimit = $true
             break
         }
-        if (BatchApproved $BatchFile) { Log "omgång ${n}: godkänd (försök $attempt)"; break }
+        $status = BatchStatus $BatchFile
+        if ($status -eq "godkänd") { Log "omgång ${n}: godkänd (försök $attempt)"; break }
         $first = (& cmd.exe /c ".venv\Scripts\python.exe scripts\validate.py $BatchFile 2>&1" | Select-String '^\s+fel:' | Select-Object -First 1)
-        Log "omgång ${n}: underkänd efter försök $attempt$(if ($first) { ': ' + $first.Line.Trim() })"
+        $what = if ($status -eq "hela") { "underkänd" } else { "underkänd för $status (övriga godkända)" }
+        Log "omgång ${n}: $what efter försök $attempt$(if ($first) { ': ' + $first.Line.Trim() })"
     }
 }
 

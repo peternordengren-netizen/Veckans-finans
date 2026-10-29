@@ -54,9 +54,13 @@ function Log([string]$Text) {
 }
 
 function ResultsComplete {
-    # Resultatfilen finns och saknar inga omgångar (en underkänd omgång gör att den skrivs utan den).
+    # Resultatfilen finns och saknar inga omgångar eller rapporter (en underkänd rapport listas i
+    # "rejected"; ett nytt försök gör då bara om den).
     if (-not (Test-Path $Results)) { return $false }
-    try { return @((Get-Content $Results -Raw -Encoding UTF8 | ConvertFrom-Json).missing_batches).Count -eq 0 }
+    try {
+        $r = Get-Content $Results -Raw -Encoding UTF8 | ConvertFrom-Json
+        return @($r.missing_batches).Count -eq 0 -and @($r.rejected | Where-Object { $_ }).Count -eq 0
+    }
     catch { return $false }
 }
 $needReport = -not (Test-Path $Report) -and (Attempts "Startar morning.py") -lt $MaxAttempts

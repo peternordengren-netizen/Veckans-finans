@@ -226,7 +226,7 @@ function loadAfternoon(day: string): AfternoonReport | null {
 }
 
 /** Rapportutfallen från en dags uppdateringar (data/results/updates/<datum>T<hhmm>.json), sammanslagna. */
-export function loadUpdateResults(day: string): { reports: ReportResult[]; missingBatches: number[] } | null {
+export function loadUpdateResults(day: string): ResultsView | null {
   const dir = join(RESULTS_DIR, "updates");
   if (!existsSync(dir)) return null;
   const files = readdirSync(dir)
@@ -237,6 +237,10 @@ export function loadUpdateResults(day: string): { reports: ReportResult[]; missi
   return {
     reports: all.flatMap((r) => r.reports).sort((a, b) => a.published.localeCompare(b.published)),
     missingBatches: all.flatMap((r) => r.missingBatches),
+    // En underkänd rapport som en senare uppdatering samma dag fått fram visas inte som underkänd.
+    rejected: all
+      .flatMap((r) => r.rejected)
+      .filter((x) => !all.some((r) => r.reports.some((y) => y.ticker === x.ticker))),
   };
 }
 const WEEK_RE = /^\d{4}-W\d{2}$/;
@@ -289,7 +293,7 @@ export type { Tone } from "./tone";
 import type { CalendarEvent } from "./calendar";
 import type { SignalRow } from "./signals";
 import type { Consensus } from "./consensus";
-import type { ReportResult } from "./results";
+import type { RejectedReport, ReportResult, ResultsView } from "./results";
 import type { ValuationRow } from "./valuation";
 import { isoWeek } from "./weekCheck";
 
@@ -342,7 +346,7 @@ export interface WeekView {
   /** Kurs mot vinst i år, om den finns. */
   valuation: ValuationView | null;
   /** Rapportutfall för bolag som rapporterat under veckan, om de finns. */
-  results: { reports: ReportResult[]; missingBatches: number[] } | null;
+  results: ResultsView | null;
   sectors: SectorView[];
 }
 
@@ -418,7 +422,7 @@ export function loadValuation(week: string): ValuationView | null {
 /** Rapportutfall (scripts/results.py) för en vecka, en morgonkörning (datum,
  * data/results/morning/<datum>.json) eller en uppdatering (datumThhmm, data/results/updates/).
  * Valfri fil; saknas den visas ingenting. */
-export function loadResults(scope: string): { reports: ReportResult[]; missingBatches: number[] } | null {
+export function loadResults(scope: string): ResultsView | null {
   const path = DATE_RE.test(scope)
     ? join(RESULTS_DIR, "morning", `${scope}.json`)
     : UPDATE_RE.test(scope)
@@ -426,8 +430,8 @@ export function loadResults(scope: string): { reports: ReportResult[]; missingBa
       : join(RESULTS_DIR, `${scope}.json`);
   if (!existsSync(path)) return null;
   try {
-    const raw = readJson<{ reports: ReportResult[]; missing_batches: number[] }>(path);
-    return { reports: raw.reports, missingBatches: raw.missing_batches };
+    const raw = readJson<{ reports: ReportResult[]; missing_batches: number[]; rejected?: RejectedReport[] }>(path);
+    return { reports: raw.reports, missingBatches: raw.missing_batches, rejected: raw.rejected ?? [] };
   } catch (err) {
     console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan rapportutfall:`, err);
     return null;

@@ -1,12 +1,18 @@
 ---
 description: Ta fram rapporterade nyckeltal ur rapporter (en omgång om 20) för en vecka, en morgon eller en uppdatering
-argument-hint: "<ISO-vecka, datum eller datumThhmm> <omgång>, t.ex. 2026-W43 1, 2026-10-20 1 eller 2026-10-20T1745 1"
+argument-hint: "<ISO-vecka, datum eller datumThhmm> <omgång> [endast <tickrar>], t.ex. 2026-W43 1, 2026-10-20 1 eller 2026-10-20T1745 1"
 ---
 
 Du ska ta fram rapporterade nyckeltal ur bolagens egna rapporter för Veckans finans. Argument: `$ARGUMENTS`:
 läge och omgång. Läget är en vecka (`2026-W43 1`, måndagens uppsamling), ett datum (`2026-10-20 1`,
 morgonkörningen) eller ett datum med klockslag (`2026-10-20T1745 1`, eftermiddagsuppdateringen eller
 "Uppdatera nu"). Morgon och uppdatering tar rapporterna sedan föregående körning.
+
+**Bara vissa rapporter:** står det `endast <tickrar>` efter omgången (t.ex. `2026-10-20 1 endast NOLA B,XANO B`,
+tickrarna kommaseparerade) finns utfilen redan och de rapporterna underkändes. Kör validate.py på utfilen först för
+att se felen. Gör sedan om **bara** de bolagens rapporter: läs bara deras källtexter och ersätt bara deras poster i
+utfilen (med Edit). Ändra, ta bort eller lägg inte till något för övriga bolag – de är redan godkända. Saknas ett
+bolags post helt lägger du till den.
 
 Utfil: `data/results/<vecka>/omgang-<omgång>.json` för en vecka, `data/results/morning/<datum>/omgang-<omgång>.json`
 för ett datum och `data/results/updates/<datumThhmm>/omgang-<omgång>.json` för en uppdatering. I filen är `"week"`

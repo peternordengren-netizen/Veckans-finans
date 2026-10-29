@@ -42,7 +42,10 @@ Workflow-mallen ligger i [`deploy/raw-repo/`](deploy/raw-repo/). Lokalt klonas d
   Varje nyhet har `evidence`, ordagranna citat ur källtexten (max 25 ord, visas inte på sidan).
   Alla siffror i rubrik och sammanfattning måste finnas exakt i något citat. Jämförelsen sker efter normalisering
   (decimalkomma/punkt, mellanslag och hårt mellanslag som tusentalsavgränsare, %/procent, typografiskt minus),
-  så avrundade eller omräknade siffror underkänns.
+  så avrundade eller omräknade siffror underkänns. I ett belopp eller värde per aktie (valutaenhet efter talet, eller
+  fjolårsvärdet inom parentes efter ett sådant) läses också punkt som tusentalsavgränsare, "2.500 MSEK" = 2 500, och
+  kolon som decimaltecken, "0:21 SEK" = 0,21; annars är "08:00" ett klockslag. Rapportutfallens validering använder
+  samma funktion (`extract_numbers` i `scripts/validate.py`).
   Valideringen kontrollerar också riktningen. Ett ökningsord (ökade, steg, höjdes, växte, stärktes) får inte stå
   framför ett tal som är negativt i citatet, och ett minskningsord (minskade, sjönk, föll, sänktes, försvagades)
   får inte stå framför ett positivt. Citatets egna riktningsord räknas, så "minskade med 3,2 procent" räknas som negativt.
@@ -215,8 +218,11 @@ fliken **Rapporterade bolag**.
    sektorns nyckeltal plus nettoomsättning och resultat per aktie.
 2. `/rapportutfall <vecka> <omgång>` körs med Claude Code (`--model sonnet`) i läget `dontAsk`. Det får bara läsa,
    skriva i `data/results/` och köra `report_list.py` och `validate.py`. Resultatet hamnar i
-   `data/results/<vecka>/omgang-<N>.json`. En godkänd omgång körs inte om. En underkänd omgång körs om en gång direkt.
-   Saknar morgonens resultatfil fortfarande en omgång, görs steget om vid nästa utlösare.
+   `data/results/<vecka>/omgang-<N>.json`. En godkänd omgång körs inte om. Omgången valideras per rapport: underkänns
+   enskilda rapporter körs bara de om en gång direkt (`/rapportutfall <läge> <N> endast <tickrar>`), och är filen
+   oanvändbar körs hela omgången om. Det som fortfarande är underkänt tas inte med men listas med orsaken under
+   "Underkända av valideringen" (`rejected` i resultatfilen); omgångens godkända rapporter tas med ändå.
+   Saknar morgonens resultatfil fortfarande en omgång eller rapport, görs steget om vid nästa utlösare.
 3. Valideringen (`scripts/validate_results.py`) kontrollerar:
    - att citatet finns ordagrant i rapporten och har högst 25 ord
    - att årets och föregående års tal, och en eventuell procentsats, står i citatet
