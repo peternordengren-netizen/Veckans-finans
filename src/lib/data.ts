@@ -60,6 +60,80 @@ export function loadClaudeLimit(): { resetAt: string | null; source: string } | 
   }
 }
 
+// Swing (scripts/swing.py, schema/swing.schema.json) och historiken per etikett (scripts/swing_history.py).
+const SWING_DIR = IS_MOCK ? join(DATA, "mock", "swing") : join(DATA, "swing");
+export interface SwingRow {
+  ticker: string;
+  name: string;
+  sector: string | null;
+  day: string;
+  ma20_pct: number;
+  ma50_pct: number;
+  rsi2: number | null;
+  rsi14: number | null;
+  atr_pct: number | null;
+  volume_ratio: number | null;
+  report_published: string | null;
+  days_since_report: number | null;
+  report_verdict: string | null;
+  short_pct: number | null;
+  labels: string[];
+}
+export interface SwingStat {
+  n: number;
+  better: number | null;
+  ci: number | null;
+  mean: number | null;
+}
+export interface SwingView {
+  date: string;
+  asOf: string | null;
+  shortAsOf: string | null;
+  thresholds: { volume_ratio: number; rsi2_low: number; rsi2_high: number; report_days: number };
+  labels: Record<string, string>;
+  rows: SwingRow[];
+  history: {
+    period: { start: string; end: string };
+    method: string;
+    base: Record<string, SwingStat>;
+    labels: Record<string, Record<string, SwingStat>>;
+  } | null;
+}
+
+/** Senaste swingfilen (data/swing/<datum>.json) med historiken, eller null. Valfri; en trasig fil visas inte. */
+export function loadLatestSwing(): SwingView | null {
+  if (!existsSync(SWING_DIR)) return null;
+  const files = readdirSync(SWING_DIR)
+    .filter((f) => f.endsWith(".json") && DATE_RE.test(f.slice(0, -5)))
+    .sort();
+  if (files.length === 0) return null;
+  const path = join(SWING_DIR, files[files.length - 1]);
+  try {
+    const raw = readJson<{
+      date: string;
+      as_of: string | null;
+      short_as_of: string | null;
+      thresholds: SwingView["thresholds"];
+      labels: Record<string, string>;
+      companies: SwingRow[];
+    }>(path);
+    const historyPath = join(SWING_DIR, "history.json");
+    const history = existsSync(historyPath) ? readJson<NonNullable<SwingView["history"]>>(historyPath) : null;
+    return {
+      date: raw.date,
+      asOf: raw.as_of,
+      shortAsOf: raw.short_as_of,
+      thresholds: raw.thresholds,
+      labels: raw.labels,
+      rows: raw.companies,
+      history,
+    };
+  } catch (err) {
+    console.warn(`[veckans-finans] kunde inte läsa ${path}, visar sidan utan Swing:`, err);
+    return null;
+  }
+}
+
 /** Datum med morgonrapport, nyast först. */
 export function listMorningDates(): string[] {
   if (!existsSync(MORNING_DIR)) return [];

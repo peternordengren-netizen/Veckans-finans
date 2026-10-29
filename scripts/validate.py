@@ -842,6 +842,41 @@ def validate_calendar(data: dict, expected_week: str | None, instruments: dict[s
     return res
 
 
+def validate_swing(data: dict, instruments: dict[str, Instrument]) -> Result:
+    """Swing (scripts/swing.py): schema, bolagen finns i listan och etiketterna stämmer med måtten och
+    trösklarna i filen (räknas om här). Inga ord som uppmanar till köp eller försäljning i etiketterna."""
+    from swing import report_label, technical_labels  # sent: swing.py importerar den här modulen
+
+    res = Result()
+    res.errors += _schema_errors(_schema_validator("swing.schema.json"), data)
+    if res.errors:
+        return res
+    _check_datetime(data["generated_at"], "generated_at", res)
+    for k, text in data["labels"].items():
+        if re.search(r"\b(köp|sälj|kursmål|rekommend)", text, re.IGNORECASE):
+            res.errors.append(f"etiketten {k!r} innehåller en uppmaning: {text!r}")
+    seen = set()
+    for c in data["companies"]:
+        where = f"{c['name']} ({c['ticker']})"
+        inst = instruments.get(c["ticker"])
+        if inst is None or inst.namn != c["name"]:
+            res.errors.append(f"{where}: finns inte i instruments.csv med samma namn")
+            continue
+        if c["ticker"] in seen:
+            res.errors.append(f"{where}: förekommer flera gånger")
+        seen.add(c["ticker"])
+        expected = technical_labels(c, data["thresholds"])
+        rl = report_label(c["days_since_report"], c["report_verdict"], data["thresholds"])
+        if rl:
+            expected.append(rl)
+        if sorted(c["labels"]) != sorted(expected):
+            res.errors.append(f"{where}: etiketterna {c['labels']} stämmer inte med måtten (väntat {expected})")
+        unknown = set(c["labels"]) - set(data["labels"])
+        if unknown:
+            res.errors.append(f"{where}: okända etiketter {sorted(unknown)}")
+    return res
+
+
 def validate_signals(data: dict, expected_week: str | None, instruments: dict[str, Instrument]) -> Result:
     """Signalöversikten (scripts/signals.py): schema, bolagen finns i listan och
     signalerna stämmer med värdena och trösklarna i filen (räknas om här)."""
@@ -1132,6 +1167,7 @@ def _default_targets() -> list[Path]:
          *DATA_DIR.glob("results/*/omgang-*.json"), *DATA_DIR.glob("results/morning/*.json"),
          *DATA_DIR.glob("results/morning/*/omgang-*.json"), *DATA_DIR.glob("results/updates/*.json"),
          *DATA_DIR.glob("results/updates/*/omgang-*.json"), *DATA_DIR.glob("afternoon/*.json"),
+         *(p for p in DATA_DIR.glob("swing/*.json") if p.stem != "history"),
          *DATA_DIR.glob("mock/weeks/*.json"), *DATA_DIR.glob("mock/prices/*.json"),
          *DATA_DIR.glob("mock/analysis/*.json"), *DATA_DIR.glob("mock/calendar/*.json"),
          *DATA_DIR.glob("mock/signals/*.json"), *DATA_DIR.glob("mock/morning/*.json")]
@@ -1162,6 +1198,10 @@ def main(argv: list[str]) -> int:
             from validate_results import validate_results
 
             res = validate_results(data, path.stem, instruments)
+        elif path.parent.name == "swing" and path.stem != "history":
+            res = validate_swing(data, mock_instruments if in_mock_dir else instruments)
+        elif path.parent.name == "swing":
+            res = Result()  # historiken (scripts/swing_history.py) har inget schema att kontrollera
         elif path.parent.name == "afternoon":
             res = validate_afternoon(data, path.stem, mock_instruments if in_mock_dir else instruments)
         elif path.parent.name == "prices":

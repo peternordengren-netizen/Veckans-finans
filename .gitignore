@@ -13,6 +13,7 @@ data/results/
 data/valuation/
 data/afternoon/
 data/status/
+data/swing/
 
 # Python
 .venv/

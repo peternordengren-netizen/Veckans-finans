@@ -13,7 +13,8 @@ Källor och hämtning (en hämtning per källa och körning):
 - data/raw/ (Actions) och data/morning/raw/ läses båda; samma post räknas en gång.
 - Rapportkalendern för innevarande vecka skrivs om (scripts/report_calendar.py), så att
   veckosidans "Kommande vecka" också hålls aktuell.
-- Kursdata: ett batchanrop till Yahoo (scripts/signals.py) för gårdagens handelsdag.
+- Kursdata: ett batchanrop till Yahoo (scripts/signals.py) för gårdagens handelsdag. Samma dagsdata
+  används för fliken Swing (scripts/swing.py -> data/swing/<datum>.json), utan extra hämtning.
 
 Innehåll:
 - reports_today: kalenderns rapporter och stämmor i dag
@@ -315,7 +316,16 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
         out_cal.parent.mkdir(parents=True, exist_ok=True)
         out_cal.write_text(json.dumps(calendar, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    data = build(today, now, instruments, raw_dirs, calendar, fetch_bars)
+    # Dagsdatan hämtas en gång och återanvänds av Swing (samma tickers och datum som kurssignalerna).
+    cache: dict = {}
+
+    def fetch_once(tickers: list[str], start: date, end: date) -> dict:
+        key = (tuple(tickers), start, end)
+        if key not in cache:
+            cache[key] = fetch_bars(tickers, start, end)
+        return cache[key]
+
+    data = build(today, now, instruments, raw_dirs, calendar, fetch_once)
     data["errors"] = errors + calendar_errors(calendar)
     res = validate_morning(data, instruments)
     if res.errors:
@@ -331,7 +341,23 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
           f"insyn {len(data['insider']['companies'])} bolag, blankning "
           f"{len(data['short']['positions'])} positioner/{len(data['short']['aggregate'])} aggregat, "
           f"kurssignaler {len(data['price']['companies'])} bolag, {len(data['errors'])} fel -> {out}")
+    write_swing(today, now, instruments, fetch_once)
     return 0
+
+
+def write_swing(today: date, now: datetime, instruments: dict[str, Instrument], fetch: BarFetcher) -> None:
+    """Fliken Swing (scripts/swing.py) med morgonrapportens dagsdata. Fel här stoppar inte morgonrapporten."""
+    import swing
+
+    try:
+        tickers = [i.yahoo_ticker for i in instruments.values()]
+        bars = fetch([*tickers, INDEX_TICKER], today - timedelta(days=swing.HISTORY_DAYS), today - timedelta(days=1))
+        data = swing.build(today, now, instruments, bars, swing.latest_reports(today), swing.short_levels(today, instruments))
+        out = swing.write(data, instruments)
+        if out:
+            print(swing.summary(data, out))
+    except Exception as e:  # noqa: BLE001
+        print(f"Swing kunde inte skrivas: {e}", file=sys.stderr)
 
 
 def calendar_errors(calendar: dict | None) -> list[str]:

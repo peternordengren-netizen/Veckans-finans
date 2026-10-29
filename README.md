@@ -344,6 +344,35 @@ för sent: FI-jobbet "06:37" har committats 10:45–11:15, så morgonrapporten k
 pressmeddelande avgörs av MFN:s eller Cisions bolagsslug, inte av namn i rubriken. Annars skulle till exempel
 "Catena Media" räknas som Catena.
 
+### Swing (`scripts/swing.py`, `scripts/swing_history.py`)
+
+Fliken **Swing** är ett informationsverktyg. Den uppdateras varje morgon av `morning.py` med morgonrapportens
+dagsdata, utan extra hämtning, och skrivs till `data/swing/<datum>.json`, som är git-ignorerad.
+
+**Lägesmått per bolag**, vid förra handelsdagens stängning:
+- kurs mot 20- och 50-dagars glidande medelvärde
+- RSI(2) och RSI(14)
+- ATR(14) i procent av kursen
+- omsättning mot snittet för de 20 dagarna före
+- handelsdagar sedan senaste rapporten, med utfall mot förväntan
+- sammanlagd blankning enligt Finansinspektionen, där den finns
+
+**Etiketterna** beskriver vad som hänt, och valideringen underkänner ord som uppmanar till köp eller försäljning:
+- utbrott över 20-dagarshögsta, med eller utan hög omsättning (≥ 2×)
+- RSI(2) under 10 eller över 90
+- trend upp eller ned (kurs, 20- och 50-dagars MA i ordning)
+- efter rapport, över eller under förväntan, inom fem handelsdagar
+
+Tabellen kan sorteras och filtreras per etikett och har fast rubrikrad.
+
+**Historiken** under tabellen kommer från `scripts/swing_history.py` (`data/swing/history.json`). Den räknas med samma
+mått och etiketter på det senaste årets dagsdata, ett batchanrop till Yahoo, och visar hur ofta aktien gått bättre än
+index efter 2 och 5 handelsdagar, med antal fall och jämfört med alla aktie-dagar.
+
+Testet 20 okt 2025 – 21 okt 2026 gav ingen etikett som klart slår alla dagar: utbrott med hög omsättning 49,3 % mot
+47,3 % efter 5 dagar, ± 3,6 procentenheter. Rapportetiketterna har för få fall, eftersom utfall mot förväntan bara
+finns sedan oktober 2026. Kör skriptet igen när mer historik finns.
+
 ## Sidan (Astro)
 
 Kräver Node 22 eller senare.

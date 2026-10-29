@@ -1,0 +1,398 @@
+---
+/**
+ * Fliken Swing: lägesmått per bolag ur dagsdata (scripts/swing.py, uppdateras varje morgon) och beskrivande
+ * etiketter, i en sorterbar och filtrerbar tabell med fast rubrikrad. Under tabellen historiken per etikett
+ * (scripts/swing_history.py). Ett informationsverktyg: etiketterna beskriver vad som hänt, inga uppmaningar.
+ */
+import type { SwingView } from "../lib/data";
+import { shortDate } from "../lib/format";
+import { signedPct } from "../lib/signals";
+import { MIN_CASES, labelClass, labelCounts, reportText, shareText, vsBaseText } from "../lib/swing";
+
+interface Props {
+  swing: SwingView;
+}
+const { swing } = Astro.props;
+const order = Object.keys(swing.labels);
+const counts = labelCounts(swing.rows, order);
+const withLabel = swing.rows.filter((r) => r.labels.length > 0).length;
+const num = (v: number | null, digits = 1) =>
+  v === null ? "–" : new Intl.NumberFormat("sv-SE", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v);
+const v = (x: number | null) => (x === null ? "" : String(x));
+const t = swing.thresholds;
+const h = swing.history;
+
+const columns = [
+  { key: "name", label: "Bolag", type: "text" },
+  { key: "labels", label: "Etiketter", type: "text" },
+  { key: "ma20", label: "Mot 20 d MA", type: "num" },
+  { key: "ma50", label: "Mot 50 d MA", type: "num" },
+  { key: "rsi2", label: "RSI(2)", type: "num" },
+  { key: "rsi14", label: "RSI(14)", type: "num" },
+  { key: "atr", label: "ATR(14)", type: "num", title: "Genomsnittlig daglig rörelse, i procent av kursen" },
+  { key: "volume", label: "Omsättning", type: "num", title: "Senaste dagen mot snittet för de 20 dagarna före" },
+  { key: "report", label: "Sedan rapport", type: "num" },
+  { key: "short", label: "Blankning", type: "num", title: "Sammanlagd blankning enligt Finansinspektionen" },
+] as const;
+---
+
+<div class="swing" data-swing>
+  <p class="lead">
+    Lägesmått per bolag vid stängningen {swing.asOf ? shortDate(swing.asOf) : "–"}, uppdaterade varje morgon. Etiketterna
+    beskriver vad som hänt i kursen, omsättningen och rapporterna. De är inga uppmaningar, och historiken under tabellen
+    visar att ingen av dem det senaste året följts av att aktien gått bättre än index oftare än vanligt.
+  </p>
+  <details class="legend">
+    <summary>Så räknas måtten och etiketterna</summary>
+    <ul>
+      <li><strong>Mot 20 d / 50 d MA:</strong> stängningskursen mot det glidande medelvärdet för 20 respektive 50 handelsdagar.</li>
+      <li><strong>RSI(2) och RSI(14):</strong> relativ styrka över 2 och 14 dagar (0–100).</li>
+      <li><strong>ATR(14):</strong> genomsnittlig daglig rörelse de senaste 14 dagarna, i procent av kursen.</li>
+      <li><strong>Omsättning:</strong> senaste dagens omsättning mot snittet för de 20 handelsdagarna före.</li>
+      <li>
+        <strong>Utbrott:</strong> stängningen ligger över det högsta värdet de 20 handelsdagarna före; "hög omsättning"
+        när omsättningen är minst {num(t.volume_ratio, 0)} gånger snittet.
+      </li>
+      <li><strong>RSI(2) under {num(t.rsi2_low, 0)} / över {num(t.rsi2_high, 0)}:</strong> kraftig nedgång respektive uppgång de senaste dagarna.</li>
+      <li><strong>Trend upp / ned:</strong> kursen över (under) 20 dagars MA, som ligger över (under) 50 dagars MA.</li>
+      <li>
+        <strong>Efter rapport:</strong> rapport inom {t.report_days} handelsdagar (reaktionsdagen räknas som dag 0), med
+        utfallet mot förväntan för vinst per aktie där det finns.
+      </li>
+      <li>
+        <strong>Blankning:</strong> sammanlagd blankning enligt Finansinspektionens register{swing.shortAsOf ? ` ${shortDate(swing.shortAsOf)}` : ""}.
+      </li>
+    </ul>
+  </details>
+
+  <div class="controls">
+    <label>
+      Visa
+      <select data-label-filter>
+        <option value="" selected>alla bolag ({swing.rows.length})</option>
+        <option value="*">bolag med etikett ({withLabel})</option>
+        {counts.map((c) => (
+          <option value={c.label} disabled={c.count === 0}>
+            {swing.labels[c.label]} ({c.count})
+          </option>
+        ))}
+      </select>
+    </label>
+    <span class="shown" data-shown aria-live="polite">Visar alla {swing.rows.length} bolag</span>
+  </div>
+
+  <div class="table-outer" data-table-outer>
+    <div class="table-wrap" data-table-wrap>
+      <table>
+        <thead>
+          <tr>
+            {
+              columns.map((c) => (
+                <th scope="col" class={`col-${c.key}`} data-key={c.key} data-type={c.type} aria-sort="none">
+                  <button type="button" title={"title" in c ? c.title : undefined}>{c.label}</button>
+                </th>
+              ))
+            }
+          </tr>
+        </thead>
+        <tbody>
+          {
+            swing.rows.map((r) => (
+              <tr data-labels={r.labels.join(" ")}>
+                <th scope="row" data-v={r.name}>
+                  <span class="name">{r.name}</span> <span class="ticker">{r.ticker}</span>
+                </th>
+                <td class="col-labels" data-v={r.labels.map((l) => swing.labels[l]).join(", ")}>
+                  <span class="chips">
+                    {r.labels.map((l) => (
+                      <span class:list={["chip", labelClass(l)]}>{swing.labels[l] ?? l}</span>
+                    ))}
+                  </span>
+                </td>
+                <td class:list={["num", r.ma20_pct > 0 ? "pos" : r.ma20_pct < 0 ? "neg" : ""]} data-v={r.ma20_pct}>
+                  {signedPct(r.ma20_pct)}
+                </td>
+                <td class:list={["num", r.ma50_pct > 0 ? "pos" : r.ma50_pct < 0 ? "neg" : ""]} data-v={r.ma50_pct}>
+                  {signedPct(r.ma50_pct)}
+                </td>
+                <td class="num" data-v={v(r.rsi2)}>{num(r.rsi2, 0)}</td>
+                <td class="num" data-v={v(r.rsi14)}>{num(r.rsi14, 0)}</td>
+                <td class="num" data-v={v(r.atr_pct)}>{r.atr_pct === null ? "–" : `${num(r.atr_pct)} %`}</td>
+                <td class="num" data-v={v(r.volume_ratio)}>{r.volume_ratio === null ? "–" : `${num(r.volume_ratio)}×`}</td>
+                <td class="num report" data-v={v(r.days_since_report)}>{reportText(r.days_since_report, r.report_verdict)}</td>
+                <td class="num" data-v={v(r.short_pct)}>{r.short_pct === null ? "–" : `${num(r.short_pct, 2)} %`}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <section class="history" aria-labelledby="swing-historik">
+    <h3 id="swing-historik">Historik per etikett</h3>
+    {
+      h ? (
+        <>
+          <p class="note">
+            {shortDate(h.period.start)} {h.period.start.slice(0, 4)} – {shortDate(h.period.end)} {h.period.end.slice(0, 4)}.
+            {" "}{h.method} Under {MIN_CASES} fall visas andelen men inte skillnaden. ± är ett ungefärligt 95-procentsintervall
+            som om fallen vore oberoende; de infaller ofta samma dagar, så den verkliga osäkerheten är större.
+          </p>
+          <div class="hist-wrap">
+            <table class="hist">
+              <thead>
+                <tr>
+                  <th scope="col">Etikett</th>
+                  <th scope="col" class="num">Fall</th>
+                  <th scope="col" class="num">Bättre än index efter 2 dagar</th>
+                  <th scope="col" class="num">efter 5 dagar</th>
+                  <th scope="col" class="num">Skillnad mot alla dagar, 5 dagar</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="base">
+                  <th scope="row">Alla aktie-dagar</th>
+                  <td class="num">{h.base["5"]?.n.toLocaleString("sv-SE")}</td>
+                  <td class="num">{shareText(h.base["2"])}</td>
+                  <td class="num">{shareText(h.base["5"])}</td>
+                  <td class="num">–</td>
+                </tr>
+                {order.map((l) => {
+                  const s = h.labels[l] ?? {};
+                  return (
+                    <tr>
+                      <th scope="row">
+                        <span class:list={["chip", labelClass(l)]}>{swing.labels[l]}</span>
+                      </th>
+                      <td class="num">{(s["5"]?.n ?? 0).toLocaleString("sv-SE")}</td>
+                      <td class="num">{shareText(s["2"])}</td>
+                      <td class="num">{shareText(s["5"])}</td>
+                      <td class="num">{vsBaseText(s["5"], h.base["5"])}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <p class="note">Historiken saknas (kör scripts/swing_history.py).</p>
+      )
+    }
+  </section>
+</div>
+
+<script>
+  import { setupFullWidth, setupSortable, setupStickyHeader } from "../lib/tableClient";
+
+  for (const root of document.querySelectorAll<HTMLElement>("[data-swing]")) {
+    const rows = Array.from(root.querySelectorAll<HTMLTableRowElement>("tbody tr[data-labels]"));
+    const select = root.querySelector<HTMLSelectElement>("[data-label-filter]")!;
+    const shown = root.querySelector<HTMLElement>("[data-shown]")!;
+    const applyFilter = () => {
+      const want = select.value;
+      let n = 0;
+      for (const r of rows) {
+        const labels = (r.dataset.labels ?? "").split(" ").filter(Boolean);
+        r.hidden = want === "" ? false : want === "*" ? labels.length === 0 : !labels.includes(want);
+        if (!r.hidden) n++;
+      }
+      shown.textContent = want === "" ? `Visar alla ${rows.length} bolag` : `Visar ${n} av ${rows.length} bolag`;
+    };
+    select.addEventListener("change", applyFilter);
+    applyFilter();
+    setupFullWidth(root);
+    setupSortable(root);
+    setupStickyHeader(root);
+  }
+</script>
+
+<style>
+  .lead {
+    margin: 0 0 8px;
+    max-width: 75ch;
+  }
+  .legend {
+    margin: 0 0 12px;
+    font-size: 0.875rem;
+  }
+  .legend summary {
+    cursor: pointer;
+  }
+  .legend ul {
+    margin: 6px 0;
+    padding-left: 1.2em;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 0.9375rem;
+  }
+  .controls select {
+    font: inherit;
+    margin-left: 6px;
+  }
+  .shown,
+  .note {
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+  .note {
+    max-width: 80ch;
+  }
+  /* Full fönsterbredd och kantskugga som signaltabellen (tableClient.setupFullWidth). */
+  .table-outer {
+    --full: calc(100vw - var(--sbw, 0px) - 32px);
+    position: relative;
+    isolation: isolate;
+    width: var(--full);
+    margin-left: calc((100% - var(--full)) / 2);
+  }
+  .table-outer::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    bottom: 1px;
+    width: 32px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    background: linear-gradient(to left, var(--scroll-shadow), transparent);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 3;
+  }
+  .table-outer.more-right::after {
+    opacity: 1;
+  }
+  .table-outer.more-left :is(tbody th, thead th:first-child) {
+    box-shadow: 8px 0 8px -6px var(--scroll-shadow);
+  }
+  .table-wrap,
+  .hist-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+  }
+  th,
+  td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    vertical-align: top;
+  }
+  tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--surface-2);
+  }
+  table:not(.hist) thead th {
+    padding: 0;
+  }
+  thead button {
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    background: none;
+    border: 0;
+    padding: 8px 10px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    white-space: normal;
+    min-width: 4.5rem;
+  }
+  thead th:first-child {
+    left: 0;
+    z-index: 2;
+  }
+  thead th[aria-sort="ascending"] button::after {
+    content: " ▲";
+  }
+  thead th[aria-sort="descending"] button::after {
+    content: " ▼";
+  }
+  table:not(.hist) tbody th {
+    font-weight: normal;
+    position: sticky;
+    left: 0;
+    background: var(--surface);
+    white-space: normal;
+    min-width: 9rem;
+    max-width: 13rem;
+  }
+  .hist tbody th {
+    font-weight: normal;
+  }
+  .hist tr.base > * {
+    font-weight: 600;
+    background: var(--surface-2);
+  }
+  .name {
+    font-weight: 600;
+  }
+  .ticker {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  th.num,
+  td.num {
+    text-align: right;
+  }
+  td.report {
+    white-space: normal;
+    min-width: 7rem;
+  }
+  .pos {
+    color: var(--pos);
+  }
+  .neg {
+    color: var(--neg);
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 10rem;
+  }
+  .chip {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+    color: var(--muted);
+  }
+  .chip.breakout {
+    color: var(--accent);
+  }
+  .chip.rsi {
+    color: var(--indirect-fg);
+  }
+  .chip.report {
+    color: var(--direct-fg);
+  }
+  .history {
+    margin-top: 20px;
+  }
+  .history h3 {
+    margin: 0 0 6px;
+    font-size: 1.0625rem;
+  }
+</style>
