@@ -39,7 +39,8 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
    sammanfattning och nyckeltalstabell står först). Läs inga andra filer.
 4. Ta för varje nyckeltal i radens lista fram **kvartalets** värde och föregående års värde för samma kvartal, om
    rapporten anger dem. Ta inte med ett nyckeltal som inte står i texten. Gissa aldrig och räkna aldrig om.
-5. Skriv utfilen med Write och validera med `.venv/Scripts/python scripts/validate.py <utfil>`.
+5. Skriv för varje rapport med nyckeltal raden **"I rapporten"** (`highlight`, se regel 8).
+6. Skriv utfilen med Write och validera med `.venv/Scripts/python scripts/validate.py <utfil>`.
    Rätta felen mot källtexten och kör igen, **högst tre valideringskörningar**. Om något fortfarande underkänns:
    stanna, ta inte bort uppgifter för att klara valideringen, och lista felen ordagrant i ditt svar.
 
@@ -55,6 +56,13 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
       "raw_file": "mfn/3ff7c4b4-1410-5745-a8ab-6020e823dd3c.txt",
       "period": "Q3 2026",
       "note": null,
+      "highlight": {
+        "text": "Rekordorderingång i kvartalet; bolaget räknar med fortsatt svag efterfrågan i Norden",
+        "quotes": [
+          "Orderingången nådde den högsta nivån för ett enskilt kvartal",
+          "vi räknar med att efterfrågan i Norden förblir svag under de närmaste kvartalen"
+        ]
+      },
       "kpis": [
         {
           "id": "resultat-per-aktie",
@@ -92,6 +100,15 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
 6. Skriv bara i `data/results/`. Ändra aldrig källtexten, listan, fönstret (`window.json`) eller valideringen.
 7. `raw_file` i utfilen är kolumnen `raw_file` tecken för tecken, inklusive källmappen: `mfn/….txt` eller
    `cision/….txt`, aldrig bara filnamnet. Använd inte kolumnen `sökväg` (den har dessutom `data/…/<vecka>/` före).
+8. **I rapporten** (`highlight`): en kort rad på svenska, **högst 15 ord**, om det rapporten själv lyfter fram som
+   viktigast – rubriken, ingressen, VD:ns kommentar – **och vad den säger om utsikterna** (t.ex. under "Utsikter",
+   "Om vi ser framåt", "Marknadsförutsättningar") om den säger något om dem. Ingen egen värdering och inga
+   slutsatser som inte står i rapporten.
+   - `quotes`: 1–3 ordagranna citat ur rapporttexten (högst 25 ord vardera, kopierade tecken för tecken) som
+     belägger raden. Citaten visas inte men valideras som nyheternas: de ska finnas i texten, varje tal i raden ska
+     stå exakt så i ett citat (inga avrundningar), och ett "ökade"/"minskade" i raden får inte motsäga citatet.
+   - Inga ord om aktien eller kursen och inga råd ("köp", "sälj", "kursmål", "rekommendation" …).
+   - Bara för en rapport utan nyckeltal (`"kpis": []`) får `highlight` vara `null`.
 
 ## Svar
 

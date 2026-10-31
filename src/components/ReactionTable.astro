@@ -2,7 +2,7 @@
 /**
  * Kursreaktionen för bolag som rapporterat (scripts/afternoon.py): kurs, dagens förändring, vinst
  * per aktie mot förväntan (samma regler och texter som i rapportutfallen) och mot samma kvartal i
- * fjol. Rader där utfallet var över förväntan men kursen föll, eller under men kursen steg, markeras.
+ * fjol, sektorns huvudnyckeltal mot fjol och "I rapporten" (validerad rad ur rapportutfallen). Rader där utfallet var över förväntan men kursen föll, eller under men kursen steg, markeras.
  * Används i eftermiddagen ("Kursreaktion i dag") och i morgonrapporten ("Kursreaktion i går").
  */
 import { weekdayDate } from "../lib/calendar";
@@ -45,7 +45,8 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
   <p class="note">
     Bolag som rapporterat sedan förra handelsdagens stängning: kursen {beforeClose ? `kl. ${time(report.generated_at)}` : "vid stängning"}{" "}
     mot förra handelsdagens stängning, och vinst per aktie mot förväntan och mot samma kvartal i fjol (för
-    fastighetsbolag förvaltningsresultat per aktie när rapporten anger det; perioden syns när du håller över värdet).
+    fastighetsbolag förvaltningsresultat per aktie när rapporten anger det; perioden syns när du håller över värdet),
+    sektorns viktigaste nyckeltal mot fjol och vad rapporten själv lyfter fram.
     {report.index.change_pct !== null && ` ${report.index.name}: ${signedPct(report.index.change_pct, 2)}.`}
     {report.price_day === null && reacted.length > 0 && " Yahoo har inga kurser för dagen ännu."}
     {divergent > 0 && <> <span class="flag" aria-hidden="true">⚑</span> = kursen gick mot utfallet ({divergent}).</>}
@@ -62,8 +63,10 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
               <th scope="col">Rapport</th>
               <th scope="col" class="num">Kurs</th>
               <th scope="col" class="num">{dayCol}</th>
-              <th scope="col">Mot förväntan</th>
+              <th scope="col">Vinst/aktie mot förväntan</th>
               <th scope="col" class="num">Mot fjol</th>
+              <th scope="col">Nyckeltal mot fjol</th>
+              <th scope="col">I rapporten</th>
             </tr>
           </thead>
           <tbody>
@@ -100,6 +103,18 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
                   {c.outcome.vsLastYear}
                   {c.outcome.vsLastYearTitle && <span class="sr-only"> ({c.outcome.vsLastYearTitle})</span>}
                 </td>
+                <td class="wrap" title={c.outcome.sectorKpi?.title}>
+                  {c.outcome.sectorKpi ? (
+                    <>
+                      <span class="kpi-name">{c.outcome.sectorKpi.name}</span>{" "}
+                      <span class="kpi-value">{c.outcome.sectorKpi.text}</span>
+                      <span class="sr-only"> ({c.outcome.sectorKpi.title})</span>
+                    </>
+                  ) : (
+                    <span class="muted">–</span>
+                  )}
+                </td>
+                <td class="highlight">{c.outcome.highlight ?? <span class="muted">–</span>}</td>
               </tr>
             ))}
           </tbody>
@@ -200,6 +215,19 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
     white-space: normal;
     min-width: 9ch;
     max-width: 26ch;
+  }
+  /* "I rapporten": högst 15 ord, radbryts. */
+  td.highlight {
+    white-space: normal;
+    min-width: 24ch;
+    max-width: 48ch;
+  }
+  .kpi-name {
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+  .kpi-value {
+    white-space: nowrap;
   }
   table {
     border-collapse: collapse;

@@ -446,8 +446,17 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
   3. Dagens kursreaktion för de rapporterande bolagen med `scripts/afternoon.py`, i `data/afternoon/<datum>.json`.
   4. Bygget av sidan.
 
-  Tabellen "Kursreaktion" har kolumnerna kurs, dagens förändring, vinst per aktie mot förväntan och vinst per aktie
-  mot samma kvartal i fjol. "Mot fjol" har följande regler:
+  Tabellen "Kursreaktion" har kolumnerna kurs, dagens förändring, "Vinst/aktie mot förväntan", vinst per aktie
+  mot samma kvartal i fjol ("Mot fjol"), "Nyckeltal mot fjol" och "I rapporten".
+  - "Nyckeltal mot fjol" är sektorns huvudnyckeltal ur rapportutfallen: det första av sektorns egna nyckeltal
+    (`data/sectors.json`, t.ex. orderingång för industri) som rapporten anger för kvartalet, utom det som redan står
+    under "Mot fjol". Procenttal (marginaler) visas med fjolårsvärdet: "19,9 % (16,9)".
+  - "I rapporten" är en rad på högst 15 ord om det rapporten själv lyfter fram, inklusive utsikter, som
+    `/rapportutfall` skriver (`highlight`). Den har ordagranna citat som valideras som nyheternas (citatet finns i
+    rapporten, varje tal belagt exakt, riktningsord stämmer, inga ord om aktien eller råd). Citaten visas inte. Raden
+    krävs från och med vecka 44 2026 för rapporter med nyckeltal.
+
+  "Mot fjol" har följande regler:
   - Bara kvartalsvärden visas. Valideringen kräver en kvartalsangivelse ("juli–september", "tredje kvartalet" o.d.)
     före citatet för värden per aktie.
   - Fastighetsbolag visar förvaltningsresultat per aktie när rapporten anger det.

@@ -10,6 +10,8 @@ import {
   lastYearText,
   periodVsLastYear,
   reactionOutcome,
+  sectorKpiText,
+  sectorMainKpi,
   surpriseShort,
   surpriseText,
   yoyText,
@@ -84,7 +86,38 @@ test("kursreaktion: mot förväntan, mot fjol och kurs mot utfallet", () => {
   assert.equal(reactionOutcome(null, report("över", 4.2)).divergent, false);
   assert.equal(over.vsLastYearTitle, "Q3 2026 mot Q3 2025 · Resultat per aktie");
   const none = reactionOutcome(2.0, undefined);
-  assert.deepEqual(none, { vsExpected: null, vsLastYear: "–", vsLastYearTitle: null, divergent: false });
+  assert.deepEqual(none, {
+    vsExpected: null, vsLastYear: "–", vsLastYearTitle: null, sectorKpi: null, highlight: null, divergent: false,
+  });
+});
+
+test("kursreaktion: sektorns huvudnyckeltal och I rapporten", () => {
+  const kpi = (id: string, name: string, value: number, prev: number | null, unit: string, change: number | null,
+    period_kind: "kvartal" | "delår" = "kvartal") =>
+    ({ id, name, value, unit, previous_value: prev, change_pct: change, yoy_pct: change, period_kind, quote: "" });
+  const base = { ticker: "ALFA", name: "Alfaverken", sector: "industri", published: "", url: "", source_name: "",
+    period: "Q3 2026", note: null, vs_consensus: null };
+  const order = kpi("orderingang", "Orderingång", 424, 467, "MSEK", -9);
+  const margin = kpi("rorelsemarginal", "Rörelsemarginal", 19.9, 16.9, "procent", null);
+  const sales = kpi("nettoomsattning", "Nettoomsättning", 435, 415, "MSEK", 5);
+  const eps = kpi("resultat-per-aktie", "Resultat per aktie", 0.45, 0.33, "SEK", null);
+  const r = reactionOutcome(-16.4, {
+    ...base, kpis: [order, margin, sales, eps],
+    highlight: { text: "Orderingången minskade; VD ser en tudelad marknad", quotes: ["…"] },
+  });
+  assert.deepEqual(r.sectorKpi, { name: "Orderingång", text: `${MINUS}9 %`, title: "Q3 2026 mot Q3 2025 · Orderingång" });
+  assert.equal(r.highlight, "Orderingången minskade; VD ser en tudelad marknad");
+  // Utan orderingång: nästa av sektorns nyckeltal; procenttal visas med fjolårsvärdet.
+  assert.equal(sectorMainKpi({ ...base, kpis: [margin, sales, eps] })?.id, "rorelsemarginal");
+  assert.equal(sectorKpiText(margin), "19,9 % (16,9)");
+  // Bara kvartalsvärden, och aldrig omsättning eller resultat per aktie.
+  assert.equal(sectorMainKpi({ ...base, kpis: [{ ...order, period_kind: "delår" }, sales, eps] }), undefined);
+  // Fastighetsbolag: förvaltningsresultat per aktie visas redan under Mot fjol, så belåningsgraden tas.
+  const fr = kpi("forvaltningsresultat-per-aktie", "Förvaltningsresultat per aktie", 2.1, 1.9, "SEK", null);
+  const ltv = kpi("belaningsgrad", "Belåningsgrad", 41.2, 43.0, "procent", null);
+  assert.equal(sectorMainKpi({ ...base, sector: "fastigheter", kpis: [fr, ltv, eps] })?.id, "belaningsgrad");
+  // Äldre filer utan highlight.
+  assert.equal(reactionOutcome(1, { ...base, kpis: [order] }).highlight, null);
 });
 
 test("mot fjol: båda värdena vid teckenbyte, nära noll och över ±200 %", () => {

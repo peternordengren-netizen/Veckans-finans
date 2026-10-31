@@ -68,6 +68,16 @@
           "raw_file": { "type": "string" },
           "period": { "type": "string" },
           "note": { "type": ["string", "null"] },
+          "highlight": {
+            "type": ["object", "null"],
+            "description": "\"I rapporten\" (se results-batch.schema.json); citaten visas inte. Saknas i äldre filer.",
+            "additionalProperties": false,
+            "required": ["text", "quotes"],
+            "properties": {
+              "text": { "type": "string", "minLength": 1 },
+              "quotes": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+            }
+          },
           "kpis": {
             "type": "array",
             "items": {

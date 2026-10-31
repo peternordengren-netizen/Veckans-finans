@@ -158,6 +158,60 @@ def test_tusentalspunkt_och_decimalkolon_i_citat():
     assert r.errors == []
 
 
+def test_i_rapporten_valideras_som_nyheterna():
+    from validate_results import check_highlight, highlight_required
+
+    text = _normalize_ws(ALFA_TEXT + "\nUtsikter\nVi räknar med att efterfrågan i Norden förblir svag under 2027.\n")
+    q_order = "Orderingången ökade med 12 % till 1 344 MSEK (1 200)"
+    q_outlook = "Vi räknar med att efterfrågan i Norden förblir svag under 2027."
+
+    def errors(h):
+        r = Result()
+        check_highlight(h, text, "t", r)
+        return r.errors
+
+    assert errors({"text": "Orderingången ökade 12 %; svag efterfrågan i Norden väntas under 2027",
+                   "quotes": [q_order, q_outlook]}) == []
+    cases = [
+        ({"text": "Orderingången ökade 13 %", "quotes": [q_order]}, "utan exakt stöd"),
+        ({"text": "Orderingången minskade 12 %", "quotes": [q_order]}, "riktningen"),
+        ({"text": "Orderingången ökade", "quotes": ["Orderingången ökade kraftigt"]}, "finns inte i rapporttexten"),
+        ({"text": " ".join(["ord"] * 16), "quotes": [q_order]}, "16 ord"),
+        ({"text": "Orderingången ökade", "quotes": []}, "0 citat"),
+        ({"text": "Orderingången ökade, aktien ser billig ut", "quotes": [q_order]}, "aktien"),
+    ]
+    for h, msg in cases:
+        errs = errors(h)
+        assert any(msg in e for e in errs), (msg, errs)
+    # Krävs från och med vecka 44 2026, för veckor, dagar och uppdateringar.
+    assert not highlight_required("2026-W43") and not highlight_required("2026-10-23")
+    assert highlight_required("2026-W44") and highlight_required("2026-10-26") and highlight_required("2026-10-29T1745")
+
+
+def test_i_rapporten_kravs_fran_vecka_44(tmp_path):
+    """En rapport utan "I rapporten" i vecka 44 underkänns (och görs om ensam); utan nyckeltal behövs ingen rad."""
+    from validate_results import check_batch
+
+    raw = tmp_path / "raw"
+    (raw / "2026-W44" / "mfn").mkdir(parents=True)
+    (raw / "2026-W44" / "mfn" / "alfa.txt").write_text(ALFA_TEXT, encoding="utf-8")
+    (raw / "2026-W44" / "mfn" / "beta.txt").write_text("Rubrik: x\n---\nInga siffror i utdraget.\n", encoding="utf-8")
+    items = [
+        {"source": "mfn", "source_name": "MFN", "url": "https://mfn.example/alfa", "published": "2026-10-29T07:00:00+01:00",
+         "title": "Alfaverken delårsrapport januari-september 2026", "company": "alfaverken", "path": "mfn/alfa.txt",
+         "text_kind": "fulltext"},
+        {"source": "mfn", "source_name": "MFN", "url": "https://mfn.example/beta", "published": "2026-10-30T07:00:00+01:00",
+         "title": "Betabolaget: Delårsrapport Q3 2026", "company": "betabolaget", "path": "mfn/beta.txt",
+         "text_kind": "fulltext"},
+    ]
+    (raw / "2026-W44" / "index.json").write_text(json.dumps({"items": items}), encoding="utf-8")
+    b = {"week": "2026-W44", "batch": 1, "reports": [alfa(), beta()]}
+    assert list(check_batch(b, "2026-W44", 1, INSTRUMENTS, raw, tmp_path / "morning", tmp_path / "results").rejected) == ["ALFA"]
+    h = {"text": "Orderingången ökade 12 % i kvartalet", "quotes": ["Orderingången ökade med 12 % till 1 344 MSEK (1 200)"]}
+    b["reports"][0]["highlight"] = h
+    assert check_batch(b, "2026-W44", 1, INSTRUMENTS, raw, tmp_path / "morning", tmp_path / "results").rejected == {}
+
+
 def test_forandring_som_inte_stammer_med_vardena():
     text = "Juli - september 2026: Vinsten ökade med 40 % till 1 344 MSEK (1 200)"
     r = Result()

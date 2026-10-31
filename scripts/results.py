@@ -165,7 +165,7 @@ def _merge_batches(scope: str, instruments: dict[str, Instrument], dirs: dict, r
             out = {"ticker": r["ticker"], "name": inst.namn, "scope": scope, "sector": inst.sektor,
                    "published": listed_r["published"], "url": listed_r["url"],
                    "source_name": listed_r["source_name"], "raw_file": r["raw_file"], "period": r["period"],
-                   "note": r["note"], "kpis": kpis}
+                   "note": r["note"], "highlight": r.get("highlight"), "kpis": kpis}
             out["vs_consensus"] = vs_consensus(out, datetime.fromisoformat(listed_r["published"]).date(),
                                                consensus_dir)
             reports.append(out)

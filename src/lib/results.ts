@@ -36,6 +36,10 @@ export interface ReactionOutcome {
   vsLastYear: string;
   /** Tooltip: perioderna och nyckeltalet, t.ex. "Q3 2026 mot Q3 2025 · Resultat per aktie", eller null. */
   vsLastYearTitle: string | null;
+  /** Sektorns huvudnyckeltal mot samma kvartal i fjol (sectorKpi), eller null. */
+  sectorKpi: { name: string; text: string; title: string } | null;
+  /** "I rapporten": vad rapporten själv lyfter fram (citaten visas inte), eller null. */
+  highlight: string | null;
   /** Över förväntan men kursen föll, eller under förväntan men kursen steg. */
   divergent: boolean;
 }
@@ -72,9 +76,29 @@ export function periodVsLastYear(period: string): string {
   return m ? `${m[1]} ${m[2]} mot ${m[1]} ${Number(m[2]) - 1}` : period;
 }
 
+/** Nyckeltal som alla bolag har; sektorns egna står före dem i rapportutfallen (sectors.json-ordning). */
+const COMMON_KPIS = new Set(["nettoomsattning", "resultat-per-aktie", "justerat-resultat-per-aktie"]);
+
+/**
+ * Sektorns huvudnyckeltal för kursreaktionen: det första av sektorns egna nyckeltal (t.ex. orderingång för
+ * industri) som rapporten anger för kvartalet, utom det som redan visas under "Mot fjol". Rapportutfallens
+ * nyckeltal är sorterade med sektorns först, i sectors.json-ordning.
+ */
+export function sectorMainKpi(report: ReportResult): ResultKpi | undefined {
+  const used = lastYearKpi(report)?.id;
+  return report.kpis.find((k) => !COMMON_KPIS.has(k.id) && k.id !== used && k.period_kind === "kvartal");
+}
+
+/** "−9 %" för belopp m.m., och för procenttal båda värdena: "19,9 % (16,9)". */
+export function sectorKpiText(k: ResultKpi): string {
+  if (k.unit === "procent") return k.previous_value === null ? `${nf.format(k.value)} %` : `${nf.format(k.value)} % (${nf.format(k.previous_value)})`;
+  return lastYearText(k);
+}
+
 export function reactionOutcome(changePct: number | null, report: ReportResult | undefined): ReactionOutcome {
   const eps = report?.vs_consensus?.eps ?? null;
   const yoy = report ? lastYearKpi(report) : undefined;
+  const main = report ? sectorMainKpi(report) : undefined;
   const divergent =
     eps !== null && changePct !== null &&
     ((eps.verdict === "över" && changePct < 0) || (eps.verdict === "under" && changePct > 0));
@@ -84,6 +108,11 @@ export function reactionOutcome(changePct: number | null, report: ReportResult |
       : null,
     vsLastYear: yoy ? lastYearText(yoy) : "–",
     vsLastYearTitle: yoy && report ? `${periodVsLastYear(report.period)} · ${yoy.name}` : null,
+    sectorKpi:
+      main && report
+        ? { name: main.name, text: sectorKpiText(main), title: `${periodVsLastYear(report.period)} · ${main.name}` }
+        : null,
+    highlight: report?.highlight?.text ?? null,
     divergent,
   };
 }
@@ -102,6 +131,8 @@ export interface ReportResult {
   source_name: string;
   period: string;
   note: string | null;
+  /** "I rapporten" (saknas i äldre filer); citaten är validerade mot rapporten men visas inte. */
+  highlight?: { text: string; quotes: string[] } | null;
   kpis: ResultKpi[];
   vs_consensus: {
     consensus_date: string;

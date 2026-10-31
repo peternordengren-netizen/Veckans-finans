@@ -29,7 +29,18 @@
         "raw_file": { "type": "string", "minLength": 1 },
         "period": { "type": "string", "minLength": 1, "description": "Rapportens kvartal, t.ex. 'Q3 2026'." },
         "kpis": { "type": "array", "items": { "$ref": "#/$defs/kpi" } },
-        "note": { "type": ["string", "null"], "description": "Varför nyckeltal saknas, t.ex. investmentbolag." }
+        "note": { "type": ["string", "null"], "description": "Varför nyckeltal saknas, t.ex. investmentbolag." },
+        "highlight": { "$ref": "#/$defs/highlight" }
+      }
+    },
+    "highlight": {
+      "type": ["object", "null"],
+      "description": "\"I rapporten\": det rapporten själv lyfter fram som viktigast, inklusive utsikter (högst 15 ord), med ordagranna citat ur rapporten som belägg (visas inte). Krävs från och med vecka 44 2026 när rapporten har nyckeltal.",
+      "additionalProperties": false,
+      "required": ["text", "quotes"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "quotes": { "type": "array", "items": { "type": "string", "minLength": 1 } }
       }
     }
   },

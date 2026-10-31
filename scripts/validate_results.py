@@ -20,12 +20,13 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
 from validate import (
-    DATA_DIR, RAW_DIR, Instrument, Result, _check_datetime, _normalize_ws, _schema_errors, _schema_validator,
-    extract_numbers, iso_week_period, load_sector_kpis,
+    _SENTIMENT_FORBIDDEN_RE, DATA_DIR, RAW_DIR, Instrument, Result, _check_datetime, _normalize_ws, _schema_errors,
+    _schema_validator, direction_conflicts, extract_numbers, iso_week_period, load_sector_kpis, unsupported_numbers,
 )
 
 MAX_QUOTE_WORDS = 25
@@ -175,7 +176,44 @@ def _kpi_kinds(instruments: dict[str, Instrument]) -> dict[str, dict[str, str]]:
     return {t: {k["id"]: k["kind"] for k in kpis_for(i, sector_kpis)} for t, i in instruments.items()}
 
 
-def _check_report(r: dict, listed: dict, kinds: dict[str, str], where: str, res: Result) -> None:
+HIGHLIGHT_FROM = date(2026, 10, 26)  # "I rapporten" krävs för rapporter från och med vecka 44
+MAX_HIGHLIGHT_WORDS = 15
+MAX_HIGHLIGHT_QUOTES = 3
+
+
+def highlight_required(scope: str) -> bool:
+    """Om rapporterna i läget (vecka, dag eller uppdatering) ska ha "I rapporten" (highlight)."""
+    start = iso_week_period(scope)[0] if re.fullmatch(r"\d{4}-W\d{2}", scope) else date.fromisoformat(scope[:10])
+    return start >= HIGHLIGHT_FROM
+
+
+def check_highlight(h: dict, raw_text: str, where: str, res: Result) -> None:
+    """"I rapporten": en kort rad (högst MAX_HIGHLIGHT_WORDS ord) om det rapporten själv lyfter fram, med
+    ordagranna citat som för nyheterna: varje tal i raden ska beläggas exakt av ett citat, riktningsord får
+    inte motsäga citaten, och inga ord om aktien, kursen eller råd."""
+    text, quotes = h["text"], h["quotes"]
+    if len(text.split()) > MAX_HIGHLIGHT_WORDS:
+        res.errors.append(f"{where}: raden har {len(text.split())} ord (max {MAX_HIGHLIGHT_WORDS})")
+    if not 1 <= len(quotes) <= MAX_HIGHLIGHT_QUOTES:
+        res.errors.append(f"{where}: {len(quotes)} citat (1–{MAX_HIGHLIGHT_QUOTES})")
+    for q in quotes:
+        if len(q.split()) > MAX_QUOTE_WORDS:
+            res.errors.append(f"{where}: citatet har {len(q.split())} ord (max {MAX_QUOTE_WORDS}): {q[:60]!r}…")
+        if _normalize_ws(q) not in raw_text:
+            res.errors.append(f"{where}: citatet finns inte i rapporttexten: {q[:60]!r}")
+    missing = unsupported_numbers(text, quotes)
+    if missing:
+        res.errors.append(f"{where}: siffror utan exakt stöd i citaten: {missing}")
+    conflicts = direction_conflicts(text, quotes)
+    if conflicts:
+        res.errors.append(f"{where}: riktningen motsäger citaten: {conflicts}")
+    forbidden = sorted({m.group(0) for m in _SENTIMENT_FORBIDDEN_RE.finditer(text)})
+    if forbidden:
+        res.errors.append(f"{where}: ord om aktien, kursen eller råd: {forbidden}")
+
+
+def _check_report(r: dict, listed: dict, kinds: dict[str, str], where: str, res: Result,
+                  scope: str | None = None) -> None:
     from report_list import report_path
 
     if r["raw_file"] != listed["raw_file"]:
@@ -186,6 +224,10 @@ def _check_report(r: dict, listed: dict, kinds: dict[str, str], where: str, res:
         res.errors.append(f"{where}: rapporttexten {path} finns inte")
         return
     raw_text = _normalize_ws(path.read_text(encoding="utf-8"))
+    if r.get("highlight"):
+        check_highlight(r["highlight"], raw_text, f"{where} I rapporten", res)
+    elif scope and highlight_required(scope) and r["kpis"]:  # ett utdrag utan siffror behöver ingen rad
+        res.errors.append(f"{where}: \"I rapporten\" (highlight) saknas")
     seen: set[str] = set()
     for k in r["kpis"]:
         kw = f"{where} {k['id']}"
@@ -256,7 +298,7 @@ def check_batch(data: dict, week: str, batch: int, instruments: dict[str, Instru
         if t not in listed or t in out.rejected:
             continue
         res = Result()
-        _check_report(r, listed[t], kinds[t], t, res)
+        _check_report(r, listed[t], kinds[t], t, res, week)
         out.warnings += res.warnings
         if res.errors:
             out.rejected[t] = res.errors
@@ -313,7 +355,7 @@ def validate_results(data: dict, week: str, instruments: dict[str, Instrument], 
         inst = instruments[r["ticker"]]
         if r["name"] != inst.namn or r["url"] != listed[r["ticker"]]["url"]:
             res.errors.append(f"{where}: namn eller url stämmer inte med listan")
-        _check_report(r, listed[r["ticker"]], kinds[r["ticker"]], where, res)
+        _check_report(r, listed[r["ticker"]], kinds[r["ticker"]], where, res, r["scope"])
         for k in r["kpis"]:
             _check_yoy(k, kinds[r["ticker"]].get(k["id"]), f"{where} {k['id']}", res)
         _check_comparison(r, where, res, consensus_dir)
