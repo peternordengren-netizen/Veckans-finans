@@ -85,9 +85,25 @@ test("kursreaktion: mot förväntan, mot fjol och kurs mot utfallet", () => {
   assert.equal(reactionOutcome(-9, report("bolagshändelse", 80)).vsExpected?.text, "bolagshändelse");
   assert.equal(reactionOutcome(null, report("över", 4.2)).divergent, false);
   assert.equal(over.vsLastYearTitle, "Q3 2026 mot Q3 2025 · Resultat per aktie");
+  assert.equal(over.revenueVsExpected, null); // ingen omsättningsförväntan
+  // Omsättning mot förväntan: samma regler och etiketter som vinst per aktie, belopp i mn/mdr.
+  const rev = (verdict: string, surprise_pct: number, actual = 435e6, expected = 468.5e6) =>
+    ({ actual, expected, analysts: 4, currency: "SEK", surprise_pct, verdict }) as never;
+  const withRev = (r: ReturnType<typeof rev>) => {
+    const base = report("i linje", -1.5);
+    return { ...base, vs_consensus: { ...base.vs_consensus, revenue: r } };
+  };
+  const under = reactionOutcome(-16.4, withRev(rev("under", -7.2)));
+  assert.equal(under.revenueVsExpected?.text, `${MINUS}7,2 %`);
+  assert.equal(under.revenueVsExpected?.title, `${MINUS}7,2 % mot förväntan`);
+  assert.equal(under.revenueVsExpected?.verdict, "under");
+  assert.equal(reactionOutcome(1, withRev(rev("i linje", 1))).revenueVsExpected?.text, "i linje");
+  assert.equal(reactionOutcome(1, withRev(rev("osäker konsensus", -40))).revenueVsExpected?.text, "osäker konsensus");
+  assert.equal(reactionOutcome(1, withRev(rev("kontrollera", 125, 1.5e9, 4e9))).revenueVsExpected?.text,
+    "kontrollera: 1,5 mdr kr (förv. 4 mdr)");
   const none = reactionOutcome(2.0, undefined);
   assert.deepEqual(none, {
-    vsExpected: null, vsLastYear: "–", vsLastYearTitle: null, sectorKpi: null, highlight: null, divergent: false,
+    vsExpected: null, revenueVsExpected: null, vsLastYear: "–", vsLastYearTitle: null, sectorKpi: null, highlight: null, divergent: false,
   });
 });
 

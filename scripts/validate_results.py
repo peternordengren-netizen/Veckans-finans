@@ -187,11 +187,39 @@ def highlight_required(scope: str) -> bool:
     return start >= HIGHLIGHT_FROM
 
 
+# Ord som en mening inte slutar på: står de sist har raden kapats mitt i ("… bland annat inom.").
+DANGLING_WORDS = {
+    "och", "samt", "men", "eller", "att", "som", "med", "för", "till", "av", "på", "i", "inom", "om", "från", "mot",
+    "bland", "annat", "under", "efter", "vid", "genom", "trots", "utan", "än", "den", "det", "de", "en", "ett",
+    "är", "var", "har", "hade", "blev", "kommer", "ska", "kan", "väntas", "både", "dels", "vilket", "där", "när",
+}
+
+
+def sentence_problems(text: str) -> list[str]:
+    """Formella tecken på att raden inte är en hel mening: stor bokstav (eller siffra) först, punkt,
+    utrops- eller frågetecken sist, inget "…" och inget ord sist som kräver en fortsättning. Om
+    meningen är grammatiskt fullständig i övrigt går inte att avgöra här."""
+    t = text.strip()
+    out = []
+    if not t or not (t[0].isupper() or t[0].isdigit()):
+        out.append("ska börja med stor bokstav")
+    if t.endswith(("…", "...")) or not t.endswith((".", "!", "?")):
+        out.append("ska sluta med punkt")
+    words = re.findall(r"\w+", t.rstrip(".!?…").casefold())  # med tal: "… under 2027." slutar på 2027
+    if words and words[-1] in DANGLING_WORDS:
+        out.append(f"slutar på {words[-1]!r}")
+    if t.count("(") != t.count(")") or t.count("\"") % 2 or t.count("”") % 2:
+        out.append("parentes eller citattecken stängs inte")
+    return out
+
+
 def check_highlight(h: dict, raw_text: str, where: str, res: Result) -> None:
-    """"I rapporten": en kort rad (högst MAX_HIGHLIGHT_WORDS ord) om det rapporten själv lyfter fram, med
+    """"I rapporten": en hel mening (sentence_problems, högst MAX_HIGHLIGHT_WORDS ord) om det rapporten själv lyfter fram, med
     ordagranna citat som för nyheterna: varje tal i raden ska beläggas exakt av ett citat, riktningsord får
     inte motsäga citaten, och inga ord om aktien, kursen eller råd."""
     text, quotes = h["text"], h["quotes"]
+    for problem in sentence_problems(text):
+        res.errors.append(f"{where}: inte en hel mening ({problem}): {text!r}")
     if len(text.split()) > MAX_HIGHLIGHT_WORDS:
         res.errors.append(f"{where}: raden har {len(text.split())} ord (max {MAX_HIGHLIGHT_WORDS})")
     if not 1 <= len(quotes) <= MAX_HIGHLIGHT_QUOTES:

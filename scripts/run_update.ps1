@@ -11,6 +11,11 @@
 #   4. npm run build
 # - -Scheduled: gör ingenting på börsens stängda dagar, och inte heller före 17:45 (en körning
 #   som tas igen nästa morgon efter att datorn varit avstängd – morgonflödet tar då hand om det).
+#   Uppgiften startas också vid inloggning och upplåsning; då körs den bara om dagens kursreaktion
+#   saknas, togs fram före stängning eller är ofullständig, högst fyra schemalagda gånger per dag.
+# - Saknas nätverket (fetch.py: ingen källa svarade) avbryts körningen med ett FEL i loggen, utan
+#   rapportutfall och kursreaktion. Saknas kurser skriver afternoon.py filen med "retry" (exit 2).
+#   I båda fallen försöker nästa inloggning eller upplåsning igen (och nästa morgon morgonflödet).
 # - Logg i logs/updates/<datum>.log, bygget i logs/updates/<datum>-build.log.
 #
 # Manuellt: powershell -NoProfile -File scripts\run_update.ps1 [-Open]
@@ -36,11 +41,6 @@ Set-Location $Root
 $env:PYTHONIOENCODING = "utf-8"
 $Py = ".venv\Scripts\python.exe"
 
-if ($Scheduled) {
-    & $Py scripts\afternoon.py --handelsdag
-    if ($LASTEXITCODE -eq 3) { Write-Output "Börsen är stängd i dag - ingen eftermiddagsuppdatering."; exit 0 }
-}
-
 New-Item -ItemType Directory -Force $LogDir | Out-Null
 $Today = Get-Date -Format "yyyy-MM-dd"
 $Scope = "{0}T{1}" -f $Today, (Get-Date -Format "HHmm")
@@ -51,11 +51,31 @@ function Log([string]$Text) {
     Write-Output $line
 }
 
+if ($Scheduled) {
+    & $Py scripts\afternoon.py --handelsdag
+    if ($LASTEXITCODE -eq 3) { Write-Output "Börsen är stängd i dag - ingen eftermiddagsuppdatering."; exit 0 }
+    # Samma uppgift startas också vid inloggning och upplåsning: bara om dagens kursreaktion saknas,
+    # togs fram före stängning eller saknade kurser/nätverk, och högst MaxScheduled gånger per dag.
+    & $Py scripts\afternoon.py --klar
+    if ($LASTEXITCODE -eq 0) { Write-Output "Dagens eftermiddagsuppdatering är klar - inget att göra."; exit 0 }
+    $MaxScheduled = 4
+    $done = if (Test-Path $RunLog) { @(Select-String -Path $RunLog -SimpleMatch "startar (schemalagd)").Count } else { 0 }
+    if ($done -ge $MaxScheduled) { Write-Output "Redan $MaxScheduled schemalagda försök i dag - se $RunLog."; exit 0 }
+}
+
 Log "Uppdatering $Scope startar$(if ($Scheduled) { ' (schemalagd)' } else { '' })"
 
 # 1. Lokal hämtning. Via cmd så att stderr inte blir PowerShell-fel.
 & cmd.exe /c "$Py scripts\fetch.py --raw-dir data\morning\raw --mfn-limit 500 2>&1" | ForEach-Object { Log "  $_" }
-Log "fetch.py: exit $LASTEXITCODE"
+$fetchCode = $LASTEXITCODE
+Log "fetch.py: exit $fetchCode"
+if ($fetchCode -ne 0) {
+    # Ingen källa gick att nå. Rapportutfallen väntar (annars låses ett tidsfönster över rapporter som
+    # inte hämtats), och kursreaktionen behöver också nätverket. Dagens fil lämnas som den är.
+    Log "FEL: nätverket saknas (ingen källa svarade) - nytt försök vid nästa inloggning eller upplåsning."
+    Log "Klart (avbrutet)"
+    exit 0
+}
 
 # 2. Rapportutfall i uppdateringens fönster.
 try {
@@ -67,7 +87,8 @@ try {
 
 # 3. Dagens kursreaktion.
 & cmd.exe /c "$Py scripts\afternoon.py 2>&1" | ForEach-Object { Log "  $_" }
-Log "afternoon.py: exit $LASTEXITCODE"
+$code = $LASTEXITCODE
+Log ("afternoon.py: exit $code" + $(if ($code -eq 2) { " - FEL: kurser saknas, nytt försök vid nästa inloggning eller upplåsning" } else { "" }))
 
 # 4. Bygget.
 $BuildLog = Join-Path $LogDir "$Today-build.log"

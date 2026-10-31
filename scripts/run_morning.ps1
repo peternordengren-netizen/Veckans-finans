@@ -13,8 +13,11 @@
 #      Saknar filen en omgång (underkänd två gånger i run_results.ps1) görs steget om vid nästa
 #      utlösare, inom gränsen för försök nedan.
 #   4. npm run build                    om något steg kördes
-# - Högst två försök per steg och dag (räknas i loggen), så att ett fel inte ger nya hämtningar
-#   eller Claude-körningar vid varje upplåsning.
+# - Saknas förra handelsdagens kurser eller nätverket skrivs morgonrapporten ändå, men med "retry"
+#   (morning.py exit 2), felet loggas och nästa utlösare gör om den. Samma för förra dagens
+#   kursreaktion (afternoon.py --forra-om-saknas). Utan nätverk väntar konsensus och rapportutfall.
+# - Högst två försök per steg och dag (räknas i loggen), fyra för morgonrapporten och kursreaktionen
+#   (ingen Claude), så att ett fel inte ger nya hämtningar eller Claude-körningar vid varje upplåsning.
 # - Logg i logs/morning/<datum>.log, bygget i logs/morning/<datum>-build.log.
 #
 # Manuellt: powershell -NoProfile -File scripts\run_morning.ps1
@@ -43,6 +46,15 @@ $Consensus = Join-Path $Root "data\consensus\$Today.json"
 $Results = Join-Path $Root "data\results\morning\$Today.json"
 $RunLog = Join-Path $LogDir "$Today.log"
 $MaxAttempts = 2
+# Morgonrapporten och kursreaktionen använder inte Claude (en hämtning per körning), så de får fler
+# försök när kurser eller nätverket saknades.
+$MaxFetchAttempts = 4
+
+function Retry([string]$File) {
+    # "retry" i filen: varför den är ofullständig ("kurser", "nätverk"); tom eller saknas = klar.
+    try { return @((Get-Content $File -Raw -Encoding UTF8 | ConvertFrom-Json).retry | Where-Object { $_ }) }
+    catch { return @("oläslig") }
+}
 
 function Attempts([string]$Marker) {
     if (Test-Path $RunLog) { @(Select-String -Path $RunLog -SimpleMatch $Marker).Count } else { 0 }
@@ -63,43 +75,63 @@ function ResultsComplete {
     }
     catch { return $false }
 }
-$needReport = -not (Test-Path $Report) -and (Attempts "Startar morning.py") -lt $MaxAttempts
+$reportIncomplete = -not (Test-Path $Report) -or @(Retry $Report).Count -gt 0
+$needReport = $reportIncomplete -and (Attempts "Startar morning.py") -lt $MaxFetchAttempts
 # Ett stopp på grund av Claudes användningsgräns räknas inte (run_results.ps1 schemalägger då själv
 # ett nytt försök efter återställningen).
 $needResults = -not (ResultsComplete) -and
     ((Attempts "Startar rapportutfall") - (Attempts "Rapportutfall: räknas inte som försök")) -lt $MaxAttempts
-if (-not $needReport -and (Test-Path $Report) -and (Test-Path $Consensus) -and -not $needResults) {
+# Förra handelsdagens kursreaktion: saknas eller ofullständig (kurser saknades) -> nytt försök.
+& cmd.exe /c ".venv\Scripts\python.exe scripts\afternoon.py --forra-om-saknas --klar > nul 2>&1"
+$needReaction = $LASTEXITCODE -eq 4 -and (Attempts "Startar kursreaktion") -lt $MaxFetchAttempts
+if (-not $needReport -and (Test-Path $Report) -and (Test-Path $Consensus) -and -not $needResults -and -not $needReaction) {
     Write-Output "Dagens morgonkörning är klar (eller har gjort sina försök) - inget att göra."
     exit 0
 }
 if (-not (Test-Path $Report) -and -not $needReport) {
-    Write-Output "Redan $MaxAttempts försök med morgonrapporten i dag - avbryter. Se $RunLog."
+    Write-Output "Redan $MaxFetchAttempts försök med morgonrapporten i dag - avbryter. Se $RunLog."
     exit 0
 }
 $ran = $false
 
 # 1. Morgonrapporten. Via cmd så att stderr (t.ex. yfinance-varningar) inte blir PowerShell-fel.
+#    Exit 2: skriven men ofullständig (kurser eller nätverket saknades) - görs om vid nästa utlösare.
 if ($needReport) {
     Log "Startar morning.py"
     & cmd.exe /c ".venv\Scripts\python.exe scripts\morning.py 2>&1" | ForEach-Object { Log "  $_" }
-    Log "morning.py: exit $LASTEXITCODE"
+    $code = $LASTEXITCODE
+    Log ("morning.py: exit $code" + $(if ($code -eq 2) { " - FEL: ofullständig ($((Retry $Report) -join ', ')), nytt försök vid nästa inloggning eller upplåsning" } else { "" }))
     $ran = $true
 }
 if (-not (Test-Path $Report)) {
     Log "Ingen morgonrapport i dag (ingen handelsdag eller fel) - resten hoppas över."
     exit 0
 }
+# Utan nätverk hämtades inga rapporter: rapportutfallen väntar, annars låses dagens tidsfönster
+# över rapporter som inte hämtats.
+$noNetwork = @(Retry $Report) -contains "nätverk"
+if ($noNetwork -and $needResults) {
+    Log "FEL: nätverket saknas - konsensus och rapportutfall väntar till nästa inloggning eller upplåsning."
+    $needResults = $false
+}
 
 # 2. Yahoos konsensus, en bild per handelsdag; bolag som redan rapporterat märks och används inte.
-if (-not (Test-Path $Consensus)) {
+if (-not (Test-Path $Consensus) -and -not $noNetwork) {
     & cmd.exe /c ".venv\Scripts\python.exe scripts\consensus.py --backup 2>&1" |
         Where-Object { $_ -match '^(Konsensus|Säkerhetskopia|Ingen|Konsensusfilen)' } | ForEach-Object { Log "  $_" }
     Log "consensus.py: exit $LASTEXITCODE"
     $ran = $true
 }
 
-# 2b. Förra handelsdagens kursreaktion ("Kursreaktion" i morgonrapporten), om eftermiddagen missades.
-& cmd.exe /c ".venv\Scripts\python.exe scripts\afternoon.py --forra-om-saknas 2>&1" | ForEach-Object { Log "  $_" }
+# 2b. Förra handelsdagens kursreaktion ("Kursreaktion" i morgonrapporten), om eftermiddagen missades
+#     eller saknade kurser. Exit 2: kurser saknas fortfarande - nytt försök vid nästa utlösare.
+if ($needReaction -and -not $noNetwork) {
+    Log "Startar kursreaktion"
+    & cmd.exe /c ".venv\Scripts\python.exe scripts\afternoon.py --forra-om-saknas 2>&1" | ForEach-Object { Log "  $_" }
+    $code = $LASTEXITCODE
+    Log ("kursreaktion: exit $code" + $(if ($code -eq 2) { " - FEL: kurser saknas, nytt försök vid nästa inloggning eller upplåsning" } else { "" }))
+    $ran = $true
+}
 
 # 3. Rapportutfall sedan förra morgonen. Fel här får aldrig stoppa bygget.
 if ($needResults) {

@@ -170,8 +170,19 @@ def test_i_rapporten_valideras_som_nyheterna():
         check_highlight(h, text, "t", r)
         return r.errors
 
-    assert errors({"text": "Orderingången ökade 12 %; svag efterfrågan i Norden väntas under 2027",
+    assert errors({"text": "Orderingången ökade 12 %; svag efterfrågan i Norden väntas under 2027.",
                    "quotes": [q_order, q_outlook]}) == []
+    # Hel mening: punkt sist, stor bokstav först, inget ord sist som kräver fortsättning (Net Insight
+    # 2026-10-29 slutade "… och kommersiella framsteg" utan punkt).
+    for bad, msg in [
+        ("Svagt kvartal men intäkterna förbättrades och kommersiella framsteg", "ska sluta med punkt"),
+        ("orderingången ökade 12 %.", "stor bokstav"),
+        ("Tillväxtmöjligheter finns bland annat inom.", "slutar på 'inom'"),
+        ("Orderingången ökade 12 % och…", "ska sluta med punkt"),
+        ("Orderingången ökade (12 %.", "parentes"),
+    ]:
+        errs = errors({"text": bad, "quotes": [q_order]})
+        assert any("inte en hel mening" in e and msg in e for e in errs), (bad, errs)
     cases = [
         ({"text": "Orderingången ökade 13 %", "quotes": [q_order]}, "utan exakt stöd"),
         ({"text": "Orderingången minskade 12 %", "quotes": [q_order]}, "riktningen"),
@@ -207,7 +218,7 @@ def test_i_rapporten_kravs_fran_vecka_44(tmp_path):
     (raw / "2026-W44" / "index.json").write_text(json.dumps({"items": items}), encoding="utf-8")
     b = {"week": "2026-W44", "batch": 1, "reports": [alfa(), beta()]}
     assert list(check_batch(b, "2026-W44", 1, INSTRUMENTS, raw, tmp_path / "morning", tmp_path / "results").rejected) == ["ALFA"]
-    h = {"text": "Orderingången ökade 12 % i kvartalet", "quotes": ["Orderingången ökade med 12 % till 1 344 MSEK (1 200)"]}
+    h = {"text": "Orderingången ökade 12 % i kvartalet.", "quotes": ["Orderingången ökade med 12 % till 1 344 MSEK (1 200)"]}
     b["reports"][0]["highlight"] = h
     assert check_batch(b, "2026-W44", 1, INSTRUMENTS, raw, tmp_path / "morning", tmp_path / "results").rejected == {}
 

@@ -11,7 +11,8 @@
 #   Samma väckning och inloggnings-/upplåsningsutlösare som veckouppgiften, högst 30 minuter.
 #   Utlöses den före 08:10 (inloggning eller upplåsning tidigt) gör run_morning.ps1 ingenting.
 # - VeckansFinansEftermiddag: vardagar 17:45, kör scripts\run_update.ps1 -Scheduled. Samma väckning,
-#   högst en timme.
+#   högst en timme. Också vid inloggning och upplåsning (gör då bara något om dagens kursreaktion
+#   saknas eller är ofullständig).
 # - Skrivbordsgenvägen "Uppdatera nu" kör scripts\run_update.ps1 -Open i ett synligt fönster.
 # Alla körs som den inloggade användaren, bara när hen är inloggad, utan förhöjd behörighet.
 # - Skrivbordsgenvägen "Veckans finans" kör scripts\open_site.ps1 dolt.
@@ -81,8 +82,9 @@ Register-ScheduledTask -TaskName "VeckansFinansMorgonrapport" -Force `
 
 # Vardagar 17:45 lokal tid: eftermiddagsuppdateringen. Väcker datorn och tas igen samma kväll om
 # datorn var avstängd; run_update.ps1 -Scheduled gör ingenting före 17:45 (t.ex. nästa morgon)
-# eller när börsen är stängd. Ingen inloggnings-/upplåsningsutlösare: morgonflödet tar upp det
-# som missats.
+# eller när börsen är stängd. Inloggning och upplåsning startar den också: run_update.ps1 kör då
+# bara om dagens kursreaktion saknas eller är ofullständig (kurser eller nätverket saknades).
+# Det som fortfarande saknas nästa morgon tar morgonflödet.
 $afternoon = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday -At "17:45"
 $afternoon.StartBoundary = (Get-Date "17:45").ToString("yyyy-MM-dd'T'HH:mm:ss")
 # En timme: på en tung rapportdag kan det bli flera Claude-omgångar, och låset i run_results.ps1
@@ -94,7 +96,7 @@ $afternoonAction = New-ScheduledTaskAction -Execute $Conhost -WorkingDirectory $
     -Argument "--headless `"$Ps`" -NoProfile -File `"$(Join-Path $Root 'scripts\run_update.ps1')`" -Scheduled"
 Register-ScheduledTask -TaskName "VeckansFinansEftermiddag" -Force `
     -Description "Veckans finans: eftermiddagsuppdatering (rapportutfall sedan morgonen med Claude Code om det finns nya rapporter, dagens kursreaktion), bygger sedan om sidan. Loggar i logs\updates\." `
-    -Action $afternoonAction -Trigger $afternoon `
+    -Action $afternoonAction -Trigger @($afternoon, $atLogon, $atUnlock) `
     -Principal $Principal -Settings $afternoonSettings | Out-Null
 
 $shell = New-Object -ComObject WScript.Shell

@@ -44,7 +44,7 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
   <H id={headingId}>{title}</H>
   <p class="note">
     Bolag som rapporterat sedan förra handelsdagens stängning: kursen {beforeClose ? `kl. ${time(report.generated_at)}` : "vid stängning"}{" "}
-    mot förra handelsdagens stängning, och vinst per aktie mot förväntan och mot samma kvartal i fjol (för
+    mot förra handelsdagens stängning, vinst per aktie och omsättning mot förväntan, vinst per aktie mot samma kvartal i fjol (för
     fastighetsbolag förvaltningsresultat per aktie när rapporten anger det; perioden syns när du håller över värdet),
     sektorns viktigaste nyckeltal mot fjol och vad rapporten själv lyfter fram.
     {report.index.change_pct !== null && ` ${report.index.name}: ${signedPct(report.index.change_pct, 2)}.`}
@@ -64,6 +64,7 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
               <th scope="col" class="num">Kurs</th>
               <th scope="col" class="num">{dayCol}</th>
               <th scope="col">Vinst/aktie mot förväntan</th>
+              <th scope="col">Omsättning mot förväntan</th>
               <th scope="col" class="num">Mot fjol</th>
               <th scope="col">Nyckeltal mot fjol</th>
               <th scope="col">I rapporten</th>
@@ -94,6 +95,15 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
                     <span class:list={["verdict", c.outcome.vsExpected.verdict.replace(" ", "-")]}>
                       {c.outcome.vsExpected.text}
                       {c.outcome.vsExpected.basis === "justerat" && <span class="basis"> (just.)</span>}
+                    </span>
+                  ) : (
+                    <span class="muted">–</span>
+                  )}
+                </td>
+                <td class="wrap" title={c.outcome.revenueVsExpected?.title}>
+                  {c.outcome.revenueVsExpected ? (
+                    <span class:list={["verdict", c.outcome.revenueVsExpected.verdict.replace(" ", "-")]}>
+                      {c.outcome.revenueVsExpected.text}
                     </span>
                   ) : (
                     <span class="muted">–</span>

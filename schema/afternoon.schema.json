@@ -45,6 +45,11 @@
         }
       }
     },
-    "errors": { "type": "array", "items": { "type": "string" } }
+    "errors": { "type": "array", "items": { "type": "string" } },
+    "retry": {
+      "type": "array",
+      "description": "Varför filen är ofullständig och körs om vid nästa inloggning/upplåsning: kurser saknas eller nätverket saknades. Tom = klar (saknas i äldre filer).",
+      "items": { "enum": ["kurser", "nätverk"] }
+    }
   }
 }

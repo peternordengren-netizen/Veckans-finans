@@ -446,15 +446,28 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
   3. Dagens kursreaktion för de rapporterande bolagen med `scripts/afternoon.py`, i `data/afternoon/<datum>.json`.
   4. Bygget av sidan.
 
-  Tabellen "Kursreaktion" har kolumnerna kurs, dagens förändring, "Vinst/aktie mot förväntan", vinst per aktie
-  mot samma kvartal i fjol ("Mot fjol"), "Nyckeltal mot fjol" och "I rapporten".
+  **Kurser och nätverk som saknas** räknas som fel, loggas med "FEL:" och görs om:
+  - Ingen källa svarar i hämtningen (nätverket saknas): uppdateringen avbryts innan rapportutfallen, så att inget
+    tidsfönster låses över rapporter som inte hämtats. Morgonrapporten skrivs, men konsensus och rapportutfall väntar.
+  - Kurser saknas (dagens för eftermiddagen, förra handelsdagens för morgonrapporten): filen skrivs med felet och
+    `retry` (`afternoon.py`/`morning.py` exit 2).
+  - Nästa inloggning eller upplåsning försöker igen. Eftermiddagsuppgiften startas också vid inloggning och
+    upplåsning efter 17:45 och kör bara om dagens kursreaktion saknas, togs fram före stängning eller är
+    ofullständig (`afternoon.py --klar`), högst fyra gånger per dag. Det som fortfarande saknas nästa morgon tar
+    morgonflödet (`afternoon.py --forra-om-saknas`), också då högst fyra försök.
+
+  Tabellen "Kursreaktion" har kolumnerna kurs, dagens förändring, "Vinst/aktie mot förväntan", "Omsättning mot
+  förväntan" (samma regler och etiketter som vinst per aktie), vinst per aktie mot samma kvartal i fjol ("Mot fjol"),
+  "Nyckeltal mot fjol" och "I rapporten".
   - "Nyckeltal mot fjol" är sektorns huvudnyckeltal ur rapportutfallen: det första av sektorns egna nyckeltal
     (`data/sectors.json`, t.ex. orderingång för industri) som rapporten anger för kvartalet, utom det som redan står
     under "Mot fjol". Procenttal (marginaler) visas med fjolårsvärdet: "19,9 % (16,9)".
-  - "I rapporten" är en rad på högst 15 ord om det rapporten själv lyfter fram, inklusive utsikter, som
+  - "I rapporten" är en hel mening på högst 15 ord om det rapporten själv lyfter fram, inklusive utsikter, som
     `/rapportutfall` skriver (`highlight`). Den har ordagranna citat som valideras som nyheternas (citatet finns i
     rapporten, varje tal belagt exakt, riktningsord stämmer, inga ord om aktien eller råd). Citaten visas inte. Raden
-    krävs från och med vecka 44 2026 för rapporter med nyckeltal.
+    krävs från och med vecka 44 2026 för rapporter med nyckeltal. Valideringen underkänner en rad som inte börjar
+    med stor bokstav, inte slutar med punkt, slutar på ett ord som kräver fortsättning ("och", "inom", "bland
+    annat" …) eller lämnar en parentes öppen. Att meningen är grammatiskt fullständig i övrigt kan den inte avgöra.
 
   "Mot fjol" har följande regler:
   - Bara kvartalsvärden visas. Valideringen kräver en kvartalsangivelse ("juli–september", "tredje kvartalet" o.d.)
@@ -465,8 +478,8 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
   justerade resultatet jämfördes. Utfallen hämtas när sidan byggs, ur körningens rapportutfall och annars ur veckans
   fil. Indexets utveckling står i texten ovanför. Rader där utfallet var över förväntan men kursen föll, eller under
   förväntan men kursen steg, markeras med ⚑. Tabellen visas som "Kursreaktion i dag" i eftermiddagen. Morgonrapporten
-  visar förra handelsdagens tabell med stängningskurser. Missades eftermiddagen tar morgonflödet fram den med
-  `afternoon.py --forra-om-saknas`.
+  visar förra handelsdagens tabell med stängningskurser. Missades eftermiddagen, eller saknade den kurser, tar
+  morgonflödet fram den med `afternoon.py --forra-om-saknas`.
 
   Uppdateringen visas som **Eftermiddag** överst på startsidan, ovanför morgonrapporten, tills nästa morgonrapport
   finns. Varje fönster börjar där det senast slutande fönstret slutade, morgon eller uppdatering, så att ingen rapport

@@ -137,6 +137,11 @@
         }
       }
     },
-    "errors": { "type": "array", "items": { "type": "string" } }
+    "errors": { "type": "array", "items": { "type": "string" } },
+    "retry": {
+      "type": "array",
+      "description": "Varför morgonrapporten är ofullständig och görs om vid nästa inloggning/upplåsning: förra handelsdagens kurser saknas eller nätverket saknades. Tom = klar (saknas i äldre filer).",
+      "items": { "enum": ["kurser", "nätverk"] }
+    }
   }
 }

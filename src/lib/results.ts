@@ -31,6 +31,8 @@ export interface ReactionOutcome {
   /** Vinst per aktie mot förväntan: kort text för tabellen (surpriseShort), hela texten från rapportutfallen
    * som tooltip, eller null. */
   vsExpected: { text: string; title: string; verdict: Comparison["verdict"]; basis: "justerat" | "redovisat" } | null;
+  /** Nettoomsättning mot förväntan, med samma regler och etiketter som vinst per aktie, eller null. */
+  revenueVsExpected: { text: string; title: string; verdict: Comparison["verdict"] } | null;
   /** Redovisat resultat per aktie (fastighetsbolag: förvaltningsresultat per aktie) mot samma kvartal i fjol:
    * "+12 %", eller båda värdena vid teckenbyte, nära noll eller över ±200 %, eller "–". */
   vsLastYear: string;
@@ -97,6 +99,7 @@ export function sectorKpiText(k: ResultKpi): string {
 
 export function reactionOutcome(changePct: number | null, report: ReportResult | undefined): ReactionOutcome {
   const eps = report?.vs_consensus?.eps ?? null;
+  const revenue = report?.vs_consensus?.revenue ?? null;
   const yoy = report ? lastYearKpi(report) : undefined;
   const main = report ? sectorMainKpi(report) : undefined;
   const divergent =
@@ -105,6 +108,9 @@ export function reactionOutcome(changePct: number | null, report: ReportResult |
   return {
     vsExpected: eps
       ? { text: surpriseShort(eps), title: surpriseText(eps, true), verdict: eps.verdict, basis: eps.basis ?? "redovisat" }
+      : null,
+    revenueVsExpected: revenue
+      ? { text: surpriseShort(revenue, false), title: surpriseText(revenue, false), verdict: revenue.verdict }
       : null,
     vsLastYear: yoy ? lastYearText(yoy) : "–",
     vsLastYearTitle: yoy && report ? `${periodVsLastYear(report.period)} · ${yoy.name}` : null,

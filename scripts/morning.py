@@ -268,6 +268,9 @@ def _prune_morning_raw(today: date) -> None:
             shutil.rmtree(p)
 
 
+FETCH_FAILED = "fetch.py: alla källor fallerade"
+
+
 def fetch_local(today: date) -> list[str]:
     """Hämtar MFN/Cision/Riksbanken och FI till data/morning/raw/. Returnerar fel som text."""
     import fetch
@@ -278,7 +281,7 @@ def fetch_local(today: date) -> list[str]:
     # 500 poster från MFN (ett anrop), så att hämtningen når tillbaka till förra morgonrapporten
     # även på tunga rapportdagar; standardens 200 räcker där bara några timmar.
     if fetch.main(["--raw-dir", str(MORNING_RAW), "--mfn-limit", str(MORNING_MFN_LIMIT)]) != 0:
-        errors.append("fetch.py: alla källor fallerade")
+        errors.append(FETCH_FAILED)
     if fi_fetch.main(["--raw-dir", str(MORNING_RAW)]) != 0:
         errors.append("fi_fetch.py: fel vid hämtning från FI")
     _prune_morning_raw(today)
@@ -327,6 +330,10 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
 
     data = build(today, now, instruments, raw_dirs, calendar, fetch_once)
     data["errors"] = errors + calendar_errors(calendar)
+    data["retry"] = retry_reasons(data, errors, today)
+    if "kurser" in data["retry"]:
+        data["errors"].append(f"kurser saknas för {previous_business_day(today)} (senaste dag hos Yahoo: "
+                              f"{data['price']['day'] or 'ingen'})")
     res = validate_morning(data, instruments)
     if res.errors:
         print("Morgonrapporten klarar inte valideringen – skrivs inte:", *res.errors, sep="\n  ", file=sys.stderr)
@@ -342,7 +349,23 @@ def main(argv: list[str] | None = None, fetch_bars: BarFetcher = yahoo_bars,
           f"{len(data['short']['positions'])} positioner/{len(data['short']['aggregate'])} aggregat, "
           f"kurssignaler {len(data['price']['companies'])} bolag, {len(data['errors'])} fel -> {out}")
     write_swing(today, now, instruments, fetch_once)
+    if data["retry"]:
+        for e in data["errors"]:
+            print(f"FEL: {e}")
+        print(f"Ofullständig ({', '.join(data['retry'])}) – nästa inloggning eller upplåsning försöker igen.")
+        return 2
     return 0
+
+
+def retry_reasons(data: dict, fetch_errors: list[str], today: date) -> list[str]:
+    """Varför morgonrapporten ska göras om vid nästa inloggning/upplåsning: "nätverk" när ingen källa
+    gick att hämta, "kurser" när Yahoo saknar förra handelsdagens kurser."""
+    out = []
+    if FETCH_FAILED in fetch_errors:
+        out.append("nätverk")
+    if data["price"]["day"] != previous_business_day(today).isoformat():
+        out.append("kurser")
+    return out
 
 
 def write_swing(today: date, now: datetime, instruments: dict[str, Instrument], fetch: BarFetcher) -> None:

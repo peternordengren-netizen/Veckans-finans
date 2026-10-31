@@ -139,6 +139,19 @@ def test_hela_rapporten_validerar(tmp_path):
     assert any("signalerna" in e for e in errors) and any("utanför" in e for e in errors)
 
 
+def test_saknade_kurser_eller_natverk_gors_om():
+    """Morgonrapporten är ofullständig (görs om vid nästa inloggning/upplåsning) om förra handelsdagens
+    kurser saknas eller ingen källa gick att hämta."""
+    from morning import FETCH_FAILED, retry_reasons
+
+    monday = date(2026, 10, 26)  # förra handelsdagen fredag 23 okt
+    data = lambda day: {"price": {"day": day}}  # noqa: E731
+    assert retry_reasons(data("2026-10-23"), [], monday) == []
+    assert retry_reasons(data("2026-10-22"), [], monday) == ["kurser"]  # Yahoo har inte fredagen än
+    assert retry_reasons(data(None), [FETCH_FAILED], monday) == ["nätverk", "kurser"]
+    assert retry_reasons(data("2026-10-23"), ["fi_fetch.py: fel vid hämtning från FI"], monday) == []
+
+
 def test_ingen_handelsdag_ger_ingen_fil(tmp_path, monkeypatch, capsys):
     import morning
 
