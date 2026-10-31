@@ -457,12 +457,27 @@ Skapas med `powershell -NoProfile -File scripts\install_tasks.ps1`:
     morgonflödet (`afternoon.py --forra-om-saknas`), också då högst fyra försök.
 
   Tabellen "Kursreaktion" har kolumnerna kurs, dagens förändring, "Vinst/aktie mot förväntan", "Omsättning mot
-  förväntan" (samma regler och etiketter som vinst per aktie), vinst per aktie mot samma kvartal i fjol ("Mot fjol"),
-  "Nyckeltal mot fjol" och "I rapporten".
+  förväntan", vinst per aktie mot samma kvartal i fjol ("Mot fjol"), "Nyckeltal mot fjol", "Ton i rapporten" och
+  "Analytiker".
+  - Mot förväntan visas alltid i procent (aldrig "i linje"), med källan och antalet analytiker under ("Yahoo,
+    3 analytiker"). Övriga etiketter (kontrollera, osäker konsensus, teckenbyte, nära noll, bolagshändelse) är
+    desamma som i rapportutfallen. En text ovanför tabellen säger att Yahoos konsensus kan skilja sig från den
+    konsensus marknaden jämför med (Modular Finance, Bloomberg, FactSet).
+  - ▼ markerar en svag punkt: vinst per aktie eller omsättning mer än 5 % under förväntan (inte vid
+    bolagshändelse), sektorns nyckeltal sämre än fjol (för belåningsgrad och kreditförluster är högre sämre) eller
+    negativ ton. Skälen syns när du håller över markeringen. ⚑ (kursen gick mot utfallet) finns kvar.
+  - "Ton i rapporten" visar tonen (positiv, blandad, neutral eller negativ, `highlight.tone`) före raden "I
+    rapporten". Tonen sätts av `/rapportutfall`; valideringen kräver den från vecka 44 och att raden delar
+    innehållsord med citaten, men kan inte avgöra om tonen är rätt bedömd.
+  - "Analytiker" länkar till Placeras taggsida och Affärsvärldens bolagssida, ur kolumnerna `placera_tagg` och
+    `afv_aktie` i `instruments.csv`. Sidan hämtar ingenting från sajterna (Placeras villkor förbjuder robotar).
+    Adresserna kontrollerades en gång innan de lades in: Placeras taggsida finns i Placeras egen tagg-sitemap,
+    och Affärsvärldens bolagssida svarar och innehåller bolagets ISIN. Saknas en kontrollerad adress står "–".
+    Nya adresser ska kontrolleras på samma sätt, aldrig gissas.
   - "Nyckeltal mot fjol" är sektorns huvudnyckeltal ur rapportutfallen: det första av sektorns egna nyckeltal
     (`data/sectors.json`, t.ex. orderingång för industri) som rapporten anger för kvartalet, utom det som redan står
     under "Mot fjol". Procenttal (marginaler) visas med fjolårsvärdet: "19,9 % (16,9)".
-  - "I rapporten" är en hel mening på högst 15 ord om det rapporten själv lyfter fram, inklusive utsikter, som
+  - Raden "I rapporten" är en hel mening på högst 15 ord om det rapporten själv lyfter fram, inklusive utsikter, som
     `/rapportutfall` skriver (`highlight`). Den har ordagranna citat som valideras som nyheternas (citatet finns i
     rapporten, varje tal belagt exakt, riktningsord stämmer, inga ord om aktien eller råd). Citaten visas inte. Raden
     krävs från och med vecka 44 2026 för rapporter med nyckeltal. Valideringen underkänner en rad som inte börjar

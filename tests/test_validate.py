@@ -333,6 +333,19 @@ def test_dubblerad_mfn_slug_underkanns(tmp_path):
         validate.load_instruments(p)
 
 
+def test_analytikerlankar_lases_och_kontrolleras(tmp_path):
+    head = CSV_HEAD + ",placera_tagg,afv_aktie"
+    p = write_csv(tmp_path, "Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen,fjallhem,fjallhem-fastigheter",
+                  "Albion,,ALBN,ALBN.MOCK,Exempelbörsen,,", head=head)
+    inst = validate.load_instruments(p)
+    assert inst["FJLH B"].analyst_links() == {"placera": "https://www.placera.se/taggar/fjallhem",
+                                               "affarsvarlden": "https://www.affarsvarlden.se/aktie/fjallhem-fastigheter"}
+    assert inst["ALBN"].analyst_links() == {"placera": None, "affarsvarlden": None}
+    p = write_csv(tmp_path, "Fjällhem,,FJLH B,FJLH-B.MOCK,Exempelbörsen,https://www.placera.se/taggar/fjallhem,", head=head)
+    with pytest.raises(ValueError, match="ogiltig placera_tagg"):
+        validate.load_instruments(p)
+
+
 def test_projektets_instrumentlistor_ar_giltiga():
     real = validate.load_instruments()
     assert real["SEB A"].sektor == "banker-finans" and real["VOLV B"].sektor == "industri"

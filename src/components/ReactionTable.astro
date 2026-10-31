@@ -32,9 +32,15 @@ const price = (v: number | null) =>
 const beforeClose = localDay(report.generated_at) === report.date && time(report.generated_at) < "17:30";
 const reacted = report.companies
   .filter((c) => !c.after_close)
-  .map((c) => ({ ...c, outcome: reactionOutcome(c.change_pct, outcomes.get(c.ticker)) }));
+  .map((c) => ({
+    ...c,
+    outcome: reactionOutcome(c.change_pct, outcomes.get(c.ticker)),
+    // Analytikerlänkar ur instruments.csv (kontrollerade adresser); saknas i äldre filer.
+    links: c.links ?? { placera: null, affarsvarlden: null },
+  }));
 const afterClose = report.companies.filter((c) => c.after_close);
 const divergent = reacted.filter((c) => c.outcome.divergent).length;
+const weak = reacted.filter((c) => c.outcome.weak.length > 0).length;
 const tone = (v: number | null) => (v === null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "");
 const title = mode === "today" ? "Kursreaktion i dag" : `Kursreaktion ${weekdayDate(report.date).toLowerCase()}`;
 const dayCol = mode === "today" ? "I dag" : "Dagen";
@@ -46,10 +52,15 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
     Bolag som rapporterat sedan förra handelsdagens stängning: kursen {beforeClose ? `kl. ${time(report.generated_at)}` : "vid stängning"}{" "}
     mot förra handelsdagens stängning, vinst per aktie och omsättning mot förväntan, vinst per aktie mot samma kvartal i fjol (för
     fastighetsbolag förvaltningsresultat per aktie när rapporten anger det; perioden syns när du håller över värdet),
-    sektorns viktigaste nyckeltal mot fjol och vad rapporten själv lyfter fram.
+    sektorns viktigaste nyckeltal mot fjol och tonen i det rapporten själv lyfter fram.
     {report.index.change_pct !== null && ` ${report.index.name}: ${signedPct(report.index.change_pct, 2)}.`}
     {report.price_day === null && reacted.length > 0 && " Yahoo har inga kurser för dagen ännu."}
     {divergent > 0 && <> <span class="flag" aria-hidden="true">⚑</span> = kursen gick mot utfallet ({divergent}).</>}
+    {weak > 0 && <> <span class="weak" aria-hidden="true">▼</span> = svag punkt: vinst eller omsättning mer än 5 % under förväntan, nyckeltalet sämre än fjol eller negativ ton ({weak}).</>}
+  </p>
+  <p class="note">
+    Förväntan är Yahoos konsensus (snittet av analytikerna hos Yahoo, sparat före rapporten). Den kan skilja sig från
+    den konsensus marknaden jämför med, t.ex. Modular Finance, Bloomberg eller FactSet, som ofta gäller rörelseresultatet.
   </p>
   {report.companies.length === 0 && <p class="empty">Inga rapporter från bolag i bevakningslistan sedan förra handelsdagens stängning.</p>}
   {
@@ -67,7 +78,8 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
               <th scope="col">Omsättning mot förväntan</th>
               <th scope="col" class="num">Mot fjol</th>
               <th scope="col">Nyckeltal mot fjol</th>
-              <th scope="col">I rapporten</th>
+              <th scope="col">Ton i rapporten</th>
+              <th scope="col">Analytiker</th>
             </tr>
           </thead>
           <tbody>
@@ -77,6 +89,11 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
                   {c.outcome.divergent && (
                     <span class="flag" title="Kursen gick mot utfallet">
                       ⚑<span class="sr-only"> Kursen gick mot utfallet: </span>
+                    </span>
+                  )}
+                  {c.outcome.weak.length > 0 && (
+                    <span class="weak" title={`Svag punkt: ${c.outcome.weak.join("; ")}`}>
+                      ▼<span class="sr-only"> Svag punkt: {c.outcome.weak.join("; ")}: </span>
                     </span>
                   )}
                   <strong>{c.name}</strong> <span class="muted">{c.ticker}</span>
@@ -95,6 +112,7 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
                     <span class:list={["verdict", c.outcome.vsExpected.verdict.replace(" ", "-")]}>
                       {c.outcome.vsExpected.text}
                       {c.outcome.vsExpected.basis === "justerat" && <span class="basis"> (just.)</span>}
+                      <span class="source">{c.outcome.vsExpected.source}</span>
                     </span>
                   ) : (
                     <span class="muted">–</span>
@@ -104,6 +122,7 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
                   {c.outcome.revenueVsExpected ? (
                     <span class:list={["verdict", c.outcome.revenueVsExpected.verdict.replace(" ", "-")]}>
                       {c.outcome.revenueVsExpected.text}
+                      <span class="source">{c.outcome.revenueVsExpected.source}</span>
                     </span>
                   ) : (
                     <span class="muted">–</span>
@@ -124,7 +143,29 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
                     <span class="muted">–</span>
                   )}
                 </td>
-                <td class="highlight">{c.outcome.highlight ?? <span class="muted">–</span>}</td>
+                <td class="highlight">
+                  {c.outcome.tone && <span class:list={["tone", c.outcome.tone]}>{c.outcome.tone}</span>}{" "}
+                  {c.outcome.highlight ?? <span class="muted">–</span>}
+                </td>
+                <td class="links">
+                  {c.links.placera || c.links.affarsvarlden ? (
+                    <>
+                      {c.links.placera && (
+                        <a href={c.links.placera} rel="noopener noreferrer" target="_blank">
+                          Placera<span class="sr-only"> om {c.name} (öppnas i ny flik)</span>
+                        </a>
+                      )}
+                      {c.links.placera && c.links.affarsvarlden && " · "}
+                      {c.links.affarsvarlden && (
+                        <a href={c.links.affarsvarlden} rel="noopener noreferrer" target="_blank">
+                          Affärsvärlden<span class="sr-only"> om {c.name} (öppnas i ny flik)</span>
+                        </a>
+                      )}
+                    </>
+                  ) : (
+                    <span class="muted">–</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -224,13 +265,19 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
   td.wrap {
     white-space: normal;
     min-width: 9ch;
-    max-width: 26ch;
+    max-width: 18ch;
+  }
+  /* Rubrikerna radbryts, så att de långa ("Vinst/aktie mot förväntan") inte bestämmer kolumnbredden. */
+  thead th {
+    white-space: normal;
+    vertical-align: bottom;
+    min-width: 7ch;
   }
   /* "I rapporten": högst 15 ord, radbryts. */
   td.highlight {
     white-space: normal;
-    min-width: 24ch;
-    max-width: 48ch;
+    min-width: 22ch;
+    max-width: 34ch;
   }
   .kpi-name {
     color: var(--muted);
@@ -290,6 +337,40 @@ const dayCol = mode === "today" ? "I dag" : "Dagen";
   }
   .basis {
     color: var(--muted);
+  }
+  /* Källan och antalet analytiker under procenten. */
+  .source {
+    display: block;
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+  .weak {
+    color: var(--neg);
+    font-weight: 700;
+    margin-right: 4px;
+  }
+  .tone {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .tone.positiv {
+    color: var(--pos);
+    border-color: currentColor;
+  }
+  .tone.negativ {
+    color: var(--neg);
+    border-color: currentColor;
+  }
+  td.links a {
+    white-space: nowrap;
+  }
+  td.links {
+    white-space: normal;
+    min-width: 12ch;
   }
   .sr-only {
     position: absolute;

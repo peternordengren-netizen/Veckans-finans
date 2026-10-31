@@ -13,6 +13,7 @@ import {
   sectorKpiText,
   sectorMainKpi,
   surpriseShort,
+  worseThanLastYear,
   surpriseText,
   yoyText,
 } from "../src/lib/results.ts";
@@ -95,16 +96,51 @@ test("kursreaktion: mot förväntan, mot fjol och kurs mot utfallet", () => {
   };
   const under = reactionOutcome(-16.4, withRev(rev("under", -7.2)));
   assert.equal(under.revenueVsExpected?.text, `${MINUS}7,2 %`);
-  assert.equal(under.revenueVsExpected?.title, `${MINUS}7,2 % mot förväntan`);
+  assert.equal(under.revenueVsExpected?.source, "Yahoo, 4 analytiker");
+  assert.equal(under.revenueVsExpected?.title, `${MINUS}7,2 % mot förväntan (Yahoos konsensus, 4 analytiker)`);
   assert.equal(under.revenueVsExpected?.verdict, "under");
-  assert.equal(reactionOutcome(1, withRev(rev("i linje", 1))).revenueVsExpected?.text, "i linje");
+  // Aldrig "i linje" i kursreaktionen: procenten visas, med källa och antal analytiker.
+  assert.equal(reactionOutcome(1, withRev(rev("i linje", 1))).revenueVsExpected?.text, "+1,0 %");
+  assert.equal(reactionOutcome(1, report("i linje", -1.5)).vsExpected?.text, `${MINUS}1,5 %`);
+  assert.equal(reactionOutcome(1, report("i linje", -1.5)).vsExpected?.source, "Yahoo, 4 analytiker");
   assert.equal(reactionOutcome(1, withRev(rev("osäker konsensus", -40))).revenueVsExpected?.text, "osäker konsensus");
   assert.equal(reactionOutcome(1, withRev(rev("kontrollera", 125, 1.5e9, 4e9))).revenueVsExpected?.text,
     "kontrollera: 1,5 mdr kr (förv. 4 mdr)");
   const none = reactionOutcome(2.0, undefined);
   assert.deepEqual(none, {
-    vsExpected: null, revenueVsExpected: null, vsLastYear: "–", vsLastYearTitle: null, sectorKpi: null, highlight: null, divergent: false,
+    vsExpected: null, revenueVsExpected: null, vsLastYear: "–", vsLastYearTitle: null, sectorKpi: null, highlight: null,
+    tone: null, divergent: false, weak: [],
   });
+});
+
+test("kursreaktion: svaga punkter (▼) och ton", () => {
+  const kpi = (id: string, name: string, value: number, prev: number | null, unit = "MSEK") =>
+    ({ id, name, value, unit, previous_value: prev, change_pct: null, yoy_pct: null, period_kind: "kvartal" as const, quote: "" });
+  const cmp = (verdict: string, surprise_pct: number) =>
+    ({ actual: 1, expected: 1, analysts: 3, currency: "SEK", surprise_pct, verdict }) as never;
+  const base = { ticker: "ALFA", name: "Alfaverken", sector: "industri", published: "", url: "", source_name: "",
+    period: "Q3 2026", note: null };
+  const r = (eps: number | null, rev: number | null, order: [number, number], tone?: "positiv" | "negativ") => ({
+    ...base,
+    kpis: [kpi("orderingang", "Orderingång", ...order)],
+    vs_consensus: { consensus_date: "", eps: eps === null ? null : cmp("under", eps), revenue: rev === null ? null : cmp("under", rev) },
+    highlight: tone ? { text: "x", quotes: [], tone } : null,
+  });
+  // Engcon-liknande: vinst −1,5 % (inte svag), omsättning −7,2 % och orderingång sämre än fjol.
+  assert.deepEqual(reactionOutcome(-16.4, r(-1.5, -7.2, [424, 467])).weak,
+    [`omsättningen ${MINUS}7,2 % mot förväntan`, "orderingång sämre än fjol"]);
+  assert.deepEqual(reactionOutcome(1, r(-5.0, -4.9, [500, 467], "positiv")).weak, []); // gränsen är mer än 5 %
+  assert.deepEqual(reactionOutcome(1, r(-5.1, null, [500, 467])).weak, [`resultat per aktie ${MINUS}5,1 % mot förväntan`]);
+  assert.deepEqual(reactionOutcome(1, r(null, null, [500, 467], "negativ")).weak, ["negativ ton i rapporten"]);
+  assert.equal(reactionOutcome(1, r(null, null, [500, 467], "negativ")).tone, "negativ");
+  // Bolagshändelse: ingen jämförbar avvikelse.
+  const corp = { ...r(null, null, [500, 467]), vs_consensus: { consensus_date: "", eps: cmp("bolagshändelse", -40), revenue: null } };
+  assert.deepEqual(reactionOutcome(1, corp).weak, []);
+  // Lägre är bättre för belåningsgrad och kreditförluster (i belopp, oavsett tecken).
+  assert.equal(worseThanLastYear({ id: "belaningsgrad", value: 44, previous_value: 43, yoy_pct: null }), true);
+  assert.equal(worseThanLastYear({ id: "kreditforluster", value: -120, previous_value: -80, yoy_pct: null }), true);
+  assert.equal(worseThanLastYear({ id: "orderingang", value: 500, previous_value: null, yoy_pct: 4 }), false);
+  assert.equal(worseThanLastYear({ id: "orderingang", value: 500, previous_value: null, yoy_pct: null }), null);
 });
 
 test("kursreaktion: sektorns huvudnyckeltal och I rapporten", () => {

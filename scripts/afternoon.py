@@ -65,7 +65,9 @@ def reporters(today: date, instruments: dict[str, Instrument], results_dir: Path
                 continue
             seen.add(r["ticker"])
             out.append({"ticker": r["ticker"], "name": r["name"], "scope": scope, "published": r["published"],
-                        "title": r["title"], "url": r["url"], "after_close": published >= close})
+                        "title": r["title"], "url": r["url"], "after_close": published >= close,
+                        # Länkar ur instruments.csv; ingenting hämtas från sajterna.
+                        "links": instruments[r["ticker"]].analyst_links()})
     return scopes, out
 
 

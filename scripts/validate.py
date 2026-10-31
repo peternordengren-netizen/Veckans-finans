@@ -250,6 +250,16 @@ class Instrument:
     sektor: str | None = None  # id ur data/sectors.json, valfri
     isin: tuple[str, ...] = ()  # alla bolagets aktieslag, valfri (används för FI-registren)
     typ: str | None = None  # bolagstyp, valfri: "investmentbolag" (P/E visas inte i "Kurs mot vinst")
+    # Analytikerlänkar i kursreaktionen, valfria och kontrollerade innan de läggs in (ingen hämtning sker):
+    placera_tagg: str | None = None  # Placeras taggsida placera.se/taggar/<slug> (finns i Placeras tagg-sitemap)
+    afv_aktie: str | None = None  # Affärsvärldens bolagssida affarsvarlden.se/aktie/<slug> (sidan har bolagets ISIN)
+
+    def analyst_links(self) -> dict:
+        """Länkarna för kolumnen "Analytiker" i kursreaktionen."""
+        return {
+            "placera": f"https://www.placera.se/taggar/{self.placera_tagg}" if self.placera_tagg else None,
+            "affarsvarlden": f"https://www.affarsvarlden.se/aktie/{self.afv_aktie}" if self.afv_aktie else None,
+        }
 
 
 def load_instruments(
@@ -276,6 +286,10 @@ def load_instruments(
             sektor = (row.get("sektor") or "").strip() or None
             isins = tuple(i.strip() for i in (row.get("isin") or "").split("|") if i.strip())
             typ = (row.get("typ") or "").strip() or None
+            links = {k: (row.get(k) or "").strip() or None for k in ("placera_tagg", "afv_aktie")}
+            for k, v in links.items():
+                if v is not None and not MFN_SLUG_RE.match(v):
+                    raise ValueError(f"{path.name} rad {line}: ogiltig {k} {v!r} (gemener, siffror och bindestreck)")
             if typ is not None and typ not in INSTRUMENT_TYPES:
                 raise ValueError(f"{path.name} rad {line}: okänd typ {typ!r} (tillåtna: {sorted(INSTRUMENT_TYPES)})")
             for isin in isins:
@@ -294,6 +308,7 @@ def load_instruments(
                 sektor=sektor,
                 isin=isins,
                 typ=typ,
+                **links,
             )
             if inst.ticker in instruments:
                 raise ValueError(f"{path.name} rad {line}: dubblett av ticker {inst.ticker!r}")
@@ -1131,6 +1146,8 @@ def validate_afternoon(data: dict, day: str, instruments: dict[str, Instrument])
             res.errors.append(f"{where}: kursreaktion trots rapport efter stängning")
         if (c["change_pct"] is None) != (c["close"] is None):
             res.errors.append(f"{where}: kurs och förändring ska finnas båda eller ingen")
+        if "links" in c and c["links"] != inst.analyst_links():
+            res.errors.append(f"{where}: analytikerlänkarna stämmer inte med instruments.csv")
         if c["relative_pp"] is not None:
             if c["change_pct"] is None or index_change is None or not inst.yahoo_ticker.endswith(".ST"):
                 res.errors.append(f"{where}: mot index utan kurs, index eller kronor")

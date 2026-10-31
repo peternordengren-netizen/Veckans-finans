@@ -41,7 +41,17 @@
           "after_close": { "type": "boolean", "description": "Publicerad efter dagens stängning 17:30 – ingen reaktion i dag." },
           "close": { "type": ["number", "null"], "description": "Senaste kursen i dag (stängning efter 17:30)." },
           "change_pct": { "type": ["number", "null"], "description": "I dag mot förra handelsdagens stängning." },
-          "relative_pp": { "type": ["number", "null"], "description": "Mot index i procentenheter (bara aktier i kronor)." }
+          "relative_pp": { "type": ["number", "null"], "description": "Mot index i procentenheter (bara aktier i kronor)." },
+          "links": {
+            "type": "object",
+            "description": "Analytikerlänkar ur instruments.csv (kontrollerade adresser, ingen hämtning); saknas i äldre filer.",
+            "additionalProperties": false,
+            "required": ["placera", "affarsvarlden"],
+            "properties": {
+              "placera": { "type": ["string", "null"], "pattern": "^https://www\\.placera\\.se/taggar/[a-z0-9-]+$" },
+              "affarsvarlden": { "type": ["string", "null"], "pattern": "^https://www\\.affarsvarlden\\.se/aktie/[a-z0-9-]+$" }
+            }
+          }
         }
       }
     },

@@ -75,7 +75,8 @@
             "required": ["text", "quotes"],
             "properties": {
               "text": { "type": "string", "minLength": 1 },
-              "quotes": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+              "quotes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+              "tone": { "enum": ["positiv", "blandad", "neutral", "negativ"] }
             }
           },
           "kpis": {

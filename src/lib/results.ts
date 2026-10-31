@@ -26,13 +26,23 @@ export interface Comparison {
   basis?: "justerat" | "redovisat";
 }
 
-/** Kolumnerna "Mot förväntan" och "Mot fjol" i kursreaktionen, och om kursen gick mot utfallet. */
+/** Mot förväntan i kursreaktionen: procent (aldrig "i linje"), källa och antal analytiker. */
+export interface ReactionExpected {
+  /** surpriseReaction: "−1,5 %", eller etiketten vid kontrollera, osäker konsensus, teckenbyte m.m. */
+  text: string;
+  /** Källan och antalet analytiker: "Yahoo, 3 analytiker". */
+  source: string;
+  /** Hela texten från rapportutfallen, som tooltip. */
+  title: string;
+  verdict: Comparison["verdict"];
+}
+
+/** Kolumnerna i kursreaktionen, om kursen gick mot utfallet och rapportens svaga punkter. */
 export interface ReactionOutcome {
-  /** Vinst per aktie mot förväntan: kort text för tabellen (surpriseShort), hela texten från rapportutfallen
-   * som tooltip, eller null. */
-  vsExpected: { text: string; title: string; verdict: Comparison["verdict"]; basis: "justerat" | "redovisat" } | null;
-  /** Nettoomsättning mot förväntan, med samma regler och etiketter som vinst per aktie, eller null. */
-  revenueVsExpected: { text: string; title: string; verdict: Comparison["verdict"] } | null;
+  /** Vinst per aktie mot förväntan, eller null. */
+  vsExpected: (ReactionExpected & { basis: "justerat" | "redovisat" }) | null;
+  /** Nettoomsättning mot förväntan, med samma regler som vinst per aktie, eller null. */
+  revenueVsExpected: ReactionExpected | null;
   /** Redovisat resultat per aktie (fastighetsbolag: förvaltningsresultat per aktie) mot samma kvartal i fjol:
    * "+12 %", eller båda värdena vid teckenbyte, nära noll eller över ±200 %, eller "–". */
   vsLastYear: string;
@@ -40,10 +50,58 @@ export interface ReactionOutcome {
   vsLastYearTitle: string | null;
   /** Sektorns huvudnyckeltal mot samma kvartal i fjol (sectorKpi), eller null. */
   sectorKpi: { name: string; text: string; title: string } | null;
-  /** "I rapporten": vad rapporten själv lyfter fram (citaten visas inte), eller null. */
+  /** "Ton i rapporten": vad rapporten själv lyfter fram (citaten visas inte), eller null. */
   highlight: string | null;
+  /** Rapportens ton enligt raden och dess citat, eller null (äldre filer). */
+  tone: Tone | null;
   /** Över förväntan men kursen föll, eller under förväntan men kursen steg. */
   divergent: boolean;
+  /** Svaga punkter (weakPoints): mer än 5 % under förväntan, nyckeltalet sämre än fjol, negativ ton. */
+  weak: string[];
+}
+
+export type Tone = "positiv" | "blandad" | "neutral" | "negativ";
+
+/** Mer än så många procent under förväntan räknas som en svag punkt. */
+export const WEAK_SURPRISE_PCT = -5;
+/** Sektornyckeltal där ett högre värde är sämre (kreditförluster jämförs i belopp, oavsett tecken). */
+const LOWER_IS_BETTER = new Set(["kreditforluster", "belaningsgrad"]);
+
+/** Om nyckeltalet är sämre än samma kvartal i fjol, eller null om det inte går att avgöra. */
+export function worseThanLastYear(k: Pick<ResultKpi, "id" | "value" | "previous_value" | "yoy_pct">): boolean | null {
+  const prev = k.previous_value;
+  if (LOWER_IS_BETTER.has(k.id)) return prev === null ? null : Math.abs(k.value) > Math.abs(prev);
+  if (prev !== null) return k.value < prev;
+  return k.yoy_pct === null ? null : k.yoy_pct < 0;
+}
+
+/** Svaga punkter för markeringen ▼ i kursreaktionen. En bolagshändelse ger ingen jämförbar avvikelse. */
+export function weakPoints(report: ReportResult | undefined, main: ResultKpi | undefined): string[] {
+  if (!report) return [];
+  const out: string[] = [];
+  const below = (c: Comparison | null) => c !== null && c.verdict !== "bolagshändelse" && c.surprise_pct < WEAK_SURPRISE_PCT;
+  const eps = report.vs_consensus?.eps ?? null;
+  const revenue = report.vs_consensus?.revenue ?? null;
+  if (eps && below(eps)) out.push(`${epsLabel(eps).toLowerCase()} ${pctText(eps.surprise_pct)} mot förväntan`);
+  if (revenue && below(revenue)) out.push(`omsättningen ${pctText(revenue.surprise_pct)} mot förväntan`);
+  if (main && worseThanLastYear(main)) out.push(`${main.name.toLowerCase()} sämre än fjol`);
+  if (report.highlight?.tone === "negativ") out.push("negativ ton i rapporten");
+  return out;
+}
+
+const pctText = (v: number) => `${signed(v, 1)} %`;
+
+/** Mot förväntan i kursreaktionen: alltid procent i stället för "i linje"/"över"/"under"; övriga etiketter som i
+ * surpriseShort. Källan är Yahoos konsensus sparad före rapporten. */
+export function surpriseReaction(c: Comparison, perShare = true): ReactionExpected {
+  const text = ["i linje", "över", "under"].includes(c.verdict) ? pctText(c.surprise_pct) : surpriseShort(c, perShare);
+  const n = c.analysts;
+  return {
+    text,
+    source: `Yahoo${n ? `, ${n} analytiker` : ""}`,
+    title: `${surpriseText(c, perShare)} (Yahoos konsensus${n ? `, ${n} analytiker` : ""})`,
+    verdict: c.verdict,
+  };
 }
 
 /** Över så stor förändring (±procent) visas båda värdena, som i "Kommande vecka" (consensus.ts MAX_SHOWN_PCT). */
@@ -106,12 +164,8 @@ export function reactionOutcome(changePct: number | null, report: ReportResult |
     eps !== null && changePct !== null &&
     ((eps.verdict === "över" && changePct < 0) || (eps.verdict === "under" && changePct > 0));
   return {
-    vsExpected: eps
-      ? { text: surpriseShort(eps), title: surpriseText(eps, true), verdict: eps.verdict, basis: eps.basis ?? "redovisat" }
-      : null,
-    revenueVsExpected: revenue
-      ? { text: surpriseShort(revenue, false), title: surpriseText(revenue, false), verdict: revenue.verdict }
-      : null,
+    vsExpected: eps ? { ...surpriseReaction(eps, true), basis: eps.basis ?? "redovisat" } : null,
+    revenueVsExpected: revenue ? surpriseReaction(revenue, false) : null,
     vsLastYear: yoy ? lastYearText(yoy) : "–",
     vsLastYearTitle: yoy && report ? `${periodVsLastYear(report.period)} · ${yoy.name}` : null,
     sectorKpi:
@@ -119,7 +173,9 @@ export function reactionOutcome(changePct: number | null, report: ReportResult |
         ? { name: main.name, text: sectorKpiText(main), title: `${periodVsLastYear(report.period)} · ${main.name}` }
         : null,
     highlight: report?.highlight?.text ?? null,
+    tone: report?.highlight?.tone ?? null,
     divergent,
+    weak: weakPoints(report, main),
   };
 }
 
@@ -138,7 +194,7 @@ export interface ReportResult {
   period: string;
   note: string | null;
   /** "I rapporten" (saknas i äldre filer); citaten är validerade mot rapporten men visas inte. */
-  highlight?: { text: string; quotes: string[] } | null;
+  highlight?: { text: string; quotes: string[]; tone?: Tone } | null;
   kpis: ResultKpi[];
   vs_consensus: {
     consensus_date: string;

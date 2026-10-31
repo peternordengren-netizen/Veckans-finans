@@ -25,7 +25,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from validate import (
-    _SENTIMENT_FORBIDDEN_RE, DATA_DIR, RAW_DIR, Instrument, Result, _check_datetime, _normalize_ws, _schema_errors,
+    _SENTIMENT_FORBIDDEN_RE, DATA_DIR, _content_stems, RAW_DIR, Instrument, Result, _check_datetime, _normalize_ws, _schema_errors,
     _schema_validator, direction_conflicts, extract_numbers, iso_week_period, load_sector_kpis, unsupported_numbers,
 )
 
@@ -213,7 +213,10 @@ def sentence_problems(text: str) -> list[str]:
     return out
 
 
-def check_highlight(h: dict, raw_text: str, where: str, res: Result) -> None:
+TONES = ("positiv", "blandad", "neutral", "negativ")
+
+
+def check_highlight(h: dict, raw_text: str, where: str, res: Result, require_tone: bool = True) -> None:
     """"I rapporten": en hel mening (sentence_problems, högst MAX_HIGHLIGHT_WORDS ord) om det rapporten själv lyfter fram, med
     ordagranna citat som för nyheterna: varje tal i raden ska beläggas exakt av ett citat, riktningsord får
     inte motsäga citaten, och inga ord om aktien, kursen eller råd."""
@@ -238,6 +241,12 @@ def check_highlight(h: dict, raw_text: str, where: str, res: Result) -> None:
     forbidden = sorted({m.group(0) for m in _SENTIMENT_FORBIDDEN_RE.finditer(text)})
     if forbidden:
         res.errors.append(f"{where}: ord om aktien, kursen eller råd: {forbidden}")
+    # Tonen ("Ton i rapporten") bygger på raden och dess citat, som nyheternas sentiment: raden ska dela
+    # innehållsord med citaten.
+    if require_tone and h.get("tone") not in TONES:
+        res.errors.append(f"{where}: tonen saknas eller är okänd ({h.get('tone')!r}; tillåtna: {', '.join(TONES)})")
+    if quotes and not _content_stems(text) & _content_stems(" ".join(quotes)):
+        res.errors.append(f"{where}: raden delar inget innehållsord med citaten")
 
 
 def _check_report(r: dict, listed: dict, kinds: dict[str, str], where: str, res: Result,
@@ -253,7 +262,8 @@ def _check_report(r: dict, listed: dict, kinds: dict[str, str], where: str, res:
         return
     raw_text = _normalize_ws(path.read_text(encoding="utf-8"))
     if r.get("highlight"):
-        check_highlight(r["highlight"], raw_text, f"{where} I rapporten", res)
+        check_highlight(r["highlight"], raw_text, f"{where} I rapporten", res,
+                        require_tone=bool(scope) and highlight_required(scope))
     elif scope and highlight_required(scope) and r["kpis"]:  # ett utdrag utan siffror behöver ingen rad
         res.errors.append(f"{where}: \"I rapporten\" (highlight) saknas")
     seen: set[str] = set()

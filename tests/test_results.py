@@ -171,7 +171,16 @@ def test_i_rapporten_valideras_som_nyheterna():
         return r.errors
 
     assert errors({"text": "Orderingången ökade 12 %; svag efterfrågan i Norden väntas under 2027.",
-                   "quotes": [q_order, q_outlook]}) == []
+                   "quotes": [q_order, q_outlook], "tone": "blandad"}) == []
+    # Tonen ("Ton i rapporten") krävs och ska vara en av de fyra; raden ska dela innehållsord med citaten.
+    for h, msg in [
+        ({"text": "Orderingången ökade 12 %.", "quotes": [q_order]}, "tonen saknas"),
+        ({"text": "Orderingången ökade 12 %.", "quotes": [q_order], "tone": "glad"}, "tonen saknas eller är okänd"),
+        ({"text": "Bolaget räknar med 12 % och svag efterfrågan.", "quotes": [q_order], "tone": "negativ"},
+         "innehållsord"),
+    ]:
+        errs = errors(h)
+        assert any(msg in e for e in errs), (msg, errs)
     # Hel mening: punkt sist, stor bokstav först, inget ord sist som kräver fortsättning (Net Insight
     # 2026-10-29 slutade "… och kommersiella framsteg" utan punkt).
     for bad, msg in [
@@ -218,7 +227,7 @@ def test_i_rapporten_kravs_fran_vecka_44(tmp_path):
     (raw / "2026-W44" / "index.json").write_text(json.dumps({"items": items}), encoding="utf-8")
     b = {"week": "2026-W44", "batch": 1, "reports": [alfa(), beta()]}
     assert list(check_batch(b, "2026-W44", 1, INSTRUMENTS, raw, tmp_path / "morning", tmp_path / "results").rejected) == ["ALFA"]
-    h = {"text": "Orderingången ökade 12 % i kvartalet.", "quotes": ["Orderingången ökade med 12 % till 1 344 MSEK (1 200)"]}
+    h = {"text": "Orderingången ökade 12 % i kvartalet.", "tone": "positiv", "quotes": ["Orderingången ökade med 12 % till 1 344 MSEK (1 200)"]}
     b["reports"][0]["highlight"] = h
     assert check_batch(b, "2026-W44", 1, INSTRUMENTS, raw, tmp_path / "morning", tmp_path / "results").rejected == {}
 

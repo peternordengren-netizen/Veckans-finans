@@ -162,6 +162,8 @@ export interface AfternoonReaction {
   close: number | null;
   change_pct: number | null;
   relative_pp: number | null;
+  /** Analytikerlänkar ur instruments.csv (Placeras taggsida, Affärsvärldens bolagssida); saknas i äldre filer. */
+  links?: { placera: string | null; affarsvarlden: string | null };
 }
 export interface AfternoonReport {
   date: string;

@@ -101,6 +101,20 @@ def test_kursfel_stoppar_inte_uppdateringen(tmp_path):
     assert validate_afternoon(data, "2026-10-22", INSTRUMENTS).errors == []
 
 
+def test_analytikerlankar_ur_instruments(tmp_path):
+    """Kolumnen "Analytiker": länkarna kommer ur instruments.csv (kontrollerade adresser), inget hämtas."""
+    insts = {**INSTRUMENTS, "ALFA": Instrument("Alfaverken", (), "ALFA", "ALFA.ST", "Stockholm",
+                                               placera_tagg="alfaverken", afv_aktie="alfaverken-ab")}
+    data = afternoon.build(TODAY, NOW, insts, fetch_today, results_dir(tmp_path), list_fn)
+    by = {c["ticker"]: c for c in data["companies"]}
+    assert by["ALFA"]["links"] == {"placera": "https://www.placera.se/taggar/alfaverken",
+                                   "affarsvarlden": "https://www.affarsvarlden.se/aktie/alfaverken-ab"}
+    assert by["GAMMA"]["links"] == {"placera": None, "affarsvarlden": None}
+    assert validate_afternoon(data, "2026-10-22", insts).errors == []
+    by["ALFA"]["links"]["placera"] = "https://www.placera.se/taggar/annat"
+    assert any("analytikerlänkarna" in e for e in validate_afternoon(data, "2026-10-22", insts).errors)
+
+
 def test_saknade_kurser_ar_fel_och_gors_om(tmp_path):
     """Saknas dagens kurser (2026-10-30: körningen gick utan nätverk) är det ett fel och filen är
     ofullständig, så att nästa inloggning eller upplåsning försöker igen."""

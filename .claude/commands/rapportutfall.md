@@ -61,7 +61,8 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
         "quotes": [
           "Orderingången nådde den högsta nivån för ett enskilt kvartal",
           "vi räknar med att efterfrågan i Norden förblir svag under de närmaste kvartalen"
-        ]
+        ],
+        "tone": "blandad"
       },
       "kpis": [
         {
@@ -113,6 +114,10 @@ Kommandot körs utan att någon tittar på, med behörighetsläget `dontAsk`. Ba
      belägger raden. Citaten visas inte men valideras som nyheternas: de ska finnas i texten, varje tal i raden ska
      stå exakt så i ett citat (inga avrundningar), och ett "ökade"/"minskade" i raden får inte motsäga citatet.
    - Inga ord om aktien eller kursen och inga råd ("köp", "sälj", "kursmål", "rekommendation" …).
+   - `tone`: rapportens ton för bolaget (inte för aktien), som raden och citaten visar: `positiv`, `blandad`
+     (både tydligt bra och tydligt dåligt, t.ex. starkt resultat men svag orderingång), `neutral` eller `negativ`.
+     Bedöm bara det rapporten själv skriver; väg in utsikterna. Raden och citaten ska bära tonen, så att en läsare
+     ser varför.
    - Bara för en rapport utan nyckeltal (`"kpis": []`) får `highlight` vara `null`.
 
 ## Svar
